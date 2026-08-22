@@ -5,6 +5,11 @@ import {
   outputToNotesPoly,
   type NoteEventTime,
 } from "@spotify/basic-pitch";
+import * as tf from "@tensorflow/tfjs";
+import {
+  modelJson as bundledModelJson,
+  modelWeightsBase64,
+} from "virtual:basic-pitch-model";
 
 export type TranscriptionOptions = {
   sensitivity: number;
@@ -13,13 +18,50 @@ export type TranscriptionOptions = {
 let engine: BasicPitch | null = null;
 const MODEL_SAMPLE_RATE = 22_050;
 
+function decodeModelWeights(base64: string) {
+  const binary = window.atob(base64);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return buffer;
+}
+
+async function loadBundledModel() {
+  const modelJson = JSON.parse(bundledModelJson) as {
+    modelTopology: tf.io.ModelArtifacts["modelTopology"];
+    weightsManifest: tf.io.WeightsManifestConfig;
+    format?: string;
+    generatedBy?: string;
+    convertedBy?: string;
+  };
+  const weightSpecs = modelJson.weightsManifest.flatMap(
+    (group) => group.weights,
+  );
+  const weightData = decodeModelWeights(modelWeightsBase64);
+
+  if (weightData.byteLength % 4 !== 0) {
+    throw new Error("מודל זיהוי התווים נטען באופן חלקי. יש לרענן את הדף.");
+  }
+
+  const modelArtifacts: tf.io.ModelArtifacts = {
+    modelTopology: modelJson.modelTopology,
+    weightSpecs,
+    weightData,
+    format: modelJson.format,
+    generatedBy: modelJson.generatedBy,
+    convertedBy: modelJson.convertedBy,
+  };
+
+  return tf.loadGraphModel(tf.io.fromMemory(modelArtifacts));
+}
+
 function getEngine() {
   if (!engine) {
-    const modelUrl = new URL(
-      `${import.meta.env.BASE_URL}model/model.json`,
-      window.location.href,
-    ).href;
-    engine = new BasicPitch(modelUrl);
+    engine = new BasicPitch(loadBundledModel());
   }
   return engine;
 }
