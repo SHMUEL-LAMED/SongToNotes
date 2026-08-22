@@ -207,7 +207,19 @@ function buildTimeline(
     const group = byStart.get(start)!;
     const nextStart = index + 1 < starts.length ? starts[index + 1] : totalSteps;
     const longest = group.reduce((max, note) => Math.max(max, note.endStep), 0);
-    const length = Math.max(1, Math.min(longest, nextStart, totalSteps) - start);
+    let length = Math.max(1, Math.min(longest, nextStart, totalSteps) - start);
+
+    // Players release a note slightly before the next one, and the model
+    // reports what it hears. Left alone, a half note held for 92% of its value
+    // becomes a dotted quarter tied to a sixteenth plus a sixteenth rest. A
+    // gap only survives as a written rest when it is a real silence rather
+    // than ordinary note release.
+    const gap = Math.min(nextStart, totalSteps) - (start + length);
+    const interOnset = Math.min(nextStart, totalSteps) - start;
+    if (gap > 0 && gap <= Math.max(1, Math.round(interOnset * 0.34))) {
+      length += gap;
+    }
+
     const midis = [...new Set(group.map((note) => note.midi))].sort(
       (a, b) => a - b,
     );

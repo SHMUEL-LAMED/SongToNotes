@@ -50,7 +50,12 @@ export function mergeFragments(
     for (let index = 1; index < bucket.length; index += 1) {
       const next = bucket[index];
       const gap = next.start - noteEnd(current);
-      if (gap <= maxGap && gap > -0.5 * current.duration) {
+      // Only a sliver or a decaying tail is a fragment. Absorbing anything
+      // more would let a stray blip bridge two genuinely repeated notes into
+      // one long one — the single most damaging error in the old output.
+      const isFragment =
+        next.duration < 0.1 || next.confidence < current.confidence * 0.6;
+      if (isFragment && gap <= maxGap && gap > -0.5 * current.duration) {
         const end = Math.max(noteEnd(current), noteEnd(next));
         const weight = current.duration + next.duration || 1;
         current.confidence =
