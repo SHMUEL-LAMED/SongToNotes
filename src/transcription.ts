@@ -11,6 +11,7 @@ export type TranscriptionOptions = {
 };
 
 let engine: BasicPitch | null = null;
+const MODEL_SAMPLE_RATE = 22_050;
 
 function getEngine() {
   if (!engine) {
@@ -21,6 +22,41 @@ function getEngine() {
     engine = new BasicPitch(modelUrl);
   }
   return engine;
+}
+
+async function normalizeAudioBuffer(audioBuffer: AudioBuffer) {
+  if (
+    audioBuffer.sampleRate === MODEL_SAMPLE_RATE &&
+    audioBuffer.numberOfChannels === 1
+  ) {
+    return audioBuffer;
+  }
+
+  const OfflineAudioContextClass =
+    window.OfflineAudioContext ||
+    (window as typeof window & {
+      webkitOfflineAudioContext?: typeof OfflineAudioContext;
+    }).webkitOfflineAudioContext;
+
+  if (!OfflineAudioContextClass) {
+    throw new Error("הדפדפן הזה אינו תומך בהמרת קצב הדגימה של השיר.");
+  }
+
+  const frameCount = Math.max(
+    1,
+    Math.ceil(audioBuffer.duration * MODEL_SAMPLE_RATE),
+  );
+  const offlineContext = new OfflineAudioContextClass(
+    1,
+    frameCount,
+    MODEL_SAMPLE_RATE,
+  );
+  const source = offlineContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineContext.destination);
+  source.start(0);
+
+  return offlineContext.startRendering();
 }
 
 export async function transcribeAudio(
@@ -41,9 +77,11 @@ export async function transcribeAudio(
   const audioContext = new AudioContextClass();
 
   try {
-    const audioBuffer = await audioContext.decodeAudioData(
+    const decodedAudioBuffer = await audioContext.decodeAudioData(
       await file.arrayBuffer(),
     );
+    onProgress(5);
+    const audioBuffer = await normalizeAudioBuffer(decodedAudioBuffer);
     const frames: number[][] = [];
     const onsets: number[][] = [];
     const contours: number[][] = [];
@@ -94,4 +132,3 @@ export async function transcribeAudio(
     await audioContext.close();
   }
 }
-
