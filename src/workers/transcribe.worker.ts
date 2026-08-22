@@ -89,19 +89,32 @@ async function transcribe(request: WorkerRequest) {
 
   post({ type: "progress", jobId, progress: 4 });
 
-  await getEngine().evaluateModel(
-    samples,
-    (frameBatch, onsetBatch, contourBatch) => {
-      // Concatenating with a spread would blow the argument limit on long
-      // recordings, so the batches are appended one row at a time.
-      for (const row of frameBatch) frames.push(row);
-      for (const row of onsetBatch) onsets.push(row);
-      for (const row of contourBatch) contours.push(row);
-    },
-    (progress) => {
-      post({ type: "progress", jobId, progress: 4 + Math.round(progress * 90) });
-    },
-  );
+  const pitchEngine = getEngine();
+  await pitchEngine.model;
+  tf.engine().startScope();
+  try {
+    await pitchEngine.evaluateModel(
+      samples,
+      (frameBatch, onsetBatch, contourBatch) => {
+        // Concatenating with a spread would blow the argument limit on long
+        // recordings, so the batches are appended one row at a time.
+        for (const row of frameBatch) frames.push(row);
+        for (const row of onsetBatch) onsets.push(row);
+        for (const row of contourBatch) contours.push(row);
+      },
+      (progress) => {
+        post({
+          type: "progress",
+          jobId,
+          progress: 4 + Math.round(progress * 90),
+        });
+      },
+    );
+  } finally {
+    // Basic Pitch creates temporary tensors for every chunk. Keeping them
+    // around eventually crashes repeated analyses on phones and long songs.
+    tf.engine().endScope();
+  }
 
   post({ type: "progress", jobId, progress: 95 });
 

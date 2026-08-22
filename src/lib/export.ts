@@ -65,7 +65,7 @@ export function notesToCsv(
     }),
   ];
   // A BOM keeps Excel from mangling the file when it is opened directly.
-  return `﻿${rows.join("\r\n")}`;
+  return `\uFEFF${rows.join("\r\n")}`;
 }
 
 export function scoreSummary(score: Score) {

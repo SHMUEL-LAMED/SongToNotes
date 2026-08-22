@@ -30,8 +30,9 @@ import {
   decodeAudioFile,
   formatTime,
   isAudioSupported,
+  prepareAudioOverview,
   prepareForModel,
-  type PreparedAudio,
+  type AudioOverview,
   type TrimRange,
 } from "./lib/audio";
 import { scoreToAbc } from "./lib/abc";
@@ -96,7 +97,55 @@ function loadSettings(): Settings {
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (!stored) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    const parsed = JSON.parse(stored) as Partial<Settings> | null;
+    if (!parsed || typeof parsed !== "object") return DEFAULT_SETTINGS;
+    const numberInRange = (
+      value: unknown,
+      fallback: number,
+      minimum: number,
+      maximum: number,
+    ) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.max(minimum, Math.min(maximum, value))
+        : fallback;
+    const stepsPerBeat = [1, 2, 3, 4, 8].includes(parsed.stepsPerBeat ?? 0)
+      ? (parsed.stepsPerBeat as number)
+      : DEFAULT_SETTINGS.stepsPerBeat;
+    const beatsPerMeasure = [2, 3, 4, 6].includes(
+      parsed.beatsPerMeasure ?? 0,
+    )
+      ? (parsed.beatsPerMeasure as number)
+      : DEFAULT_SETTINGS.beatsPerMeasure;
+    return {
+      sensitivity: numberInRange(
+        parsed.sensitivity,
+        DEFAULT_SETTINGS.sensitivity,
+        20,
+        90,
+      ),
+      harmonicCleanup: numberInRange(
+        parsed.harmonicCleanup,
+        DEFAULT_SETTINGS.harmonicCleanup,
+        0,
+        1,
+      ),
+      minDuration: numberInRange(
+        parsed.minDuration,
+        DEFAULT_SETTINGS.minDuration,
+        0.02,
+        0.3,
+      ),
+      mode: parsed.mode === "full" ? "full" : "melody",
+      stepsPerBeat,
+      beatsPerMeasure,
+      transpose: Math.round(
+        numberInRange(parsed.transpose, DEFAULT_SETTINGS.transpose, -12, 12),
+      ),
+      withChords:
+        typeof parsed.withChords === "boolean"
+          ? parsed.withChords
+          : DEFAULT_SETTINGS.withChords,
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -110,7 +159,7 @@ function formatBytes(bytes: number) {
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [prepared, setPrepared] = useState<PreparedAudio | null>(null);
+  const [prepared, setPrepared] = useState<AudioOverview | null>(null);
   const [decodedBuffer, setDecodedBuffer] = useState<AudioBuffer | null>(null);
   const [trim, setTrim] = useState<TrimRange>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -135,11 +184,13 @@ export default function App() {
   const [micLevel, setMicLevel] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const sheetSvgRef = useRef<SVGSVGElement | null>(null);
   const playerRef = useRef<NotePlayer | null>(null);
 
   const transcriber = useTranscriber();
+  const cancelTranscription = transcriber.cancel;
 
   useEffect(() => {
     try {
@@ -149,15 +200,14 @@ export default function App() {
     }
   }, [settings]);
 
-  useEffect(() => {
-    if (!file) {
-      setAudioUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setAudioUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+  useEffect(
+    () => () => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => () => recorder.cancel(), [recorder]);
 
   // ---- everything below is derived, so no control ever costs another
   // ---- inference pass ----
@@ -288,11 +338,18 @@ export default function App() {
     setBpmDraft("");
     try {
       const buffer = await decodeAudioFile(await candidate.arrayBuffer());
-      const info = await prepareForModel(buffer, null);
+      const info = prepareAudioOverview(buffer);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      const url = URL.createObjectURL(candidate);
+      audioUrlRef.current = url;
+      setAudioUrl(url);
       setDecodedBuffer(buffer);
       setPrepared(info);
       setFile(candidate);
     } catch (caughtError) {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+      setAudioUrl(null);
       setFile(null);
       setDecodedBuffer(null);
       setPrepared(null);
@@ -309,6 +366,10 @@ export default function App() {
   const validateAndLoad = useCallback(
     (candidate?: File | null) => {
       if (!candidate) return;
+      if (candidate.size === 0) {
+        setError("קובץ האודיו ריק. יש לבחור קובץ שמכיל הקלטה.");
+        return;
+      }
       const extension = candidate.name.split(".").pop()?.toLowerCase() ?? "";
       const looksAudio =
         candidate.type.startsWith("audio/") ||
@@ -419,7 +480,11 @@ export default function App() {
   }, [decodedBuffer, transcriber, trim, stopPlayback]);
 
   const reset = useCallback(() => {
+    cancelTranscription();
     stopPlayback();
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    setAudioUrl(null);
     setFile(null);
     setDecodedBuffer(null);
     setPrepared(null);
@@ -430,7 +495,7 @@ export default function App() {
     setBpmOverride(0);
     setBpmDraft("");
     if (inputRef.current) inputRef.current.value = "";
-  }, [stopPlayback]);
+  }, [cancelTranscription, stopPlayback]);
 
   // ---- downloads ----
 
@@ -550,7 +615,7 @@ export default function App() {
           </div>
 
           {!supported && (
-            <div className="error-message">
+            <div className="error-message" role="alert">
               הדפדפן הזה אינו תומך בעיבוד אודיו. נסה בכרום, אדג׳, ספארי או
               פיירפוקס מעודכנים.
             </div>
@@ -640,7 +705,14 @@ export default function App() {
                   {prepared ? ` · ${formatTime(prepared.sourceDuration)}` : ""}
                 </span>
               </div>
-              {audioUrl && <audio controls src={audioUrl} preload="metadata" />}
+              {audioUrl && (
+                <audio
+                  controls
+                  src={audioUrl}
+                  preload="metadata"
+                  aria-label={`השמעת ${file.name}`}
+                />
+              )}
             </div>
           )}
 
@@ -717,7 +789,11 @@ export default function App() {
               {error}
             </div>
           )}
-          {notice && !error && <div className="notice-message">{notice}</div>}
+          {notice && !error && (
+            <div className="notice-message" role="status">
+              {notice}
+            </div>
+          )}
 
           {transcriber.isRunning ? (
             <div className="processing-box">
@@ -730,6 +806,7 @@ export default function App() {
               <div
                 className="progress-track"
                 role="progressbar"
+                aria-label="התקדמות ניתוח השיר"
                 aria-valuenow={transcriber.progress}
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -1054,6 +1131,7 @@ export default function App() {
                 className="note-table-wrap"
               >
                 <table className="note-table">
+                  <caption className="sr-only">רשימת התווים שזוהו בשיר</caption>
                   <thead>
                     <tr>
                       <th>#</th>

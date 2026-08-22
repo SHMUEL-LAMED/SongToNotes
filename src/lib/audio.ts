@@ -13,6 +13,8 @@ export type PreparedAudio = {
   peaks: Float32Array;
 };
 
+export type AudioOverview = Pick<PreparedAudio, "sourceDuration" | "peaks">;
+
 export type TrimRange = { start: number; end: number } | null;
 
 function getAudioContextClass() {
@@ -54,16 +56,22 @@ export async function decodeAudioFile(data: ArrayBuffer): Promise<AudioBuffer> {
  * (min, max) so quiet passages stay visible.
  */
 export function buildPeaks(buffer: AudioBuffer, buckets = 900): Float32Array {
-  const channel = buffer.getChannelData(0);
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) =>
+    buffer.getChannelData(index),
+  );
   const peaks = new Float32Array(buckets * 2);
-  const perBucket = Math.max(1, Math.floor(channel.length / buckets));
   for (let bucket = 0; bucket < buckets; bucket += 1) {
-    const from = bucket * perBucket;
-    const to = Math.min(channel.length, from + perBucket);
+    const from = Math.floor((bucket * buffer.length) / buckets);
+    const to = Math.max(
+      from + 1,
+      Math.floor(((bucket + 1) * buffer.length) / buckets),
+    );
     let min = 0;
     let max = 0;
-    for (let index = from; index < to; index += 1) {
-      const value = channel[index];
+    for (let index = from; index < Math.min(to, buffer.length); index += 1) {
+      let value = 0;
+      for (const channel of channels) value += channel[index];
+      value /= channels.length;
       if (value < min) min = value;
       if (value > max) max = value;
     }
@@ -71,6 +79,13 @@ export function buildPeaks(buffer: AudioBuffer, buckets = 900): Float32Array {
     peaks[bucket * 2 + 1] = max;
   }
   return peaks;
+}
+
+export function prepareAudioOverview(buffer: AudioBuffer): AudioOverview {
+  if (!Number.isFinite(buffer.duration) || buffer.duration <= 0 || !buffer.length) {
+    throw new Error("קובץ האודיו ריק או פגום.");
+  }
+  return { sourceDuration: buffer.duration, peaks: buildPeaks(buffer) };
 }
 
 /**
@@ -86,10 +101,15 @@ export async function prepareForModel(
     throw new Error("הדפדפן הזה אינו תומך בהמרת קצב הדגימה של השיר.");
   }
 
-  const sourceDuration = buffer.duration;
-  const start = trim ? Math.max(0, Math.min(trim.start, sourceDuration)) : 0;
+  const { sourceDuration } = prepareAudioOverview(buffer);
+  const minimumDuration = Math.min(0.05, sourceDuration);
+  const latestStart = Math.max(0, sourceDuration - minimumDuration);
+  const start = trim ? Math.max(0, Math.min(trim.start, latestStart)) : 0;
   const end = trim
-    ? Math.max(start + 0.05, Math.min(trim.end, sourceDuration))
+    ? Math.max(
+        start + minimumDuration,
+        Math.min(trim.end, sourceDuration),
+      )
     : sourceDuration;
   const duration = end - start;
 

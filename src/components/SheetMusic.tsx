@@ -9,7 +9,10 @@ type SheetMusicProps = {
 export function SheetMusic({ abc, onRendered }: SheetMusicProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const notify = useRef(onRendered);
-  notify.current = onRendered;
+
+  useEffect(() => {
+    notify.current = onRendered;
+  }, [onRendered]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -32,6 +35,7 @@ export function SheetMusic({ abc, onRendered }: SheetMusicProps) {
       },
     });
     notify.current?.(container.querySelector("svg"));
+    return () => notify.current?.(null);
   }, [abc]);
 
   return <div className="sheet-music" ref={containerRef} dir="ltr" />;
@@ -42,6 +46,7 @@ export function SheetMusic({ abc, onRendered }: SheetMusicProps) {
  * or dropped into a document. Fonts are left as text, which keeps the file
  * small and the notes selectable.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function sheetToSvg(svg: SVGSVGElement | null) {
   if (!svg) return null;
   const clone = svg.cloneNode(true) as SVGSVGElement;

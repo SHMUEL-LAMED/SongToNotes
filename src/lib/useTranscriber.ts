@@ -58,6 +58,8 @@ export function useTranscriber() {
         setState({ isRunning: false, progress: 0, error: message.message });
         pendingRef.current?.reject(new Error(message.message));
         pendingRef.current = null;
+        worker.terminate();
+        if (workerRef.current === worker) workerRef.current = null;
       }
     };
     worker.onerror = (event) => {
@@ -65,6 +67,8 @@ export function useTranscriber() {
       setState({ isRunning: false, progress: 0, error: message });
       pendingRef.current?.reject(new Error(message));
       pendingRef.current = null;
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
     };
     workerRef.current = worker;
     return worker;
