@@ -4,12 +4,16 @@ import {
   noteFramesToTime,
   outputToNotesPoly,
 } from "@spotify/basic-pitch";
+import * as tf from "@tensorflow/tfjs";
+import {
+  modelJson as bundledModelJson,
+  modelWeightsBase64,
+} from "virtual:basic-pitch-model";
 import type { DetectedNote } from "../lib/types";
 
 export type WorkerRequest = {
   type: "transcribe";
   jobId: number;
-  modelUrl: string;
   samples: Float32Array;
   /** 0..1 — lower values keep only the notes the model is sure about. */
   detectionLevel: number;
@@ -22,13 +26,53 @@ export type WorkerResponse =
   | { type: "error"; jobId: number; message: string };
 
 let engine: BasicPitch | null = null;
-let engineUrl = "";
 
-function getEngine(modelUrl: string) {
-  if (!engine || engineUrl !== modelUrl) {
-    engine = new BasicPitch(modelUrl);
-    engineUrl = modelUrl;
+function decodeModelWeights(base64: string) {
+  const binary = atob(base64);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
   }
+  return buffer;
+}
+
+/**
+ * The weights ship inside the bundle rather than being fetched, because
+ * serving them as a separate binary produced truncated, unusable downloads.
+ * Decoding them here keeps that work off the main thread as well.
+ */
+async function loadBundledModel() {
+  const modelJson = JSON.parse(bundledModelJson) as {
+    modelTopology: tf.io.ModelArtifacts["modelTopology"];
+    weightsManifest: tf.io.WeightsManifestConfig;
+    format?: string;
+    generatedBy?: string;
+    convertedBy?: string;
+  };
+  const weightSpecs = modelJson.weightsManifest.flatMap(
+    (group) => group.weights,
+  );
+  const weightData = decodeModelWeights(modelWeightsBase64);
+
+  if (weightData.byteLength % 4 !== 0) {
+    throw new Error("מודל זיהוי התווים נטען באופן חלקי. יש לרענן את הדף.");
+  }
+
+  return tf.loadGraphModel(
+    tf.io.fromMemory({
+      modelTopology: modelJson.modelTopology,
+      weightSpecs,
+      weightData,
+      format: modelJson.format,
+      generatedBy: modelJson.generatedBy,
+      convertedBy: modelJson.convertedBy,
+    }),
+  );
+}
+
+function getEngine() {
+  if (!engine) engine = new BasicPitch(loadBundledModel());
   return engine;
 }
 
@@ -37,7 +81,7 @@ function post(message: WorkerResponse) {
 }
 
 async function transcribe(request: WorkerRequest) {
-  const { jobId, samples, detectionLevel, modelUrl } = request;
+  const { jobId, samples, detectionLevel } = request;
 
   const frames: number[][] = [];
   const onsets: number[][] = [];
@@ -45,7 +89,7 @@ async function transcribe(request: WorkerRequest) {
 
   post({ type: "progress", jobId, progress: 4 });
 
-  await getEngine(modelUrl).evaluateModel(
+  await getEngine().evaluateModel(
     samples,
     (frameBatch, onsetBatch, contourBatch) => {
       // Concatenating with a spread would blow the argument limit on long

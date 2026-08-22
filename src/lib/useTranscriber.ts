@@ -88,17 +88,11 @@ export function useTranscriber() {
       const jobId = jobRef.current;
       setState({ isRunning: true, progress: 0, error: null });
 
-      const modelUrl = new URL(
-        `${import.meta.env.BASE_URL}model/model.json`,
-        window.location.href,
-      ).href;
-
       return new Promise<DetectedNote[]>((resolve, reject) => {
         pendingRef.current = { resolve, reject };
         const request: WorkerRequest = {
           type: "transcribe",
           jobId,
-          modelUrl,
           samples,
           detectionLevel: DETECTION_LEVEL,
         };
