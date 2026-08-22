@@ -12,10 +12,20 @@ import type { DetectedNote } from "./types";
  */
 const DETECTION_LEVEL = 0.8;
 
+export type Timings = {
+  backend: string;
+  load: number;
+  infer: number;
+  decode: number;
+};
+
 export type TranscriberState = {
   isRunning: boolean;
   progress: number;
   error: string | null;
+  /** Which tfjs backend the worker settled on, once it has chosen. */
+  backend: string | null;
+  timings: Timings | null;
 };
 
 export function useTranscriber() {
@@ -30,6 +40,8 @@ export function useTranscriber() {
     isRunning: false,
     progress: 0,
     error: null,
+    backend: null,
+    timings: null,
   });
 
   const teardown = useCallback(() => {
@@ -50,12 +62,25 @@ export function useTranscriber() {
       if (message.jobId !== jobRef.current) return;
       if (message.type === "progress") {
         setState((previous) => ({ ...previous, progress: message.progress }));
+      } else if (message.type === "backend") {
+        setState((previous) => ({ ...previous, backend: message.backend }));
       } else if (message.type === "done") {
-        setState({ isRunning: false, progress: 100, error: null });
+        setState((previous) => ({
+          ...previous,
+          isRunning: false,
+          progress: 100,
+          error: null,
+          timings: message.timings,
+        }));
         pendingRef.current?.resolve(message.notes);
         pendingRef.current = null;
       } else if (message.type === "error") {
-        setState({ isRunning: false, progress: 0, error: message.message });
+        setState((previous) => ({
+          ...previous,
+          isRunning: false,
+          progress: 0,
+          error: message.message,
+        }));
         pendingRef.current?.reject(new Error(message.message));
         pendingRef.current = null;
         worker.terminate();
@@ -64,7 +89,12 @@ export function useTranscriber() {
     };
     worker.onerror = (event) => {
       const message = event.message || "העיבוד נכשל.";
-      setState({ isRunning: false, progress: 0, error: message });
+      setState((previous) => ({
+        ...previous,
+        isRunning: false,
+        progress: 0,
+        error: message,
+      }));
       pendingRef.current?.reject(new Error(message));
       pendingRef.current = null;
       worker.terminate();
@@ -82,7 +112,12 @@ export function useTranscriber() {
     pendingRef.current.reject(new Error("הניתוח בוטל."));
     pendingRef.current = null;
     teardown();
-    setState({ isRunning: false, progress: 0, error: null });
+    setState((previous) => ({
+      ...previous,
+      isRunning: false,
+      progress: 0,
+      error: null,
+    }));
   }, [teardown]);
 
   const transcribe = useCallback(
@@ -90,7 +125,12 @@ export function useTranscriber() {
       const worker = ensureWorker();
       jobRef.current += 1;
       const jobId = jobRef.current;
-      setState({ isRunning: true, progress: 0, error: null });
+      setState((previous) => ({
+        ...previous,
+        isRunning: true,
+        progress: 0,
+        error: null,
+      }));
 
       return new Promise<DetectedNote[]>((resolve, reject) => {
         pendingRef.current = { resolve, reject };

@@ -173,6 +173,7 @@ export default function App() {
   const [bpmOverride, setBpmOverride] = useState(0);
   const [bpmDraft, setBpmDraft] = useState("");
 
+  const [elapsed, setElapsed] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("sheet");
   const [zoom, setZoom] = useState(70);
   const [playhead, setPlayhead] = useState(0);
@@ -208,6 +209,17 @@ export default function App() {
   );
 
   useEffect(() => () => recorder.cancel(), [recorder]);
+
+  useEffect(() => {
+    if (!transcriber.isRunning) return;
+    // The counter is zeroed where the run starts, so the effect only ticks.
+    const startedAt = Date.now();
+    const timer = window.setInterval(
+      () => setElapsed((Date.now() - startedAt) / 1000),
+      250,
+    );
+    return () => window.clearInterval(timer);
+  }, [transcriber.isRunning]);
 
   // ---- everything below is derived, so no control ever costs another
   // ---- inference pass ----
@@ -456,6 +468,7 @@ export default function App() {
     if (!decodedBuffer || transcriber.isRunning) return;
     setError(null);
     setNotice(null);
+    setElapsed(0);
     stopPlayback();
     try {
       const info = await prepareForModel(decodedBuffer, trim);
@@ -801,7 +814,9 @@ export default function App() {
                 <span>
                   <AudioWaveform size={20} /> מנתח את הצלילים והתווים…
                 </span>
-                <strong aria-live="polite">{transcriber.progress}%</strong>
+                <strong aria-live="polite">
+                  {transcriber.progress}% · {formatTime(elapsed)}
+                </strong>
               </div>
               <div
                 className="progress-track"
@@ -815,8 +830,9 @@ export default function App() {
               </div>
               <div className="processing-bottom">
                 <small>
-                  העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח
-                  לשום שרת.
+                  {transcriber.backend === "cpu"
+                    ? "הדפדפן לא סיפק האצת GPU, ולכן הניתוח איטי במיוחד. אפשר לסמן קטע קצר יותר בגל הקול."
+                    : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
                 </small>
                 <button
                   className="secondary-button"
@@ -878,6 +894,20 @@ export default function App() {
               <span>תיבות</span>
             </div>
           </div>
+
+          {transcriber.timings && (
+            <p
+              className={
+                transcriber.timings.backend === "cpu"
+                  ? "engine-note is-slow"
+                  : "engine-note"
+              }
+            >
+              {transcriber.timings.backend === "cpu"
+                ? `הניתוח רץ על המעבד בלבד (${Math.round(transcriber.timings.infer / 1000)} שנ׳) — הדפדפן לא סיפק האצת GPU. ניתוח של קטע מסומן בגל הקול יהיה מהיר בהרבה.`
+                : `הניתוח רץ בהאצת GPU והסתיים ב־${Math.round(transcriber.timings.infer / 1000)} שנ׳.`}
+            </p>
+          )}
 
           <div className="transport">
             <button
