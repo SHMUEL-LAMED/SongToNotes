@@ -61,6 +61,13 @@ export default defineConfig({
       ],
     }),
   ],
+  // Workers are bundled in their own pass, which does not inherit the plugins
+  // above. The transcription worker is what imports the inlined model, so the
+  // plugin has to be registered here too.
+  worker: {
+    format: "es",
+    plugins: () => [inlineBasicPitchModel()],
+  },
   build: {
     chunkSizeWarningLimit: 1800,
   },

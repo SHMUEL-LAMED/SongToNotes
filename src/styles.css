@@ -1,7 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap");
-
 :root {
-  font-family: "Heebo", system-ui, sans-serif;
+  font-family: "Heebo", "Segoe UI", system-ui, "Arial Hebrew", sans-serif;
   color: #eef2ff;
   background: #080c18;
   font-synthesis: none;
@@ -185,3 +183,78 @@ footer p { max-width: 610px; margin: 0; color: var(--muted); font-size: 13px; li
   .download-buttons button { flex-basis: 100%; }
 }
 
+
+/* ---- source alternatives, recording ---- */
+.source-alternatives { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.source-alternatives .secondary-button { flex: 1 1 200px; justify-content: center; }
+.recording-box { display: flex; align-items: center; gap: 16px; padding: 20px; border: 1px solid rgba(255,88,115,.35); background: rgba(255,88,115,.07); border-radius: 18px; }
+.recording-dot { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; background: #ff5873; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
+.recording-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.recording-info small { color: var(--muted); font-size: 12px; }
+.level-meter { height: 6px; background: #0a1020; border-radius: 99px; overflow: hidden; }
+.level-meter div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--mint), #ffd166 75%, #ff5873); transition: width .1s linear; }
+.recording-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.primary-button.compact { width: auto; margin: 0; min-height: 42px; padding: 10px 18px; font-size: 15px; border-radius: 11px; }
+
+/* ---- waveform with trim selection ---- */
+.waveform { margin-top: 16px; border: 1px solid var(--border); border-radius: 15px; overflow: hidden; background: #0b1120; }
+.waveform svg { display: block; width: 100%; height: 96px; cursor: crosshair; touch-action: none; }
+.waveform-legend { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+.waveform-legend button { border: 0; background: transparent; color: #b8aaff; cursor: pointer; font-size: 12.5px; text-decoration: underline; padding: 0; }
+
+.notice-message { margin-top: 18px; padding: 13px 16px; border-radius: 12px; background: rgba(45,212,191,.1); border: 1px solid rgba(45,212,191,.3); color: #a5ede2; font-size: 14px; }
+.processing-bottom { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.processing-bottom small { color: var(--muted); }
+.processing-bottom .secondary-button { flex: 0 0 auto; padding: 7px 14px; font-size: 13px; }
+
+/* ---- transport ---- */
+.transport { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.transport-button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface-2); color: inherit; border-radius: 11px; padding: 10px 15px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.transport-button:hover { background: #24304e; }
+.transport-button.primary { background: linear-gradient(110deg, #7657fb, #2cc9b4); border: 0; font-weight: 800; }
+.transport-seek { flex: 1; min-width: 90px; accent-color: var(--mint); }
+.transport-time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; direction: ltr; white-space: nowrap; }
+
+/* ---- live refine panel ---- */
+.refine-panel { padding: 20px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 17px; background: rgba(255,255,255,.022); }
+.refine-panel .settings-title em { font-style: normal; font-weight: 400; font-size: 12.5px; color: var(--mint); margin-inline-start: auto; }
+.refine-panel .settings-title { display: flex; align-items: center; gap: 8px; }
+.refine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px 26px; }
+.setting-field select, .tempo-row input { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: #0b1120; color: inherit; }
+.setting-field select { cursor: pointer; }
+.tempo-row { display: flex; align-items: center; gap: 10px; }
+.tempo-row input { width: 90px; text-align: center; }
+.link-button { border: 0; background: transparent; color: #b8aaff; cursor: pointer; font-size: 12.5px; text-decoration: underline; padding: 0; }
+.checkbox-field { display: flex; align-items: center; gap: 10px; color: #d9e1f2; font-size: 14px; cursor: pointer; align-self: end; }
+.checkbox-field input { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+.stats-grid { grid-template-columns: repeat(5, 1fr); }
+.stat-card strong { font-size: 22px; line-height: 1.2; }
+
+.tempo-control input[type="range"] { width: 130px; accent-color: var(--primary); }
+.table-footnote { margin: 12px 4px 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.result-canvas > [role="tabpanel"] { min-height: 420px; }
+
+:where(button, a, input, select, [tabindex]):focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 8px; }
+
+@media (max-width: 1000px) {
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 800px) {
+  .recording-box { flex-wrap: wrap; }
+  .recording-actions { width: 100%; }
+  .recording-actions button { flex: 1; justify-content: center; }
+  .transport { flex-wrap: wrap; }
+  .transport-seek { order: 3; flex-basis: 100%; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .refine-panel { padding: 15px; }
+  .refine-panel .settings-title { flex-wrap: wrap; }
+  .refine-panel .settings-title em { margin-inline-start: 0; flex-basis: 100%; }
+  .waveform svg { height: 76px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  html { scroll-behavior: auto; }
+}
