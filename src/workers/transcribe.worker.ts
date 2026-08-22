@@ -1,5 +1,4 @@
 import {
-  BasicPitch,
   addPitchBendsToNoteEvents,
   noteFramesToTime,
   outputToNotesPoly,
@@ -10,6 +9,7 @@ import {
   modelWeightsBase64,
 } from "virtual:basic-pitch-model";
 import type { DetectedNote } from "../lib/types";
+import { runInference } from "./inference";
 
 export type WorkerRequest = {
   type: "transcribe";
@@ -22,10 +22,46 @@ export type WorkerRequest = {
 export type WorkerResponse =
   | { type: "ready"; jobId: number }
   | { type: "progress"; jobId: number; progress: number }
-  | { type: "done"; jobId: number; notes: DetectedNote[] }
+  | { type: "backend"; jobId: number; backend: string }
+  | {
+      type: "done";
+      jobId: number;
+      notes: DetectedNote[];
+      timings: { backend: string; load: number; infer: number; decode: number };
+    }
   | { type: "error"; jobId: number; message: string };
 
-let engine: BasicPitch | null = null;
+let modelReady: Promise<tf.GraphModel> | null = null;
+let backendReady: Promise<string> | null = null;
+
+/**
+ * Picks the fastest backend available. In a worker the GPU path needs a WebGL2
+ * context on an OffscreenCanvas; where that is missing the only remaining
+ * option is the plain-JavaScript kernels, which are an order of magnitude
+ * slower, so which one we landed on is reported back to the UI.
+ *
+ * The WebAssembly backend would sit neatly in between, but it cannot execute
+ * this model — it fails with "Unknown dtype undefined" — so it is not offered.
+ */
+async function selectBackend() {
+  if (backendReady) return backendReady;
+
+  backendReady = (async () => {
+    try {
+      if (await tf.setBackend("webgl")) {
+        await tf.ready();
+        return "webgl";
+      }
+    } catch {
+      // Fall through to the CPU kernels.
+    }
+    await tf.setBackend("cpu");
+    await tf.ready();
+    return "cpu";
+  })();
+
+  return backendReady;
+}
 
 function decodeModelWeights(base64: string) {
   const binary = atob(base64);
@@ -71,9 +107,9 @@ async function loadBundledModel() {
   );
 }
 
-function getEngine() {
-  if (!engine) engine = new BasicPitch(loadBundledModel());
-  return engine;
+function getModel() {
+  if (!modelReady) modelReady = loadBundledModel();
+  return modelReady;
 }
 
 function post(message: WorkerResponse) {
@@ -83,39 +119,29 @@ function post(message: WorkerResponse) {
 async function transcribe(request: WorkerRequest) {
   const { jobId, samples, detectionLevel } = request;
 
-  const frames: number[][] = [];
-  const onsets: number[][] = [];
-  const contours: number[][] = [];
+  const loadStart = performance.now();
+  const backend = await selectBackend();
+  post({ type: "backend", jobId, backend });
+  const model = await getModel();
+  const load = performance.now() - loadStart;
 
   post({ type: "progress", jobId, progress: 4 });
 
-  const pitchEngine = getEngine();
-  await pitchEngine.model;
+  const inferStart = performance.now();
+  // An outer scope backs up the per-batch disposal inside runInference, so a
+  // stray tensor cannot survive a run and pile up across repeated analyses.
   tf.engine().startScope();
+  let output;
   try {
-    await pitchEngine.evaluateModel(
-      samples,
-      (frameBatch, onsetBatch, contourBatch) => {
-        // Concatenating with a spread would blow the argument limit on long
-        // recordings, so the batches are appended one row at a time.
-        for (const row of frameBatch) frames.push(row);
-        for (const row of onsetBatch) onsets.push(row);
-        for (const row of contourBatch) contours.push(row);
-      },
-      (progress) => {
-        post({
-          type: "progress",
-          jobId,
-          progress: 4 + Math.round(progress * 90),
-        });
-      },
-    );
+    output = await runInference(model, samples, (fraction) => {
+      post({ type: "progress", jobId, progress: 4 + Math.round(fraction * 90) });
+    });
   } finally {
-    // Basic Pitch creates temporary tensors for every chunk. Keeping them
-    // around eventually crashes repeated analyses on phones and long songs.
     tf.engine().endScope();
   }
-
+  const { frames, onsets, contours } = output;
+  const infer = performance.now() - inferStart;
+  const decodeStart = performance.now();
   post({ type: "progress", jobId, progress: 95 });
 
   // The model thresholds stay deliberately permissive: everything the user can
@@ -148,7 +174,17 @@ async function transcribe(request: WorkerRequest) {
     }))
     .sort((a, b) => a.start - b.start || a.midi - b.midi);
 
-  post({ type: "done", jobId, notes });
+  post({
+    type: "done",
+    jobId,
+    notes,
+    timings: {
+      backend,
+      load: Math.round(load),
+      infer: Math.round(infer),
+      decode: Math.round(performance.now() - decodeStart),
+    },
+  });
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {

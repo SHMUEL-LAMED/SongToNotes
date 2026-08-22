@@ -259,3 +259,6 @@ footer p { max-width: 610px; margin: 0; color: var(--muted); font-size: 13px; li
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   html { scroll-behavior: auto; }
 }
+
+.engine-note { margin: 0 4px 14px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.engine-note.is-slow { color: #ffd08a; }
