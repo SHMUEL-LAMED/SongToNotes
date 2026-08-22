@@ -70,10 +70,17 @@ export function mergeFragments(
       // clearly quieter continuation. Anything more substantial is a genuine
       // re-attack and must stay a separate note — merging those is what used
       // to turn two repeated quarter notes into one half note.
+      const shorter = Math.min(current.duration, next.duration);
+      const longer = Math.max(current.duration, next.duration);
       const isTail =
         next.duration < 0.1 ||
         next.duration < current.duration * 0.45 ||
-        next.confidence < current.confidence * 0.6;
+        next.confidence < current.confidence * 0.6 ||
+        // A sustained note the model chopped in two leaves essentially no gap
+        // at all, while a genuinely repeated note is re-articulated and shows
+        // one. Only the seamless case, with one piece clearly the offcut, is
+        // rejoined.
+        (gap <= 0.02 && shorter < 0.25 && shorter < longer * 0.6);
 
       if (isTail) {
         const end = Math.max(noteEnd(current), noteEnd(next));
