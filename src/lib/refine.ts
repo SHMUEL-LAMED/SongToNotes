@@ -16,7 +16,7 @@ export type RefineOptions = {
 export const DEFAULT_REFINE: RefineOptions = {
   minConfidence: 0.3,
   harmonicCleanup: 0.6,
-  minDuration: 0.06,
+  minDuration: 0.08,
   lowestMidi: 21,
   highestMidi: 108,
   mode: "melody",
@@ -50,12 +50,32 @@ export function mergeFragments(
     for (let index = 1; index < bucket.length; index += 1) {
       const next = bucket[index];
       const gap = next.start - noteEnd(current);
-      // Only a sliver or a decaying tail is a fragment. Absorbing anything
-      // more would let a stray blip bridge two genuinely repeated notes into
-      // one long one — the single most damaging error in the old output.
-      const isFragment =
-        next.duration < 0.1 || next.confidence < current.confidence * 0.6;
-      if (isFragment && gap <= maxGap && gap > -0.5 * current.duration) {
+      const adjacent = gap <= maxGap && gap > -0.5 * current.duration;
+
+      if (!adjacent) {
+        merged.push(current);
+        current = { ...next };
+        continue;
+      }
+
+      // A brief, faint blip immediately before a solid note is the model
+      // hearing the attack twice. Keeping it would put a grace note in front
+      // of the first beat, so the sliver is dropped and the real note stands.
+      if (current.duration < 0.1 && current.confidence < 0.5) {
+        current = { ...next };
+        continue;
+      }
+
+      // A tail is a sliver, a piece much shorter than what it follows, or a
+      // clearly quieter continuation. Anything more substantial is a genuine
+      // re-attack and must stay a separate note — merging those is what used
+      // to turn two repeated quarter notes into one half note.
+      const isTail =
+        next.duration < 0.1 ||
+        next.duration < current.duration * 0.45 ||
+        next.confidence < current.confidence * 0.6;
+
+      if (isTail) {
         const end = Math.max(noteEnd(current), noteEnd(next));
         const weight = current.duration + next.duration || 1;
         current.confidence =

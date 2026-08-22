@@ -142,10 +142,11 @@ export function scoreToAbc(score: Score, options: AbcOptions = {}) {
       start < score.measureCount;
       start += measuresPerLine
     ) {
+      const isLast = start + measuresPerLine >= score.measureCount;
       score.staves.forEach((_, staffIndex) => {
         const slice = staffLines[staffIndex].slice(start, start + measuresPerLine);
         lines.push(`V:${staffIndex + 1}`);
-        lines.push(`| ${slice.join(" | ")} |`);
+        lines.push(`${slice.join(" | ")} ${isLast ? "|]" : "|"}`);
       });
     }
   } else {
@@ -156,7 +157,8 @@ export function scoreToAbc(score: Score, options: AbcOptions = {}) {
       start += measuresPerLine
     ) {
       const slice = staffLines[0].slice(start, start + measuresPerLine);
-      lines.push(`| ${slice.join(" | ")} |`);
+      const isLast = start + measuresPerLine >= score.measureCount;
+      lines.push(`${slice.join(" | ")} ${isLast ? "|]" : "|"}`);
     }
   }
 

@@ -3,17 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SongToNotes — הפיכת שיר לתווים בדפדפן</title>
     <meta
       name="description"
-      content="SongToNotes — הופכים הקלטות ושירים לתווים, MIDI ו-MusicXML ישירות בדפדפן."
+      content="ממירים שיר, הקלטה או זמזום לתווים, MIDI ו-MusicXML ישירות בדפדפן. זיהוי אוטומטי של תווים, קצב וסולם, האזנה לתוצאה ועריכה בזמן אמת — בלי העלאה לשרת ובלי הרשמה."
     />
     <meta name="theme-color" content="#0b1020" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="https://shmuel-lamed.github.io/SongToNotes/" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>SongToNotes — משיר לתווים</title>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SongToNotes" />
+    <meta property="og:locale" content="he_IL" />
+    <meta property="og:title" content="SongToNotes — הפיכת שיר לתווים בדפדפן" />
+    <meta
+      property="og:description"
+      content="מעלים שיר או מזמזמים למיקרופון, והמערכת מזהה תווים, קצב וסולם ומכינה תווים, MIDI ו-MusicXML. הכול רץ במכשיר שלכם."
+    />
+    <meta property="og:url" content="https://shmuel-lamed.github.io/SongToNotes/" />
+    <meta name="twitter:card" content="summary" />
+
+    <!-- Loaded from the document rather than an @import so a slow or blocked
+         font host cannot hold up the stylesheet, and the page still renders in
+         the fallback stack. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap"
+      />
+    </noscript>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "SongToNotes",
+        "url": "https://shmuel-lamed.github.io/SongToNotes/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "inLanguage": "he",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "ILS" },
+        "featureList": [
+          "זיהוי תווים משיר או מהקלטה",
+          "הקלטה ישירות מהמיקרופון",
+          "זיהוי קצב וסולם אוטומטי",
+          "ייצוא MIDI, MusicXML, ABC ו-CSV",
+          "עיבוד מקומי בדפדפן ללא העלאה לשרת"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p style="padding: 24px; color: #eef2ff; font-family: system-ui, sans-serif">
+        SongToNotes מנתח את השיר בתוך הדפדפן, ולכן דרוש JavaScript פעיל.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -78,11 +78,34 @@ function scoreGrid(
   return fit * (0.35 + 0.65 * coverage);
 }
 
+/**
+ * Tempo is a global property, so a long take is measured from a representative
+ * stretch rather than every onset in it. This keeps the estimate steady while
+ * bounding the work, which matters because every settings change re-derives it.
+ */
+const MAX_SCORED_ONSETS = 900;
+
+function scoringWindow(onsets: Onset[]) {
+  if (onsets.length <= MAX_SCORED_ONSETS) return onsets;
+  const start = Math.floor((onsets.length - MAX_SCORED_ONSETS) / 2);
+  return onsets.slice(start, start + MAX_SCORED_ONSETS);
+}
+
+/**
+ * Moves a beat phase by whole beats so bar 1 lands at, or just before, the
+ * first note of the recording.
+ */
+function anchorPhase(phase: number, period: number, songStart: number) {
+  const steps = Math.ceil((phase - songStart) / period);
+  return phase - steps * period;
+}
+
 export function estimateTempo(notes: DetectedNote[]): Tempo {
-  const onsets = collectOnsets(notes);
-  if (onsets.length < 4) {
+  const all = collectOnsets(notes);
+  if (all.length < 4) {
     return { bpm: 120, offset: 0, fit: 0 };
   }
+  const onsets = scoringWindow(all);
 
   const from = onsets[0].time;
   const to = onsets[onsets.length - 1].time;
@@ -118,16 +141,11 @@ export function estimateTempo(notes: DetectedNote[]): Tempo {
   }
   sweep(fine, 64);
 
-  // Pull the phase back to the first bar that still precedes every onset, so
-  // bar 1 starts at or before the first note instead of skipping it.
-  const period = 60 / best.bpm;
-  let offset = best.offset;
-  while (offset > from + 1e-6) offset -= period;
-  while (offset < -period) offset += period;
-
   return {
     bpm: Math.round(best.bpm * 10) / 10,
-    offset,
+    // The winning phase may sit anywhere inside the scored window, so it is
+    // shifted by whole beats back to the start of the recording.
+    offset: anchorPhase(best.offset, 60 / best.bpm, all[0].time),
     fit: totalStrength > 0 ? Math.min(1, best.raw / totalStrength) : 0,
   };
 }
@@ -137,8 +155,9 @@ export function estimateTempo(notes: DetectedNote[]): Tempo {
  * lands its barlines on real accents.
  */
 export function alignOffset(notes: DetectedNote[], bpm: number): number {
-  const onsets = collectOnsets(notes);
-  if (!onsets.length) return 0;
+  const all = collectOnsets(notes);
+  if (!all.length) return 0;
+  const onsets = scoringWindow(all);
   const period = 60 / bpm;
   const from = onsets[0].time;
   const to = onsets[onsets.length - 1].time;
@@ -154,8 +173,5 @@ export function alignOffset(notes: DetectedNote[], bpm: number): number {
     }
   }
 
-  let offset = bestPhase;
-  while (offset > from + 1e-6) offset -= period;
-  while (offset < -period) offset += period;
-  return offset;
+  return anchorPhase(bestPhase, period, all[0].time);
 }
