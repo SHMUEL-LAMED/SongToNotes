@@ -12,21 +12,42 @@ import type { DetectedNote } from "./types";
  */
 const DETECTION_LEVEL = 0.8;
 
-export type Timings = {
-  backend: string;
-  load: number;
-  infer: number;
-  decode: number;
-};
+import type { Timings } from "./pitchModel";
+
+export type { Timings };
 
 export type TranscriberState = {
   isRunning: boolean;
   progress: number;
   error: string | null;
-  /** Which tfjs backend the worker settled on, once it has chosen. */
+  /** Which tfjs backend the run settled on, once it has chosen. */
   backend: string | null;
   timings: Timings | null;
+  /** True while the run has moved to the main thread for GPU access. */
+  onMainThread: boolean;
 };
+
+/**
+ * Whether this thread could give tfjs a GPU. Used to decide if it is worth
+ * asking the worker to hand a job back: if there is no WebGL here either, the
+ * retry would only cost a round trip and lose the responsive UI for nothing.
+ */
+function mainThreadHasWebgl() {
+  try {
+    const canvas = document.createElement("canvas");
+    const context =
+      canvas.getContext("webgl2") ||
+      canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl");
+    if (!context) return false;
+    (context as WebGLRenderingContext)
+      .getExtension("WEBGL_lose_context")
+      ?.loseContext();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function useTranscriber() {
   const workerRef = useRef<Worker | null>(null);
@@ -35,6 +56,11 @@ export function useTranscriber() {
     resolve: (notes: DetectedNote[]) => void;
     reject: (error: Error) => void;
   } | null>(null);
+  // Set once a main-thread retry has also landed on the CPU kernels. Some
+  // browsers hand out a WebGL context that tfjs then cannot use, so the only
+  // reliable evidence is having tried; after that, runs stay in the worker
+  // where at least the page keeps responding.
+  const mainThreadGpuFailedRef = useRef(false);
 
   const [state, setState] = useState<TranscriberState>({
     isRunning: false,
@@ -42,6 +68,7 @@ export function useTranscriber() {
     error: null,
     backend: null,
     timings: null,
+    onMainThread: false,
   });
 
   const teardown = useCallback(() => {
@@ -50,6 +77,60 @@ export function useTranscriber() {
   }, []);
 
   useEffect(() => teardown, [teardown]);
+
+  /**
+   * Second attempt when the worker could not reach the GPU. A worker needs a
+   * WebGL2 context on an OffscreenCanvas, which several browsers — notably
+   * older mobile Safari — do not provide, and falling through to the
+   * JavaScript kernels there turns a few seconds of work into a minute or
+   * more. The main thread has a real canvas, so the GPU is usually available;
+   * the page stops responding for the duration, which is far the lesser cost.
+   *
+   * The model code is pulled in on demand so this path adds nothing to the
+   * initial download.
+   */
+  const runOnMainThread = useCallback(
+    async (jobId: number, samples: Float32Array) => {
+      if (jobRef.current !== jobId) return;
+      setState((previous) => ({ ...previous, onMainThread: true }));
+      try {
+        const { transcribeSamples } = await import("./pitchModel");
+        const { notes, timings } = await transcribeSamples(
+          samples,
+          DETECTION_LEVEL,
+          (progress) => {
+            if (jobRef.current !== jobId) return;
+            setState((previous) => ({ ...previous, progress }));
+          },
+        );
+        if (timings.backend !== "webgl") mainThreadGpuFailedRef.current = true;
+        if (jobRef.current !== jobId) return;
+        setState((previous) => ({
+          ...previous,
+          isRunning: false,
+          progress: 100,
+          error: null,
+          backend: timings.backend,
+          timings,
+        }));
+        pendingRef.current?.resolve(notes);
+        pendingRef.current = null;
+      } catch (error) {
+        if (jobRef.current !== jobId) return;
+        const message =
+          error instanceof Error ? error.message : "העיבוד נכשל.";
+        setState((previous) => ({
+          ...previous,
+          isRunning: false,
+          progress: 0,
+          error: message,
+        }));
+        pendingRef.current?.reject(new Error(message));
+        pendingRef.current = null;
+      }
+    },
+    [],
+  );
 
   const ensureWorker = useCallback(() => {
     if (workerRef.current) return workerRef.current;
@@ -64,6 +145,8 @@ export function useTranscriber() {
         setState((previous) => ({ ...previous, progress: message.progress }));
       } else if (message.type === "backend") {
         setState((previous) => ({ ...previous, backend: message.backend }));
+      } else if (message.type === "no-gpu") {
+        void runOnMainThread(message.jobId, message.samples);
       } else if (message.type === "done") {
         setState((previous) => ({
           ...previous,
@@ -102,7 +185,7 @@ export function useTranscriber() {
     };
     workerRef.current = worker;
     return worker;
-  }, []);
+  }, [runOnMainThread]);
 
   const cancel = useCallback(() => {
     if (!pendingRef.current) return;
@@ -130,6 +213,7 @@ export function useTranscriber() {
         isRunning: true,
         progress: 0,
         error: null,
+        onMainThread: false,
       }));
 
       return new Promise<DetectedNote[]>((resolve, reject) => {
@@ -139,6 +223,7 @@ export function useTranscriber() {
           jobId,
           samples,
           detectionLevel: DETECTION_LEVEL,
+          requireGpu: !mainThreadGpuFailedRef.current && mainThreadHasWebgl(),
         };
         // The sample buffer is handed over rather than copied.
         worker.postMessage(request, [samples.buffer]);

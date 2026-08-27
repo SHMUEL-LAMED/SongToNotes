@@ -830,8 +830,8 @@ export default function App() {
               </div>
               <div className="processing-bottom">
                 <small>
-                  {transcriber.backend === "cpu"
-                    ? "הדפדפן לא סיפק האצת GPU, ולכן הניתוח איטי במיוחד. אפשר לסמן קטע קצר יותר בגל הקול."
+                  {transcriber.onMainThread
+                    ? "העיבוד ברקע לא קיבל גישה לכרטיס המסך, ולכן הוא רץ ישירות בדף כדי להאיץ אותו. הדף עשוי לא להגיב עד לסיום."
                     : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
                 </small>
                 <button
@@ -904,8 +904,8 @@ export default function App() {
               }
             >
               {transcriber.timings.backend === "cpu"
-                ? `הניתוח רץ על המעבד בלבד (${Math.round(transcriber.timings.infer / 1000)} שנ׳) — הדפדפן לא סיפק האצת GPU. ניתוח של קטע מסומן בגל הקול יהיה מהיר בהרבה.`
-                : `הניתוח רץ בהאצת GPU והסתיים ב־${Math.round(transcriber.timings.infer / 1000)} שנ׳.`}
+                ? `הניתוח רץ על המעבד בלבד (${Math.round(transcriber.timings.infer / 1000)} שנ׳) — הדפדפן הזה לא סיפק האצת GPU בכלל. סימון קטע קצר בגל הקול יקצר את הזמן בהתאם.`
+                : `הניתוח רץ בהאצת GPU והסתיים ב־${Math.round(transcriber.timings.infer / 1000)} שנ׳${transcriber.onMainThread ? " (בדף עצמו, כי העיבוד ברקע לא קיבל גישה לכרטיס המסך)" : ""}.`}
             </p>
           )}
 
