@@ -167,7 +167,7 @@ function formatBytes(bytes: number) {
 }
 
 function WorkspaceApp() {
-  const { user, profile } = useAuth();
+  const { user, profile, signInWithGoogle } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [historyTitle, setHistoryTitle] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -645,17 +645,39 @@ function WorkspaceApp() {
             <LockKeyhole size={15} />
             הקובץ נשאר אצלך בדפדפן
           </div>
-          <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
-            ) : (
+          {!user ? (
+            <button
+              className="account-button"
+              type="button"
+              onClick={() =>
+                void signInWithGoogle().catch(() =>
+                  setError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."),
+                )
+              }
+            >
               <span><UserRound size={18} /></span>
-            )}
-            <span className="account-button-copy">
-              <strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong>
-              <small><History size={12} /> היסטוריה</small>
-            </span>
-          </button>
+              <span className="account-button-copy">
+                <strong>התחברות</strong>
+                <small><History size={12} /> לשמירת היסטוריה</small>
+              </span>
+            </button>
+          ) : (
+            <button
+              className="account-button"
+              type="button"
+              onClick={() => setAccountOpen(true)}
+            >
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                <span><UserRound size={18} /></span>
+              )}
+              <span className="account-button-copy">
+                <strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong>
+                <small><History size={12} /> היסטוריה</small>
+              </span>
+            </button>
+          )}
         </div>
       </nav>
 
@@ -1394,7 +1416,7 @@ function WorkspaceApp() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, guest } = useAuth();
 
   if (loading) {
     return (
@@ -1407,5 +1429,5 @@ export default function App() {
     );
   }
 
-  return user ? <WorkspaceApp /> : <SignInScreen />;
+  return user || guest ? <WorkspaceApp /> : <SignInScreen />;
 }

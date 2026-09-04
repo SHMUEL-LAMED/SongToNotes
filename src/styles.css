@@ -55,6 +55,9 @@ main { min-height: 100vh; overflow: hidden; }
 .auth-card p { margin: 18px auto 26px; color: var(--muted); line-height: 1.75; }
 .google-button { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 0; border-radius: 14px; color: #172033; background: #fff; font-weight: 800; cursor: pointer; box-shadow: 0 12px 28px rgba(0,0,0,.25); transition: .2s; }
 .google-button:hover { transform: translateY(-2px); background: #f7f9ff; }
+.guest-button { width: 100%; min-height: 48px; margin-top: 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 14px; background: transparent; color: #eef2ff; font-weight: 700; cursor: pointer; transition: .2s; }
+.guest-button:hover { background: rgba(255,255,255,.08); }
+.auth-note { display: block; margin-top: 10px; color: rgba(238,242,255,.65); font-size: 13px; line-height: 1.5; }
 .auth-privacy { margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .auth-loading { display: flex; align-items: center; gap: 13px; color: #dbe3f7; }
 .auth-loading .brand-mark { animation: account-pulse 1.5s ease-in-out infinite; }

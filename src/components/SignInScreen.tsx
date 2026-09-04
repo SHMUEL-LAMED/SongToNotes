@@ -14,7 +14,7 @@ function GoogleMark() {
 }
 
 export function SignInScreen() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, continueAsGuest } = useAuth();
   const [error, setError] = useState("");
 
   return (
@@ -37,14 +37,24 @@ export function SignInScreen() {
           type="button"
           onClick={() => {
             setError("");
-            void signInWithGoogle().catch(() =>
-              setError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."),
+            void signInWithGoogle().catch((caught: unknown) =>
+              setError(
+                caught instanceof Error && caught.message
+                  ? `לא הצלחנו לפתוח את ההתחברות ל־Google: ${caught.message}`
+                  : "לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב.",
+              ),
             );
           }}
         >
           <GoogleMark /> המשך באמצעות Google
         </button>
         {error && <div className="error-message" role="alert">{error}</div>}
+        <button className="guest-button" type="button" onClick={continueAsGuest}>
+          המשך ללא חשבון
+        </button>
+        <small className="auth-note">
+          ללא חשבון אפשר להמיר ולהוריד תווים, אבל התוצאות לא נשמרות בהיסטוריה.
+        </small>
         <div className="auth-privacy">
           <LockKeyhole size={15} /> קובצי השמע נשארים במכשיר שלך ולא נשמרים בשרת
         </div>
