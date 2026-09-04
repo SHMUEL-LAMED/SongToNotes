@@ -6,6 +6,7 @@ import {
   Download,
   FileAudio,
   FileMusic,
+  History,
   Image,
   ListMusic,
   LockKeyhole,
@@ -19,11 +20,14 @@ import {
   Square,
   Trash2,
   UploadCloud,
+  UserRound,
   Wand2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PianoRoll } from "./components/PianoRoll";
+import { AccountPanel } from "./components/AccountPanel";
+import { SignInScreen } from "./components/SignInScreen";
 import { SheetMusic, sheetToSvg } from "./components/SheetMusic";
 import { Waveform } from "./components/Waveform";
 import {
@@ -36,6 +40,7 @@ import {
   type TrimRange,
 } from "./lib/audio";
 import { scoreToAbc } from "./lib/abc";
+import { useAuth } from "./lib/auth";
 import {
   downloadFile,
   notesToCsv,
@@ -43,6 +48,10 @@ import {
   safeFilename,
 } from "./lib/export";
 import { detectKey, keyName, scientificName } from "./lib/key";
+import {
+  saveTranscription,
+  type SavedTranscription,
+} from "./lib/history";
 import { scoreToMusicXml } from "./lib/musicxml";
 import {
   isRecordingSupported,
@@ -93,59 +102,60 @@ const DEFAULT_SETTINGS: Settings = {
   withChords: true,
 };
 
+function normalizeSettings(parsed: Partial<Settings> | null | undefined): Settings {
+  if (!parsed || typeof parsed !== "object") return DEFAULT_SETTINGS;
+  const numberInRange = (
+    value: unknown,
+    fallback: number,
+    minimum: number,
+    maximum: number,
+  ) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.max(minimum, Math.min(maximum, value))
+      : fallback;
+  const stepsPerBeat = [1, 2, 3, 4, 8].includes(parsed.stepsPerBeat ?? 0)
+    ? (parsed.stepsPerBeat as number)
+    : DEFAULT_SETTINGS.stepsPerBeat;
+  const beatsPerMeasure = [2, 3, 4, 6].includes(parsed.beatsPerMeasure ?? 0)
+    ? (parsed.beatsPerMeasure as number)
+    : DEFAULT_SETTINGS.beatsPerMeasure;
+  return {
+    sensitivity: numberInRange(
+      parsed.sensitivity,
+      DEFAULT_SETTINGS.sensitivity,
+      20,
+      90,
+    ),
+    harmonicCleanup: numberInRange(
+      parsed.harmonicCleanup,
+      DEFAULT_SETTINGS.harmonicCleanup,
+      0,
+      1,
+    ),
+    minDuration: numberInRange(
+      parsed.minDuration,
+      DEFAULT_SETTINGS.minDuration,
+      0.02,
+      0.3,
+    ),
+    mode: parsed.mode === "full" ? "full" : "melody",
+    stepsPerBeat,
+    beatsPerMeasure,
+    transpose: Math.round(
+      numberInRange(parsed.transpose, DEFAULT_SETTINGS.transpose, -12, 12),
+    ),
+    withChords:
+      typeof parsed.withChords === "boolean"
+        ? parsed.withChords
+        : DEFAULT_SETTINGS.withChords,
+  };
+}
+
 function loadSettings(): Settings {
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (!stored) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(stored) as Partial<Settings> | null;
-    if (!parsed || typeof parsed !== "object") return DEFAULT_SETTINGS;
-    const numberInRange = (
-      value: unknown,
-      fallback: number,
-      minimum: number,
-      maximum: number,
-    ) =>
-      typeof value === "number" && Number.isFinite(value)
-        ? Math.max(minimum, Math.min(maximum, value))
-        : fallback;
-    const stepsPerBeat = [1, 2, 3, 4, 8].includes(parsed.stepsPerBeat ?? 0)
-      ? (parsed.stepsPerBeat as number)
-      : DEFAULT_SETTINGS.stepsPerBeat;
-    const beatsPerMeasure = [2, 3, 4, 6].includes(
-      parsed.beatsPerMeasure ?? 0,
-    )
-      ? (parsed.beatsPerMeasure as number)
-      : DEFAULT_SETTINGS.beatsPerMeasure;
-    return {
-      sensitivity: numberInRange(
-        parsed.sensitivity,
-        DEFAULT_SETTINGS.sensitivity,
-        20,
-        90,
-      ),
-      harmonicCleanup: numberInRange(
-        parsed.harmonicCleanup,
-        DEFAULT_SETTINGS.harmonicCleanup,
-        0,
-        1,
-      ),
-      minDuration: numberInRange(
-        parsed.minDuration,
-        DEFAULT_SETTINGS.minDuration,
-        0.02,
-        0.3,
-      ),
-      mode: parsed.mode === "full" ? "full" : "melody",
-      stepsPerBeat,
-      beatsPerMeasure,
-      transpose: Math.round(
-        numberInRange(parsed.transpose, DEFAULT_SETTINGS.transpose, -12, 12),
-      ),
-      withChords:
-        typeof parsed.withChords === "boolean"
-          ? parsed.withChords
-          : DEFAULT_SETTINGS.withChords,
-    };
+    return normalizeSettings(JSON.parse(stored) as Partial<Settings> | null);
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -156,8 +166,10 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function App() {
+function WorkspaceApp() {
+  const { user, profile } = useAuth();
   const [file, setFile] = useState<File | null>(null);
+  const [historyTitle, setHistoryTitle] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<AudioOverview | null>(null);
   const [decodedBuffer, setDecodedBuffer] = useState<AudioBuffer | null>(null);
@@ -178,6 +190,8 @@ export default function App() {
   const [zoom, setZoom] = useState(70);
   const [playhead, setPlayhead] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
   const [recorder] = useState(() => new MicRecorder());
   const [isRecording, setIsRecording] = useState(false);
@@ -253,7 +267,9 @@ export default function App() {
   }, [bpmOverride, detectedTempo, notes]);
 
   const keySignature = useMemo(() => detectKey(notes), [notes]);
-  const title = file ? file.name.replace(/\.[^/.]+$/, "") : "SongToNotes";
+  const title = file
+    ? file.name.replace(/\.[^/.]+$/, "")
+    : historyTitle ?? "SongToNotes";
 
   const score = useMemo(
     () =>
@@ -348,6 +364,7 @@ export default function App() {
     setTrim(null);
     setBpmOverride(0);
     setBpmDraft("");
+    setHistoryTitle(null);
     try {
       const buffer = await decodeAudioFile(await candidate.arrayBuffer());
       const info = prepareAudioOverview(buffer);
@@ -481,6 +498,30 @@ export default function App() {
         return;
       }
       setRawNotes(detected);
+      if (user) {
+        const refined = refineNotes(detected, refineOptions);
+        const savedTempo = estimateTempo(refined);
+        const savedKey = detectKey(refined);
+        void saveTranscription({
+          user_id: user.id,
+          title,
+          source_name: file?.name ?? null,
+          note_count: refined.length,
+          duration_seconds: noteSpan(refined),
+          bpm: savedTempo.bpm,
+          key_name: keyName(savedKey),
+          analysis_offset: info.startOffset,
+          raw_notes: detected,
+          settings,
+        })
+          .then(() => {
+            setHistoryRefreshToken((value) => value + 1);
+            setNotice("התוצאה נשמרה אוטומטית בפרופיל שלך.");
+          })
+          .catch(() =>
+            setNotice("התווים מוכנים, אבל לא הצלחנו לשמור אותם בהיסטוריה."),
+          );
+      }
       window.setTimeout(
         () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
         120,
@@ -490,7 +531,7 @@ export default function App() {
         caughtError instanceof Error ? caughtError.message : "אירעה שגיאה.";
       if (message !== "הניתוח בוטל.") setError(message);
     }
-  }, [decodedBuffer, transcriber, trim, stopPlayback]);
+  }, [decodedBuffer, file, refineOptions, settings, stopPlayback, title, transcriber, trim, user]);
 
   const reset = useCallback(() => {
     cancelTranscription();
@@ -499,6 +540,7 @@ export default function App() {
     audioUrlRef.current = null;
     setAudioUrl(null);
     setFile(null);
+    setHistoryTitle(null);
     setDecodedBuffer(null);
     setPrepared(null);
     setRawNotes([]);
@@ -509,6 +551,34 @@ export default function App() {
     setBpmDraft("");
     if (inputRef.current) inputRef.current.value = "";
   }, [cancelTranscription, stopPlayback]);
+
+  const openSavedTranscription = useCallback(
+    (item: SavedTranscription) => {
+      cancelTranscription();
+      stopPlayback();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+      setAudioUrl(null);
+      setFile(null);
+      setDecodedBuffer(null);
+      setPrepared(null);
+      setTrim(null);
+      setError(null);
+      setRawNotes(Array.isArray(item.raw_notes) ? item.raw_notes : []);
+      setAnalysisOffset(Number(item.analysis_offset) || 0);
+      setSettings(normalizeSettings(item.settings as Partial<Settings>));
+      setBpmOverride(0);
+      setBpmDraft("");
+      setHistoryTitle(item.title);
+      setAccountOpen(false);
+      setNotice("פתחת תוצאה שמורה. קובץ השמע המקורי לא נשמר מטעמי פרטיות.");
+      window.setTimeout(
+        () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
+        100,
+      );
+    },
+    [cancelTranscription, stopPlayback],
+  );
 
   // ---- downloads ----
 
@@ -570,11 +640,31 @@ export default function App() {
           </span>
           <span>SongToNotes</span>
         </a>
-        <div className="privacy-pill">
-          <LockKeyhole size={15} />
-          הקובץ נשאר אצלך בדפדפן
+        <div className="topbar-actions">
+          <div className="privacy-pill">
+            <LockKeyhole size={15} />
+            הקובץ נשאר אצלך בדפדפן
+          </div>
+          <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span><UserRound size={18} /></span>
+            )}
+            <span className="account-button-copy">
+              <strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong>
+              <small><History size={12} /> היסטוריה</small>
+            </span>
+          </button>
         </div>
       </nav>
+
+      <AccountPanel
+        open={accountOpen}
+        refreshToken={historyRefreshToken}
+        onClose={() => setAccountOpen(false)}
+        onOpenItem={openSavedTranscription}
+      />
 
       <section className="hero" id="top">
         <div className="hero-glow hero-glow-one" />
@@ -594,7 +684,7 @@ export default function App() {
         </p>
         <div className="hero-points">
           <span>
-            <Check size={16} /> ללא הרשמה
+            <Check size={16} /> היסטוריה אישית ושמורה
           </span>
           <span>
             <Check size={16} /> עיבוד מקומי ופרטי
@@ -1301,4 +1391,21 @@ export default function App() {
       </footer>
     </main>
   );
+}
+
+export default function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <main className="auth-screen">
+        <div className="auth-loading" role="status">
+          <span className="brand-mark"><Music2 size={22} /></span>
+          <strong>טוען את החשבון שלך…</strong>
+        </div>
+      </main>
+    );
+  }
+
+  return user ? <WorkspaceApp /> : <SignInScreen />;
 }
