@@ -13,13 +13,13 @@ const HOP_SIZE = AUDIO_N_SAMPLES - OVERLAP_LENGTH_FRAMES;
 const OUTPUT_TENSORS = ["Identity_1", "Identity_2", "Identity"];
 
 /**
- * How many 2-second windows to push through the graph at once. Batching pays
- * for itself on the GPU, where each execution costs a round trip regardless of
- * size. On the CPU kernels there is no round trip to amortise and larger
- * batches measured slower, so that path stays at one window.
+ * Keep batches deliberately small. A large first WebGL batch made several
+ * mobile and integrated GPUs spend a very long time compiling/executing it;
+ * because the UI cannot paint during that work, every affected run appeared
+ * to freeze at the 4% hand-off between model loading and inference.
  */
 function batchSizeFor(backend: string) {
-  return backend === "webgl" ? 8 : 1;
+  return backend === "webgl" ? 2 : 1;
 }
 
 export type ModelOutput = {
@@ -56,61 +56,73 @@ export async function runInference(
   onProgress: (fraction: number) => void,
 ): Promise<ModelOutput> {
   const initialBatch = batchSizeFor(tf.getBackend());
-  const framed = tf.tidy(() => {
-    const padded = tf.concat1d([
-      tf.zeros([Math.floor(OVERLAP_LENGTH_FRAMES / 2)], "float32"),
-      tf.tensor1d(samples),
-    ]);
-    return tf.expandDims(
-      tf.signal.frame(padded, AUDIO_N_SAMPLES, HOP_SIZE, true, 0),
-      -1,
-    ) as tf.Tensor3D;
-  });
+  const leftPadding = Math.floor(OVERLAP_LENGTH_FRAMES / 2);
+  const paddedLength = leftPadding + samples.length;
+  const windowCount = Math.max(1, Math.ceil(paddedLength / HOP_SIZE));
 
   const frames: number[][] = [];
   const onsets: number[][] = [];
   const contours: number[][] = [];
 
-  try {
-    const windowCount = framed.shape[0];
-    const expectedFrames = Math.floor(
-      samples.length * (ANNOTATIONS_FPS / AUDIO_SAMPLE_RATE),
-    );
-    let produced = 0;
-    let batchSize = initialBatch;
+  const expectedFrames = Math.floor(
+    samples.length * (ANNOTATIONS_FPS / AUDIO_SAMPLE_RATE),
+  );
+  let produced = 0;
+  let batchSize = initialBatch;
 
-    for (let start = 0; start < windowCount; ) {
-      onProgress(start / windowCount);
-      const size = Math.min(batchSize, windowCount - start);
+  for (let start = 0; start < windowCount; ) {
+    onProgress(start / windowCount);
+    // Give React a chance to paint the progress value before the next model
+    // execution. This matters when WebGL is only available on the main thread.
+    await tf.nextFrame();
+    const size = Math.min(batchSize, windowCount - start);
 
-      let outputs: tf.Tensor2D[];
-      try {
-        outputs = tf.tidy(() => {
-          const batch = tf.slice(
-            framed,
-            [start, 0, 0],
-            [size, -1, -1],
-          ) as tf.Tensor3D;
-          const results = model.execute(
-            batch,
-            OUTPUT_TENSORS,
-          ) as tf.Tensor3D[];
-          return results.map(unwrap);
-        });
-      } catch (error) {
-        // Some exported graphs pin the batch dimension to one. Drop to
-        // single-window evaluation and carry on rather than failing.
-        if (size > 1) {
-          batchSize = 1;
-          continue;
-        }
-        throw error;
+    // Build only the windows needed for this batch. The previous implementation
+    // materialised a framed tensor for the entire song up front; on longer
+    // tracks that duplicated tens of megabytes on the GPU before inference had
+    // even begun and could leave the page permanently stuck at 4%.
+    const batchSamples = new Float32Array(size * AUDIO_N_SAMPLES);
+    for (let batchIndex = 0; batchIndex < size; batchIndex += 1) {
+      const paddedStart = (start + batchIndex) * HOP_SIZE;
+      const sourceStart = Math.max(0, paddedStart - leftPadding);
+      const destinationStart = Math.max(0, leftPadding - paddedStart);
+      const available = Math.min(
+        AUDIO_N_SAMPLES - destinationStart,
+        samples.length - sourceStart,
+      );
+      if (available > 0) {
+        batchSamples.set(
+          samples.subarray(sourceStart, sourceStart + available),
+          batchIndex * AUDIO_N_SAMPLES + destinationStart,
+        );
       }
+    }
 
+    let outputs: tf.Tensor2D[];
+    try {
+      outputs = tf.tidy(() => {
+        const batch = tf.tensor3d(batchSamples, [
+          size,
+          AUDIO_N_SAMPLES,
+          1,
+        ]);
+        const results = model.execute(batch, OUTPUT_TENSORS) as tf.Tensor3D[];
+        return results.map(unwrap);
+      });
+    } catch (error) {
+      // Some exported graphs pin the batch dimension to one. Drop to
+      // single-window evaluation and carry on rather than failing.
+      if (size > 1) {
+        batchSize = 1;
+        continue;
+      }
+      throw error;
+    }
+
+    try {
       const [batchFrames, batchOnsets, batchContours] = (await Promise.all(
         outputs.map((tensor) => tensor.array()),
       )) as number[][][];
-      outputs.forEach((tensor) => tensor.dispose());
 
       // The final window runs past the end of the audio, so the tail is cut.
       const take = Math.min(batchFrames.length, expectedFrames - produced);
@@ -120,12 +132,13 @@ export async function runInference(
         contours.push(batchContours[index]);
       }
       produced += take;
-
-      start += size;
-      if (produced >= expectedFrames) break;
+    } finally {
+      outputs.forEach((tensor) => tensor.dispose());
     }
-  } finally {
-    framed.dispose();
+
+    start += size;
+    onProgress(Math.min(1, start / windowCount));
+    if (produced >= expectedFrames) break;
   }
 
   onProgress(1);
