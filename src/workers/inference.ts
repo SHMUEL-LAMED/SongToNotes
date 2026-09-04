@@ -12,14 +12,9 @@ const HOP_SIZE = AUDIO_N_SAMPLES - OVERLAP_LENGTH_FRAMES;
 
 const OUTPUT_TENSORS = ["Identity_1", "Identity_2", "Identity"];
 
-/**
- * Keep batches deliberately small. A large first WebGL batch made several
- * mobile and integrated GPUs spend a very long time compiling/executing it;
- * because the UI cannot paint during that work, every affected run appeared
- * to freeze at the 4% hand-off between model loading and inference.
- */
-function batchSizeFor(backend: string) {
-  return backend === "webgl" ? 2 : 1;
+/** GPU inference is much faster when several windows share one execution. */
+function preferredBatchSize(backend: string) {
+  return backend === "webgl" ? 8 : 1;
 }
 
 export type ModelOutput = {
@@ -55,7 +50,8 @@ export async function runInference(
   samples: Float32Array,
   onProgress: (fraction: number) => void,
 ): Promise<ModelOutput> {
-  const initialBatch = batchSizeFor(tf.getBackend());
+  const backend = tf.getBackend();
+  const preferredBatch = preferredBatchSize(backend);
   const leftPadding = Math.floor(OVERLAP_LENGTH_FRAMES / 2);
   const paddedLength = leftPadding + samples.length;
   const windowCount = Math.max(1, Math.ceil(paddedLength / HOP_SIZE));
@@ -68,7 +64,11 @@ export async function runInference(
     samples.length * (ANNOTATIONS_FPS / AUDIO_SAMPLE_RATE),
   );
   let produced = 0;
-  let batchSize = initialBatch;
+  // Compile and validate the graph with one small window first. This moves the
+  // progress bar beyond 4% quickly and avoids asking weaker GPUs to compile a
+  // large first execution. Once it succeeds, WebGL switches to the faster
+  // eight-window batches used by the original optimized path.
+  let batchSize = 1;
 
   for (let start = 0; start < windowCount; ) {
     onProgress(start / windowCount);
@@ -138,6 +138,7 @@ export async function runInference(
 
     start += size;
     onProgress(Math.min(1, start / windowCount));
+    if (batchSize === 1 && preferredBatch > 1) batchSize = preferredBatch;
     if (produced >= expectedFrames) break;
   }
 
