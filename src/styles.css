@@ -35,6 +35,61 @@ main { min-height: 100vh; overflow: hidden; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -.4px; direction: ltr; }
 .brand-mark { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: linear-gradient(135deg, var(--primary), var(--mint)); box-shadow: 0 10px 30px rgba(124,92,255,.25); }
 .privacy-pill { display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 999px; color: #b8c3dc; font-size: 13px; background: rgba(16,23,40,.75); }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.account-button { min-height: 48px; padding: 5px 8px 5px 13px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 15px; color: inherit; background: rgba(16,23,40,.88); cursor: pointer; text-align: right; }
+.account-button:hover { background: var(--surface-2); border-color: rgba(124,92,255,.45); }
+.account-button > img, .account-button > span:first-child { width: 36px; height: 36px; border-radius: 11px; object-fit: cover; display: grid; place-items: center; background: linear-gradient(135deg, rgba(124,92,255,.35), rgba(45,212,191,.22)); }
+.account-button-copy { display: flex; flex-direction: column; line-height: 1.25; }
+.account-button-copy strong { max-width: 115px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.account-button-copy small { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+
+/* ---- sign in and personal account ---- */
+.auth-screen { min-height: 100vh; position: relative; overflow: hidden; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 50% 10%, #171c38 0, var(--bg) 48%); }
+.auth-glow { position: absolute; border-radius: 50%; filter: blur(100px); pointer-events: none; opacity: .28; }
+.auth-glow-one { width: 430px; height: 430px; top: -180px; right: 8%; background: var(--primary); }
+.auth-glow-two { width: 330px; height: 330px; bottom: -130px; left: 8%; background: var(--mint); opacity: .16; }
+.auth-card { width: min(475px, 100%); position: relative; z-index: 1; padding: 36px; text-align: center; border: 1px solid rgba(255,255,255,.13); border-radius: 28px; background: linear-gradient(145deg, rgba(21,30,51,.97), rgba(12,18,33,.98)); box-shadow: 0 35px 100px rgba(0,0,0,.48); }
+.auth-brand { justify-content: center; margin-bottom: 34px; }
+.auth-icon { width: 58px; height: 58px; margin: 0 auto 17px; display: grid; place-items: center; border-radius: 18px; color: #c4b9ff; background: linear-gradient(135deg, rgba(124,92,255,.26), rgba(45,212,191,.14)); }
+.auth-card h1 { margin: 0; font-size: clamp(34px, 7vw, 48px); line-height: 1.08; letter-spacing: -1.8px; }
+.auth-card p { margin: 18px auto 26px; color: var(--muted); line-height: 1.75; }
+.google-button { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 0; border-radius: 14px; color: #172033; background: #fff; font-weight: 800; cursor: pointer; box-shadow: 0 12px 28px rgba(0,0,0,.25); transition: .2s; }
+.google-button:hover { transform: translateY(-2px); background: #f7f9ff; }
+.auth-privacy { margin-top: 20px; display: flex; justify-content: center; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.auth-loading { display: flex; align-items: center; gap: 13px; color: #dbe3f7; }
+.auth-loading .brand-mark { animation: account-pulse 1.5s ease-in-out infinite; }
+@keyframes account-pulse { 50% { transform: scale(.93); opacity: .65; } }
+
+.account-overlay { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-start; background: rgba(2,5,12,.7); backdrop-filter: blur(5px); }
+.account-panel { width: min(440px, calc(100% - 18px)); height: 100%; padding: 24px; overflow-y: auto; background: #0e1526; border-inline-end: 1px solid var(--border); box-shadow: 30px 0 80px rgba(0,0,0,.45); animation: panel-in .2s ease-out; }
+@keyframes panel-in { from { transform: translateX(-30px); opacity: .3; } }
+.account-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.account-panel-header > div { display: flex; align-items: center; gap: 9px; font-size: 18px; }
+.profile-card { padding: 16px; display: flex; align-items: center; gap: 13px; border: 1px solid var(--border); border-radius: 17px; background: var(--surface); }
+.profile-card img, .profile-placeholder { width: 51px; height: 51px; flex: 0 0 auto; border-radius: 15px; object-fit: cover; display: grid; place-items: center; background: rgba(124,92,255,.18); color: #b9acff; }
+.profile-card > div { min-width: 0; display: flex; flex-direction: column; }
+.profile-card strong, .profile-card span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-card span { color: var(--muted); font-size: 12px; direction: ltr; text-align: right; }
+.profile-name-field { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 27px; color: #d7dff2; font-size: 13px; }
+.profile-name-field > div { display: flex; gap: 8px; }
+.profile-name-field input { min-width: 0; flex: 1; padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; color: white; background: #090f1d; }
+.profile-name-field button { white-space: nowrap; }
+.profile-name-field button:disabled { opacity: .45; cursor: default; }
+.history-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.empty-history { margin: 0; padding: 22px 15px; border: 1px dashed var(--border); border-radius: 13px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.6; }
+.history-item { display: flex; align-items: center; gap: 5px; padding: 6px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.025); }
+.history-item:hover { border-color: rgba(124,92,255,.4); background: rgba(124,92,255,.055); }
+.history-open { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; border: 0; color: inherit; background: transparent; cursor: pointer; text-align: right; }
+.history-open > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.history-open strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-open small { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+.history-note { width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 11px; color: #c1b5ff; background: rgba(124,92,255,.15); font-size: 22px; }
+.history-delete { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 9px; color: #aeb8cf; background: transparent; cursor: pointer; }
+.history-delete:hover { color: #ff9caf; background: rgba(255,88,115,.1); }
+.account-message { margin: 12px 0 0; color: var(--mint); font-size: 13px; }
+.logout-button { width: 100%; margin-top: 25px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,88,115,.25); border-radius: 12px; color: #ffb1be; background: rgba(255,88,115,.06); cursor: pointer; }
+.logout-button:hover { background: rgba(255,88,115,.11); }
 
 .hero { position: relative; width: min(900px, calc(100% - 40px)); margin: 65px auto 54px; text-align: center; }
 .hero-glow { position: absolute; border-radius: 50%; filter: blur(90px); pointer-events: none; opacity: .3; }
@@ -169,6 +224,11 @@ footer p { max-width: 610px; margin: 0; color: var(--muted); font-size: 13px; li
 }
 
 @media (max-width: 520px) {
+  .account-button-copy { display: none; }
+  .account-button { padding: 5px; border-radius: 13px; }
+  .auth-card { padding: 26px 20px; border-radius: 22px; }
+  .auth-brand { margin-bottom: 27px; }
+  .account-panel { width: 100%; padding: 18px; }
   .topbar, .hero, .how-it-works, footer { width: min(100% - 28px, 1180px); }
   .workspace-section, .results-section { width: min(100% - 20px, 1180px); }
   .hero { margin-bottom: 40px; }
