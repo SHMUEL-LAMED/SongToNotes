@@ -46,7 +46,7 @@ export function SignInScreen() {
         </button>
         {error && <div className="error-message" role="alert">{error}</div>}
         <div className="auth-privacy">
-          <LockKeyhole size={15} /> קובצי השמע נשארים במכשיר שלך ולא נשמרים בשרת
+          <LockKeyhole size={15} /> קובצי השמע מעובדים באופן זמני ואינם נשמרים בשרת
         </div>
       </section>
     </main>

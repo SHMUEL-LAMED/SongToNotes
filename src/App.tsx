@@ -643,7 +643,7 @@ function WorkspaceApp() {
         <div className="topbar-actions">
           <div className="privacy-pill">
             <LockKeyhole size={15} />
-            הקובץ נשאר אצלך בדפדפן
+            עיבוד מאובטח · הקובץ לא נשמר
           </div>
           <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>
             {profile?.avatar_url ? (
@@ -679,15 +679,14 @@ function WorkspaceApp() {
         </h1>
         <p>
           מעלים שיר, מקליטים זמזום או בוחרים קטע מתוך הקלטה — והמערכת מזהה את
-          התווים, את הקצב ואת הסולם, ומכינה תווים, MIDI ו־MusicXML ישירות
-          בדפדפן.
+          התווים, את הקצב ואת הסולם, ומכינה תווים, MIDI ו־MusicXML.
         </p>
         <div className="hero-points">
           <span>
             <Check size={16} /> היסטוריה אישית ושמורה
           </span>
           <span>
-            <Check size={16} /> עיבוד מקומי ופרטי
+            <Check size={16} /> ניתוח מהיר ב־GPU מאובטח
           </span>
           <span>
             <Check size={16} /> האזנה לתוצאה לפני הורדה
@@ -920,7 +919,11 @@ function WorkspaceApp() {
               </div>
               <div className="processing-bottom">
                 <small>
-                  {transcriber.onMainThread
+                  {transcriber.inCloud
+                    ? "השיר נשלח בחיבור מוצפן ל־GPU, מעובד זמנית ואינו נשמר בשרת."
+                    : transcriber.fellBackToLocal
+                      ? "שרת ה־GPU לא היה זמין, ולכן הניתוח ממשיך אוטומטית במכשיר שלך."
+                      : transcriber.onMainThread
                     ? "העיבוד ברקע לא קיבל גישה לכרטיס המסך, ולכן הוא רץ ישירות בדף כדי להאיץ אותו. הדף עשוי לא להגיב עד לסיום."
                     : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
                 </small>
@@ -993,7 +996,9 @@ function WorkspaceApp() {
                   : "engine-note"
               }
             >
-              {transcriber.timings.backend === "cpu"
+              {transcriber.timings.backend === "cloud-gpu"
+                ? `הניתוח הושלם בשרת GPU בתוך ${Math.round(transcriber.timings.infer / 1000)} שנ׳. קובץ השמע הזמני נמחק בסיום.`
+                : transcriber.timings.backend === "cpu"
                 ? `הניתוח רץ על המעבד בלבד (${Math.round(transcriber.timings.infer / 1000)} שנ׳) — הדפדפן הזה לא סיפק האצת GPU בכלל. סימון קטע קצר בגל הקול יקצר את הזמן בהתאם.`
                 : `הניתוח רץ בהאצת GPU והסתיים ב־${Math.round(transcriber.timings.infer / 1000)} שנ׳${transcriber.onMainThread ? " (בדף עצמו, כי העיבוד ברקע לא קיבל גישה לכרטיס המסך)" : ""}.`}
             </p>
