@@ -57,12 +57,30 @@ async function handle(request: WorkerRequest) {
   post({ type: "done", jobId, notes, timings });
 }
 
+// A failure inside tfjs's own polling loop is a rejection nobody awaits. Left
+// alone it would leave the host waiting forever, so it is reported instead.
+let currentJobId: number | null = null;
+self.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  event.preventDefault();
+  if (currentJobId === null) return;
+  const reason: unknown = event.reason;
+  post({
+    type: "error",
+    jobId: currentJobId,
+    message: reason instanceof Error ? reason.message : "העיבוד נכשל.",
+  });
+  currentJobId = null;
+};
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   if (request.type !== "transcribe") return;
+  currentJobId = request.jobId;
   try {
     await handle(request);
+    currentJobId = null;
   } catch (error) {
+    currentJobId = null;
     post({
       type: "error",
       jobId: request.jobId,

@@ -23,7 +23,10 @@ function formatSavedDate(value: string) {
 
 export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props) {
   const { user, profile, updateName, signOut } = useAuth();
-  const [name, setName] = useState(profile?.full_name ?? "");
+  // `null` means "untouched", so the field follows the profile until the
+  // visitor types — the profile arrives after this panel first renders.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const name = nameDraft ?? profile?.full_name ?? "";
   const [items, setItems] = useState<SavedTranscription[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -81,7 +84,7 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
         <label className="profile-name-field">
           <span>השם שיוצג באתר</span>
           <div>
-            <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+            <input value={name} maxLength={80} onChange={(event) => setNameDraft(event.target.value)} />
             <button
               type="button"
               className="secondary-button"
@@ -89,7 +92,10 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
               onClick={() => {
                 setMessage("");
                 void updateName(name)
-                  .then(() => setMessage("השם נשמר."))
+                  .then(() => {
+                    setNameDraft(null);
+                    setMessage("השם נשמר.");
+                  })
                   .catch(() => setMessage("לא הצלחנו לשמור את השם."));
               }}
             ><Save size={16} /> שמור</button>

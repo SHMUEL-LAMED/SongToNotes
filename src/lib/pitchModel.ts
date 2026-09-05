@@ -27,6 +27,22 @@ let modelReady: Promise<tf.GraphModel> | null = null;
 let backendReady: Promise<string> | null = null;
 
 /**
+ * tfjs 3.x reads GPU results by polling through
+ * `platform.setTimeoutCustom`, whose first line touches the bare `window`
+ * identifier. Inside a worker that is a ReferenceError thrown from a promise
+ * nobody awaits, so `tensor.array()` never settles and the run hangs at 4%.
+ * A plain setTimeout on the platform instance shadows the broken method.
+ */
+function patchWorkerPlatform() {
+  if (typeof window !== "undefined") return;
+  const platform = tf.env().platform as unknown as Record<string, unknown>;
+  if (!platform || typeof platform.setTimeoutCustom !== "function") return;
+  platform.setTimeoutCustom = (callback: () => void, delay: number) => {
+    setTimeout(callback, delay);
+  };
+}
+
+/**
  * Picks the fastest backend available here. The GPU path needs a WebGL2
  * context, which inside a worker means one on an OffscreenCanvas — not every
  * browser grants that. Where it is missing the only remaining option is the
@@ -40,6 +56,7 @@ export async function selectBackend(): Promise<string> {
   if (backendReady) return backendReady;
 
   backendReady = (async () => {
+    patchWorkerPlatform();
     try {
       if (await tf.setBackend("webgl")) {
         await tf.ready();
