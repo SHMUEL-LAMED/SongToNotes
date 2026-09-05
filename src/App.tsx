@@ -193,6 +193,16 @@ function WorkspaceApp() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
+  // The audio is downmixed and resampled before the model sees it, and on a
+  // long file that takes long enough for a second click to land. The flag
+  // shows the progress panel from the first click; the ref blocks a re-entry
+  // that React state, which has not flushed yet, would let through.
+  const [isStarting, setIsStarting] = useState(false);
+  const startingRef = useRef(false);
+  // Bumped whenever a run is abandoned, so work already in flight knows to
+  // drop its result instead of applying it to whatever is on screen now.
+  const runTokenRef = useRef(0);
+
   const [recorder] = useState(() => new MicRecorder());
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -357,6 +367,7 @@ function WorkspaceApp() {
   // ---- loading audio ----
 
   const loadAudio = useCallback(async (candidate: File) => {
+    runTokenRef.current += 1;
     setIsPreparing(true);
     setError(null);
     setNotice(null);
@@ -482,15 +493,20 @@ function WorkspaceApp() {
   // ---- analysis ----
 
   const startTranscription = useCallback(async () => {
-    if (!decodedBuffer || transcriber.isRunning) return;
+    if (!decodedBuffer || transcriber.isRunning || startingRef.current) return;
+    startingRef.current = true;
+    setIsStarting(true);
+    const token = runTokenRef.current;
     setError(null);
     setNotice(null);
     setElapsed(0);
     stopPlayback();
     try {
       const info = await prepareForModel(decodedBuffer, trim);
+      if (runTokenRef.current !== token) return;
       setAnalysisOffset(info.startOffset);
       const detected = await transcriber.transcribe(info.samples);
+      if (runTokenRef.current !== token) return;
       if (!detected.length) {
         setError(
           "לא נמצאו תווים ברורים. נסה קטע עם כלי אחד או שירה נקייה, או העלה את הרגישות.",
@@ -527,13 +543,18 @@ function WorkspaceApp() {
         120,
       );
     } catch (caughtError) {
+      if (runTokenRef.current !== token) return;
       const message =
         caughtError instanceof Error ? caughtError.message : "אירעה שגיאה.";
       if (message !== "הניתוח בוטל.") setError(message);
+    } finally {
+      startingRef.current = false;
+      setIsStarting(false);
     }
   }, [decodedBuffer, file, refineOptions, settings, stopPlayback, title, transcriber, trim, user]);
 
   const reset = useCallback(() => {
+    runTokenRef.current += 1;
     cancelTranscription();
     stopPlayback();
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -554,6 +575,7 @@ function WorkspaceApp() {
 
   const openSavedTranscription = useCallback(
     (item: SavedTranscription) => {
+      runTokenRef.current += 1;
       cancelTranscription();
       stopPlayback();
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -920,11 +942,14 @@ function WorkspaceApp() {
             </div>
           )}
 
-          {transcriber.isRunning ? (
+          {transcriber.isRunning || isStarting ? (
             <div className="processing-box">
               <div className="processing-top">
                 <span>
-                  <AudioWaveform size={20} /> מנתח את הצלילים והתווים…
+                  <AudioWaveform size={20} />{" "}
+                  {transcriber.isRunning
+                    ? "מנתח את הצלילים והתווים…"
+                    : "מכין את השמע לניתוח…"}
                 </span>
                 <strong aria-live="polite">
                   {transcriber.progress}% · {formatTime(elapsed)}
@@ -946,13 +971,15 @@ function WorkspaceApp() {
                     ? "העיבוד ברקע לא קיבל גישה לכרטיס המסך, ולכן הוא רץ ישירות בדף כדי להאיץ אותו. הדף עשוי לא להגיב עד לסיום."
                     : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
                 </small>
-                <button
-                  className="secondary-button"
-                  onClick={transcriber.cancel}
-                  type="button"
-                >
-                  בטל
-                </button>
+                {transcriber.isRunning && (
+                  <button
+                    className="secondary-button"
+                    onClick={transcriber.cancel}
+                    type="button"
+                  >
+                    בטל
+                  </button>
+                )}
               </div>
             </div>
           ) : (
