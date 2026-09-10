@@ -1459,5 +1459,5 @@ export default function App() {
     );
   }
 
-  return user || guest ? <WorkspaceApp /> : <SignInScreen />;
+  return <WorkspaceApp />;
 }
