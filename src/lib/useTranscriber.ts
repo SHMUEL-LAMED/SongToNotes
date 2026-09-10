@@ -10,7 +10,7 @@ import type { DetectedNote } from "./types";
  * afterwards, so the expensive pass happens once per recording rather than
  * once per slider move.
  */
-const DETECTION_LEVEL = 0.8;
+const DETECTION_LEVEL = 0.35;
 
 import type { Timings } from "./pitchModel";
 
