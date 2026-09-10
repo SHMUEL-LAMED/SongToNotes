@@ -30,7 +30,6 @@ import { AccountPanel } from "./components/AccountPanel";
 import { SignInScreen } from "./components/SignInScreen";
 import { SheetMusic, sheetToSvg } from "./components/SheetMusic";
 import { Waveform } from "./components/Waveform";
-import { RingtoneStudio } from "./components/RingtoneStudio";
 import {
   decodeAudioFile,
   formatTime,
@@ -67,7 +66,7 @@ import type { DetectedNote, ViewMode } from "./lib/types";
 import { useTranscriber } from "./lib/useTranscriber";
 
 type Tab = "sheet" | "piano" | "notes";
-type Workspace = "home" | "notes" | "ringtones";
+type Workspace = "home" | "notes";
 
 const ACCEPTED_EXTENSIONS = [
   "mp3",
@@ -656,8 +655,7 @@ function WorkspaceApp() {
   const canRecord = isRecordingSupported();
   const hasResults = notes.length > 0;
 
-  if (workspace === "ringtones") return <RingtoneStudio onBack={() => setWorkspace("home")} />;
-  if (workspace === "home") return <main className="chooser-page"><nav className="topbar"><span className="brand"><span className="brand-mark"><Music2 size={22} /></span><span>כלי מוזיקה</span></span><div className="privacy-pill"><LockKeyhole size={15} /> הקובץ נשאר אצלך בדפדפן</div></nav><section className="chooser-hero"><div className="eyebrow"><Sparkles size={16} /> כלי מוזיקה במקום אחד</div><h1>מה תרצה לעשות<br /><span>עם השיר שלך?</span></h1><p>בחר תוכנה. בהמשך נוסיף כאן עוד כלי מוזיקה.</p></section><section className="tool-choice-grid"><button className="tool-choice" onClick={() => setWorkspace("ringtones")} type="button"><AudioWaveform size={34}/><h2>יצירת צלצול</h2><p>חותכים קטע מהשיר ומכינים צלצול לפלאפון.</p><b>ליצירת צלצול ←</b></button><button className="tool-choice" onClick={() => setWorkspace("notes")} type="button"><FileMusic size={34}/><h2>הפיכת שיר לתווים</h2><p>מזהים מנגינה ומורידים תווים, MIDI או MusicXML.</p><b>להמרת שיר לתווים ←</b></button></section></main>;
+  if (workspace === "home") return <main className="chooser-page"><nav className="topbar"><span className="brand"><span className="brand-mark"><Music2 size={22} /></span><span>כלי מוזיקה</span></span><div className="topbar-actions"><div className="privacy-pill"><LockKeyhole size={15} /> הקובץ נשאר אצלך בדפדפן</div>{!user ? <button className="account-button" type="button" onClick={() => void signInWithGoogle().catch(() => setError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."))}><span><UserRound size={18} /></span><span className="account-button-copy"><strong>התחברות</strong><small><History size={12} /> לשמירת היסטוריה</small></span></button> : <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>{profile?.avatar_url ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" /> : <span><UserRound size={18} /></span>}<span className="account-button-copy"><strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong><small><History size={12} /> היסטוריה</small></span></button>}</div></nav><AccountPanel open={accountOpen} refreshToken={historyRefreshToken} onClose={() => setAccountOpen(false)} onOpenItem={openSavedTranscription} /><section className="chooser-hero"><div className="eyebrow"><Sparkles size={16} /> כלי מוזיקה במקום אחד</div><h1>מה תרצה לעשות<br /><span>עם השיר שלך?</span></h1><p>בחר תוכנה. בהמשך נוסיף כאן עוד כלי מוזיקה.</p></section><section className="tool-choice-grid"><button className="tool-choice" onClick={() => window.location.assign("https://shmuel-lamed.github.io/Ringtones/")} type="button"><AudioWaveform size={34}/><h2>יצירת צלצול</h2><p>חותכים קטע מהשיר ומכינים צלצול לפלאפון.</p><b>ליצירת צלצול ←</b></button><button className="tool-choice" onClick={() => setWorkspace("notes")} type="button"><FileMusic size={34}/><h2>הפיכת שיר לתווים</h2><p>מזהים מנגינה ומורידים תווים, MIDI או MusicXML.</p><b>להמרת שיר לתווים ←</b></button></section></main>;
   return (
     <main>
       <nav className="topbar">
