@@ -30,6 +30,7 @@ import { AccountPanel } from "./components/AccountPanel";
 import { SignInScreen } from "./components/SignInScreen";
 import { SheetMusic, sheetToSvg } from "./components/SheetMusic";
 import { Waveform } from "./components/Waveform";
+import { RingtoneStudio } from "./components/RingtoneStudio";
 import {
   decodeAudioFile,
   formatTime,
@@ -66,6 +67,7 @@ import type { DetectedNote, ViewMode } from "./lib/types";
 import { useTranscriber } from "./lib/useTranscriber";
 
 type Tab = "sheet" | "piano" | "notes";
+type Workspace = "home" | "notes" | "ringtones";
 
 const ACCEPTED_EXTENSIONS = [
   "mp3",
@@ -192,6 +194,7 @@ function WorkspaceApp() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [workspace, setWorkspace] = useState<Workspace>("home");
 
   // The audio is downmixed and resampled before the model sees it, and on a
   // long file that takes long enough for a second click to land. The flag
@@ -653,15 +656,17 @@ function WorkspaceApp() {
   const canRecord = isRecordingSupported();
   const hasResults = notes.length > 0;
 
+  if (workspace === "ringtones") return <RingtoneStudio onBack={() => setWorkspace("home")} />;
+  if (workspace === "home") return <main className="chooser-page"><nav className="topbar"><span className="brand"><span className="brand-mark"><Music2 size={22} /></span><span>כלי מוזיקה</span></span><div className="privacy-pill"><LockKeyhole size={15} /> הקובץ נשאר אצלך בדפדפן</div></nav><section className="chooser-hero"><div className="eyebrow"><Sparkles size={16} /> כלי מוזיקה במקום אחד</div><h1>מה תרצה לעשות<br /><span>עם השיר שלך?</span></h1><p>בחר תוכנה. בהמשך נוסיף כאן עוד כלי מוזיקה.</p></section><section className="tool-choice-grid"><button className="tool-choice" onClick={() => setWorkspace("ringtones")} type="button"><AudioWaveform size={34}/><h2>יצירת צלצול</h2><p>חותכים קטע מהשיר ומכינים צלצול לפלאפון.</p><b>ליצירת צלצול ←</b></button><button className="tool-choice" onClick={() => setWorkspace("notes")} type="button"><FileMusic size={34}/><h2>הפיכת שיר לתווים</h2><p>מזהים מנגינה ומורידים תווים, MIDI או MusicXML.</p><b>להמרת שיר לתווים ←</b></button></section></main>;
   return (
     <main>
       <nav className="topbar">
-        <a className="brand" href="#top" aria-label="SongToNotes">
+        <button className="brand brand-button" onClick={() => setWorkspace("home")} aria-label="חזרה לכלי המוזיקה" type="button">
           <span className="brand-mark">
             <Music2 size={22} />
           </span>
-          <span>SongToNotes</span>
-        </a>
+          <span>כלי מוזיקה</span>
+        </button>
         <div className="topbar-actions">
           <div className="privacy-pill">
             <LockKeyhole size={15} />
