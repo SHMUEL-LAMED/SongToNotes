@@ -27,7 +27,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PianoRoll } from "./components/PianoRoll";
 import { AccountPanel } from "./components/AccountPanel";
-import { SignInScreen } from "./components/SignInScreen";
 import { SheetMusic, sheetToSvg } from "./components/SheetMusic";
 import { Waveform } from "./components/Waveform";
 import {
@@ -1446,7 +1445,7 @@ function WorkspaceApp() {
 }
 
 export default function App() {
-  const { user, loading, guest } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
     return (
