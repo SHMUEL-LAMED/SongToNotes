@@ -27,6 +27,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PianoRoll } from "./components/PianoRoll";
 import { AccountPanel } from "./components/AccountPanel";
+import { MusicQuickTools } from "./components/MusicQuickTools";
 import { SheetMusic, sheetToSvg } from "./components/SheetMusic";
 import { Waveform } from "./components/Waveform";
 import {
@@ -710,6 +711,8 @@ function WorkspaceApp() {
             <b>פתח את ממיר התווים <ChevronLeft size={20} /></b>
           </button>
         </section>
+
+        <MusicQuickTools />
 
         <footer className="chooser-footer"><span className="brand"><span className="brand-mark"><Music2 size={18} /></span><span>כלי מוזיקה</span></span><p>הקבצים נשארים אצלך במכשיר ואינם מועלים לשרת.</p></footer>
       </main>

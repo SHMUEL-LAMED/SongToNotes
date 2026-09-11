@@ -1,4 +1,4 @@
-import { Clock3, History, LogOut, Save, Trash2, UserRound, X } from "lucide-react";
+import { AudioWaveform, Clock3, History, LogOut, Save, Trash2, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
@@ -6,6 +6,7 @@ import {
   listTranscriptions,
   type SavedTranscription,
 } from "../lib/history";
+import { deleteRingtone, listRingtones, type SavedRingtone } from "../lib/ringtoneHistory";
 
 type Props = {
   open: boolean;
@@ -28,6 +29,8 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const name = nameDraft ?? profile?.full_name ?? "";
   const [items, setItems] = useState<SavedTranscription[]>([]);
+  const [ringtones, setRingtones] = useState<SavedRingtone[]>([]);
+  const [historyTab, setHistoryTab] = useState<"notes" | "ringtones">("notes");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -35,6 +38,7 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
     if (!open || !user) return;
     let active = true;
     const timer = window.setTimeout(() => {
+      setRingtones(listRingtones());
       setLoading(true);
       setMessage("");
       void listTranscriptions(user.id)
@@ -102,13 +106,17 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
           </div>
         </label>
 
-        <div className="history-heading"><History size={19} /><strong>היצירות האחרונות שלי</strong></div>
+        <div className="history-heading"><History size={19} /><strong>ההיסטוריה המלאה שלי</strong></div>
+        <div className="history-tabs" role="tablist" aria-label="סוג היסטוריה">
+          <button type="button" role="tab" aria-selected={historyTab === "notes"} className={historyTab === "notes" ? "active" : ""} onClick={() => setHistoryTab("notes")}>תווים <span>{items.length}</span></button>
+          <button type="button" role="tab" aria-selected={historyTab === "ringtones"} className={historyTab === "ringtones" ? "active" : ""} onClick={() => setHistoryTab("ringtones")}>צלצולים <span>{ringtones.length}</span></button>
+        </div>
         <div className="history-list">
-          {loading ? (
+          {historyTab === "notes" && loading ? (
             <p className="empty-history">טוען את ההיסטוריה…</p>
-          ) : items.length === 0 ? (
+          ) : historyTab === "notes" && items.length === 0 ? (
             <p className="empty-history">עדיין אין תוצאות שמורות. התוצאה הראשונה תישמר כאן אוטומטית.</p>
-          ) : (
+          ) : historyTab === "notes" ? (
             items.map((item) => (
               <article className="history-item" key={item.id}>
                 <button className="history-open" type="button" onClick={() => onOpenItem(item)}>
@@ -126,6 +134,22 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
                       .catch(() => setMessage("לא הצלחנו למחוק את היצירה."));
                   }}
                 ><Trash2 size={16} /></button>
+              </article>
+            ))
+          ) : ringtones.length === 0 ? (
+            <p className="empty-history">עדיין אין צלצולים שמורים. אחרי הורדת צלצול הוא יופיע כאן אוטומטית.</p>
+          ) : (
+            ringtones.map((item) => (
+              <article className="history-item" key={item.id}>
+                <a className="history-open" href="https://shmuel-lamed.github.io/Ringtones/">
+                  <span className="history-note ringtone"><AudioWaveform size={19} /></span>
+                  <span><strong>{item.title}</strong><small><Clock3 size={13} /> {formatSavedDate(item.createdAt)} · {Math.round(item.durationSeconds)} שניות</small></span>
+                </a>
+                <button className="history-delete" type="button" aria-label={`מחק את ${item.title}`} onClick={() => {
+                  if (!window.confirm(`למחוק את „${item.title}” מההיסטוריה?`)) return;
+                  deleteRingtone(item.id);
+                  setRingtones((current) => current.filter((entry) => entry.id !== item.id));
+                }}><Trash2 size={16} /></button>
               </article>
             ))
           )}
