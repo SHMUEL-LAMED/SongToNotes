@@ -6,7 +6,12 @@ import {
   listTranscriptions,
   type SavedTranscription,
 } from "../lib/history";
-import { deleteRingtone, listRingtones, type SavedRingtone } from "../lib/ringtoneHistory";
+import {
+  deleteRingtone,
+  listLocalRingtones,
+  listRingtones,
+  type SavedRingtone,
+} from "../lib/ringtoneHistory";
 
 type Props = {
   open: boolean;
@@ -38,19 +43,26 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
     if (!open || !user) return;
     let active = true;
     const timer = window.setTimeout(() => {
-      setRingtones(listRingtones());
       setLoading(true);
       setMessage("");
-      void listTranscriptions(user.id)
+      const notes = listTranscriptions(user.id)
         .then((nextItems) => {
           if (active) setItems(nextItems);
         })
         .catch(() => {
           if (active) setMessage("לא הצלחנו לטעון את ההיסטוריה.");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
         });
+      // A profile that cannot be reached still shows what this device made.
+      const tones = listRingtones(user.id)
+        .then((nextRingtones) => {
+          if (active) setRingtones(nextRingtones);
+        })
+        .catch(() => {
+          if (active) setRingtones(listLocalRingtones());
+        });
+      void Promise.all([notes, tones]).finally(() => {
+        if (active) setLoading(false);
+      });
     }, 0);
     return () => {
       active = false;
@@ -112,7 +124,7 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
           <button type="button" role="tab" aria-selected={historyTab === "ringtones"} className={historyTab === "ringtones" ? "active" : ""} onClick={() => setHistoryTab("ringtones")}>צלצולים <span>{ringtones.length}</span></button>
         </div>
         <div className="history-list">
-          {historyTab === "notes" && loading ? (
+          {loading ? (
             <p className="empty-history">טוען את ההיסטוריה…</p>
           ) : historyTab === "notes" && items.length === 0 ? (
             <p className="empty-history">עדיין אין תוצאות שמורות. התוצאה הראשונה תישמר כאן אוטומטית.</p>
@@ -147,8 +159,9 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
                 </a>
                 <button className="history-delete" type="button" aria-label={`מחק את ${item.title}`} onClick={() => {
                   if (!window.confirm(`למחוק את „${item.title}” מההיסטוריה?`)) return;
-                  deleteRingtone(item.id);
-                  setRingtones((current) => current.filter((entry) => entry.id !== item.id));
+                  void deleteRingtone(item.id, user.id)
+                    .then(() => setRingtones((current) => current.filter((entry) => entry.id !== item.id)))
+                    .catch(() => setMessage("לא הצלחנו למחוק את הצלצול."));
                 }}><Trash2 size={16} /></button>
               </article>
             ))
