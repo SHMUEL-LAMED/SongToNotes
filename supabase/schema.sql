@@ -28,11 +28,31 @@ create table if not exists public.transcriptions (
 create index if not exists transcriptions_user_created_idx
   on public.transcriptions (user_id, created_at desc);
 
+create table if not exists public.ringtones (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- The id the ringtone got on the device that created it, so the same
+  -- ringtone is never stored twice when a local history is uploaded later.
+  client_id text not null,
+  title text not null,
+  source_name text,
+  start_seconds double precision not null default 0 check (start_seconds >= 0),
+  duration_seconds double precision not null default 0 check (duration_seconds >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, client_id)
+);
+
+create index if not exists ringtones_user_created_idx
+  on public.ringtones (user_id, created_at desc);
+
 alter table public.profiles enable row level security;
 alter table public.transcriptions enable row level security;
+alter table public.ringtones enable row level security;
 
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update, delete on public.transcriptions to authenticated;
+grant select, insert, update, delete on public.ringtones to authenticated;
 
 create policy "Users can view their own profile"
 on public.profiles for select to authenticated
@@ -62,6 +82,23 @@ with check ((select auth.uid()) = user_id);
 
 create policy "Users can delete their own transcriptions"
 on public.transcriptions for delete to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can view their own ringtones"
+on public.ringtones for select to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can insert their own ringtones"
+on public.ringtones for insert to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update their own ringtones"
+on public.ringtones for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can delete their own ringtones"
+on public.ringtones for delete to authenticated
 using ((select auth.uid()) = user_id);
 
 create or replace function private.handle_new_user()
@@ -107,4 +144,8 @@ for each row execute function private.set_updated_at();
 
 create trigger transcriptions_set_updated_at
 before update on public.transcriptions
+for each row execute function private.set_updated_at();
+
+create trigger ringtones_set_updated_at
+before update on public.ringtones
 for each row execute function private.set_updated_at();
