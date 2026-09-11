@@ -1,0 +1,135 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Activity,
+  FileMusic,
+  Gauge,
+  MicVocal,
+  Piano,
+  Smartphone,
+  Snail,
+  Timer,
+} from "lucide-react";
+
+export type ToolCategory = "create" | "practice" | "analyze";
+
+export type ToolDefinition = {
+  id: string;
+  title: string;
+  tagline: string;
+  description: string;
+  icon: LucideIcon;
+  /** CSS hue used for the tool's accent — every tool gets its own colour. */
+  hue: number;
+  category: ToolCategory;
+  tags: string[];
+  badge?: string;
+};
+
+export const CATEGORY_LABELS: Record<ToolCategory, string> = {
+  create: "יצירה והמרה",
+  practice: "תרגול ונגינה",
+  analyze: "ניתוח והאזנה",
+};
+
+/**
+ * One list drives the hub, the routing and the page titles, so adding a
+ * tool is a matter of adding one entry here and one component.
+ */
+export const TOOLS: ToolDefinition[] = [
+  {
+    id: "notes",
+    title: "שיר לתווים",
+    tagline: "מנגינה נכנסת, תווים יוצאים",
+    description:
+      "מעלים שיר או מזמזמים למיקרופון, והמודל מזהה תווים, קצב וסולם ומכין תווים, MIDI ו־MusicXML.",
+    icon: FileMusic,
+    hue: 258,
+    category: "create",
+    tags: ["תווים", "midi", "musicxml", "תמלול", "פסנתר"],
+    badge: "הכלי הראשי",
+  },
+  {
+    id: "ringtone",
+    title: "יצירת צלצול",
+    tagline: "חותכים, מעמעמים, מורידים",
+    description:
+      "בוחרים את הקטע הכי טוב בשיר, מוסיפים כניסה ויציאה רכות ומורידים צלצול מוכן לטלפון.",
+    icon: Smartphone,
+    hue: 335,
+    category: "create",
+    tags: ["צלצול", "חיתוך", "טלפון", "fade"],
+  },
+  {
+    id: "vocals",
+    title: "הסרת שירה",
+    tagline: "קריוקי מכל שיר",
+    description:
+      "מפרידים את השירה מהליווי ומורידים גרסה אינסטרומנטלית — או להפך, רק את הקול.",
+    icon: MicVocal,
+    hue: 20,
+    category: "create",
+    tags: ["קריוקי", "ווקאל", "אינסטרומנטלי", "פלייבק"],
+    badge: "חדש",
+  },
+  {
+    id: "speed",
+    title: "מאט ומאיץ",
+    tagline: "לתרגל בקצב שלך",
+    description:
+      "מאטים שיר בלי לשנות את הגובה, או משנים טון בלי לשנות את הקצב — מושלם ללמידת סולו.",
+    icon: Snail,
+    hue: 168,
+    category: "practice",
+    tags: ["תרגול", "מהירות", "טרנספוזיציה", "לולאה"],
+    badge: "חדש",
+  },
+  {
+    id: "metronome",
+    title: "מטרונום",
+    tagline: "דיוק של אולפן",
+    description:
+      "מטרונום מדויק עם הדגשות, חלוקות משנה, טאפ־טמפו ומשקלים — עובד גם כשהמסך כבוי.",
+    icon: Timer,
+    hue: 28,
+    category: "practice",
+    tags: ["קצב", "bpm", "תרגול", "מקצב"],
+  },
+  {
+    id: "tuner",
+    title: "מכוון כלים",
+    tagline: "כרומטי, מהמיקרופון",
+    description:
+      "מזהה את הצליל שמנגנים ומראה כמה סנטים הוא רחוק מהתו — לגיטרה, כינור, יוקללה ולקול.",
+    icon: Gauge,
+    hue: 190,
+    category: "practice",
+    tags: ["טיונר", "כיוון", "גיטרה", "כינור", "סנטים"],
+  },
+  {
+    id: "piano",
+    title: "פסנתר וירטואלי",
+    tagline: "מנגנים מהמקלדת",
+    description:
+      "פסנתר שמנגנים בעכבר, במגע או במקלדת המחשב, עם הדגשת סולמות והקלטה ל־MIDI.",
+    icon: Piano,
+    hue: 280,
+    category: "practice",
+    tags: ["פסנתר", "מקלדת", "סולמות", "midi"],
+  },
+  {
+    id: "analyze",
+    title: "מזהה קצב וסולם",
+    tagline: "BPM וסולם בשניות",
+    description:
+      "ניתוח מהיר של כל שיר: קצב, סולם, פרופיל הצלילים ועוצמה — בלי להריץ את מודל התווים.",
+    icon: Activity,
+    hue: 158,
+    category: "analyze",
+    tags: ["bpm", "סולם", "ניתוח", "די ג'יי"],
+    badge: "חדש",
+  },
+];
+
+export function findTool(id: string) {
+  return TOOLS.find((tool) => tool.id === id) ?? null;
+}

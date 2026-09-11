@@ -107,8 +107,8 @@ export function PianoRoll({
       >
         <defs>
           <linearGradient id="roll-note" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#8b6bff" />
-            <stop offset="1" stopColor="#5b3fd6" />
+            <stop offset="0" stopColor="var(--roll-note-top)" />
+            <stop offset="1" stopColor="var(--roll-note-bottom)" />
           </linearGradient>
         </defs>
 
@@ -122,7 +122,7 @@ export function PianoRoll({
               y={index * ROW_HEIGHT}
               width={width - GUTTER}
               height={ROW_HEIGHT}
-              fill={isBlack ? "#0e1424" : index % 2 ? "#151d31" : "#18213a"}
+              fill={isBlack ? "var(--roll-row-black)" : index % 2 ? "var(--roll-row-odd)" : "var(--roll-row-even)"}
             />
           );
         })}
@@ -134,7 +134,7 @@ export function PianoRoll({
             x2={line.x}
             y1={0}
             y2={height}
-            stroke={line.bar ? "#5a6790" : "#2b3450"}
+            stroke={line.bar ? "var(--roll-bar-line)" : "var(--roll-grid-line)"}
             strokeWidth={line.bar ? 1.3 : 0.6}
           />
         ))}
@@ -146,7 +146,7 @@ export function PianoRoll({
               key={`bar-${index}`}
               x={line.x + 4}
               y={11}
-              fill="#6f7ca6"
+              fill="var(--roll-label)"
               fontSize="9"
               fontFamily="system-ui, sans-serif"
             >
@@ -167,7 +167,7 @@ export function PianoRoll({
               height={ROW_HEIGHT - 3}
               rx="3"
               fill="url(#roll-note)"
-              stroke="#b9a6ff"
+              stroke="var(--roll-note-edge)"
               strokeWidth="0.5"
               opacity={0.45 + Math.min(0.55, note.confidence * 0.7)}
             >
@@ -176,7 +176,7 @@ export function PianoRoll({
           );
         })}
 
-        <rect x="0" y="0" width={GUTTER} height={height} fill="#0b1020" />
+        <rect x="0" y="0" width={GUTTER} height={height} fill="var(--roll-gutter)" />
         {Array.from({ length: rows }, (_, index) => {
           const midi = layout.highest - index;
           const pitchClass = ((midi % 12) + 12) % 12;
@@ -188,13 +188,13 @@ export function PianoRoll({
                 y={index * ROW_HEIGHT}
                 width={18}
                 height={ROW_HEIGHT - 0.5}
-                fill={isBlack ? "#1b2338" : "#dfe5f5"}
+                fill={isBlack ? "var(--roll-key-black)" : "var(--roll-key-white)"}
               />
               {pitchClass === 0 && (
                 <text
                   x={4}
                   y={index * ROW_HEIGHT + ROW_HEIGHT - 4}
-                  fill="#8e9ac2"
+                  fill="var(--roll-label)"
                   fontSize="9"
                   fontFamily="system-ui, sans-serif"
                 >
@@ -210,7 +210,7 @@ export function PianoRoll({
           x2={GUTTER + playhead * zoom}
           y1={0}
           y2={height}
-          stroke="#2dd4bf"
+          stroke="var(--roll-playhead)"
           strokeWidth="1.8"
           pointerEvents="none"
         />

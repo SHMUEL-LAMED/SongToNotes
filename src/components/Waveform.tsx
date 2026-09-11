@@ -7,6 +7,11 @@ type WaveformProps = {
   duration: number;
   trim: TrimRange;
   onTrimChange: (trim: TrimRange) => void;
+  /** Playback position in seconds, drawn as a line; null hides it. */
+  cursor?: number | null;
+  selectLabel?: string;
+  clearLabel?: string;
+  emptyLabel?: string;
 };
 
 const WIDTH = 1000;
@@ -16,8 +21,18 @@ const HEIGHT = 96;
  * Waveform overview with a draggable region. Transcribing only the interesting
  * part of a long file is both faster and more accurate, since the tempo and
  * key estimates stop averaging over sections that do not belong together.
+ * The same strip doubles as the loop picker and the ringtone trimmer.
  */
-export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps) {
+export function Waveform({
+  peaks,
+  duration,
+  trim,
+  onTrimChange,
+  cursor = null,
+  selectLabel = "קטע נבחר",
+  clearLabel = "נתח את כל השיר",
+  emptyLabel = "סמן קטע בגל הקול כדי לנתח רק אותו",
+}: WaveformProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ anchor: number } | null>(null);
 
@@ -75,6 +90,8 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
         width: ((trim.end - trim.start) / duration) * WIDTH,
       }
     : null;
+  const cursorX =
+    cursor !== null && duration > 0 ? Math.max(0, Math.min(WIDTH, (cursor / duration) * WIDTH)) : null;
 
   return (
     <div className="waveform" dir="ltr">
@@ -86,67 +103,59 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         role="img"
-        aria-label="גל הקול של הקובץ. אפשר לסמן קטע לניתוח."
+        aria-label="גל הקול של הקובץ. אפשר לסמן קטע."
       >
-        <rect width={WIDTH} height={HEIGHT} fill="#0b1120" />
-        <path d={path} fill="#7c5cff" opacity={selection ? 0.22 : 0.6} />
+        <rect width={WIDTH} height={HEIGHT} className="waveform-bg" />
+        <path d={path} className="waveform-body" opacity={selection ? 0.28 : 0.7} />
         {selection && (
           <>
+            <defs>
+              <clipPath id="trim-clip">
+                <rect x={selection.x} y={0} width={selection.width} height={HEIGHT} />
+              </clipPath>
+            </defs>
             <rect
               x={selection.x}
               y={0}
               width={selection.width}
               height={HEIGHT}
-              fill="#2dd4bf"
-              opacity="0.14"
+              className="waveform-selection"
             />
-            <path
-              d={path}
-              fill="#2dd4bf"
-              opacity="0.75"
-              clipPath="url(#trim-clip)"
-            />
-            <defs>
-              <clipPath id="trim-clip">
-                <rect
-                  x={selection.x}
-                  y={0}
-                  width={selection.width}
-                  height={HEIGHT}
-                />
-              </clipPath>
-            </defs>
+            <path d={path} className="waveform-selected" clipPath="url(#trim-clip)" />
             <line
               x1={selection.x}
               x2={selection.x}
               y1={0}
               y2={HEIGHT}
-              stroke="#2dd4bf"
-              strokeWidth="2"
+              className="waveform-handle"
             />
             <line
               x1={selection.x + selection.width}
               x2={selection.x + selection.width}
               y1={0}
               y2={HEIGHT}
-              stroke="#2dd4bf"
-              strokeWidth="2"
+              className="waveform-handle"
             />
           </>
+        )}
+        {cursorX !== null && (
+          <line x1={cursorX} x2={cursorX} y1={0} y2={HEIGHT} className="waveform-cursor" />
         )}
       </svg>
       <div className="waveform-legend">
         {trim ? (
           <>
             <span>
-              קטע נבחר: {formatTime(trim.start)}–{formatTime(trim.end)}
+              {selectLabel}: {formatTime(trim.start)}–{formatTime(trim.end)}
             </span>
             <button type="button" onClick={() => onTrimChange(null)}>
-              נתח את כל השיר
+              {clearLabel}
             </button>
           </>
         ) : (
-          <span>סמן קטע בגל הקול כדי לנתח רק אותו · {formatTime(duration)}</span>
+          <span>
+            {emptyLabel} · {formatTime(duration)}
+          </span>
         )}
       </div>
     </div>
