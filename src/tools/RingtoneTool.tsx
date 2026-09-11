@@ -1,11 +1,13 @@
 import { Download, Smartphone, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AudioPicker, useAudioFile, type LoadedAudio } from "../components/AudioPicker";
+import { useAuth } from "../lib/auth";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { normalise, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { saveRingtone } from "../lib/ringtoneHistory";
 import { useRenderedAudio } from "../lib/useRenderedAudio";
 import { encodeWav } from "../lib/wav";
 
@@ -25,7 +27,8 @@ function sharedContext() {
  * gain — is rendered into a fresh buffer so the preview and the download
  * are byte-for-byte the same thing.
  */
-export function RingtoneTool() {
+export function RingtoneTool({ onSaved }: { onSaved: () => void }) {
+  const { user } = useAuth();
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
   const [context] = useState(sharedContext);
 
@@ -65,16 +68,27 @@ export function RingtoneTool() {
         {audio && context && (
           // Remounting on a new file is what resets the trim and the fades,
           // so none of that state has to be cleared by hand.
-          <RingtoneEditor key={audio.url} audio={audio} context={context} />
+          <RingtoneEditor
+            key={audio.url}
+            audio={audio}
+            context={context}
+            userId={user?.id ?? null}
+            onSaved={onSaved}
+          />
         )}
       </div>
     </section>
   );
 }
 
-type EditorProps = { audio: LoadedAudio; context: AudioContext };
+type EditorProps = {
+  audio: LoadedAudio;
+  context: AudioContext;
+  userId: string | null;
+  onSaved: () => void;
+};
 
-function RingtoneEditor({ audio, context }: EditorProps) {
+function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const [trim, setTrim] = useState<TrimRange>(() => ({
     // A fresh file starts with the first thirty seconds selected, which is
     // both a sensible ringtone and the iPhone limit.
@@ -131,8 +145,19 @@ function RingtoneEditor({ audio, context }: EditorProps) {
       rendered.getChannelData(index),
     );
     const blob = encodeWav({ channels, sampleRate: rendered.sampleRate });
-    const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
-    downloadFile(blob, `${base}-ringtone.wav`, "audio/wav");
+    const title = audio.file.name.replace(/\.[^/.]+$/, "");
+    downloadFile(blob, `${safeFilename(title)}-ringtone.wav`, "audio/wav");
+    // The profile history is a record of what was made, not a copy of the
+    // audio: the file itself never leaves the device.
+    void saveRingtone(
+      {
+        title,
+        sourceName: audio.file.name,
+        startSeconds: range.start,
+        durationSeconds: range.end - range.start,
+      },
+      userId,
+    ).then(onSaved);
   };
 
   const length = range.end - range.start;

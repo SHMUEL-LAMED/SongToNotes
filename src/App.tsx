@@ -107,7 +107,9 @@ function WorkspaceApp() {
           />
         </Suspense>
       )}
-      {tool?.id === "ringtone" && <RingtoneTool />}
+      {tool?.id === "ringtone" && (
+        <RingtoneTool onSaved={() => setHistoryRefreshToken((value) => value + 1)} />
+      )}
       {tool?.id === "vocals" && <VocalsTool />}
       {tool?.id === "speed" && <SpeedTool />}
       {tool?.id === "metronome" && <MetronomeTool />}

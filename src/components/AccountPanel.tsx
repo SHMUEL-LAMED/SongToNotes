@@ -1,4 +1,4 @@
-import { Clock3, History, LogOut, Save, Trash2, UserRound, X } from "lucide-react";
+import { AudioWaveform, Clock3, History, LogOut, Save, Trash2, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
@@ -6,6 +6,12 @@ import {
   listTranscriptions,
   type SavedTranscription,
 } from "../lib/history";
+import {
+  deleteRingtone,
+  listLocalRingtones,
+  listRingtones,
+  type SavedRingtone,
+} from "../lib/ringtoneHistory";
 
 type Props = {
   open: boolean;
@@ -28,6 +34,8 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const name = nameDraft ?? profile?.full_name ?? "";
   const [items, setItems] = useState<SavedTranscription[]>([]);
+  const [ringtones, setRingtones] = useState<SavedRingtone[]>([]);
+  const [historyTab, setHistoryTab] = useState<"notes" | "ringtones">("notes");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -37,16 +45,24 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
     const timer = window.setTimeout(() => {
       setLoading(true);
       setMessage("");
-      void listTranscriptions(user.id)
+      const notes = listTranscriptions(user.id)
         .then((nextItems) => {
           if (active) setItems(nextItems);
         })
         .catch(() => {
           if (active) setMessage("לא הצלחנו לטעון את ההיסטוריה.");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
         });
+      // A profile that cannot be reached still shows what this device made.
+      const tones = listRingtones(user.id)
+        .then((nextRingtones) => {
+          if (active) setRingtones(nextRingtones);
+        })
+        .catch(() => {
+          if (active) setRingtones(listLocalRingtones());
+        });
+      void Promise.all([notes, tones]).finally(() => {
+        if (active) setLoading(false);
+      });
     }, 0);
     return () => {
       active = false;
@@ -102,13 +118,17 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
           </div>
         </label>
 
-        <div className="history-heading"><History size={19} /><strong>היצירות האחרונות שלי</strong></div>
+        <div className="history-heading"><History size={19} /><strong>ההיסטוריה המלאה שלי</strong></div>
+        <div className="history-tabs" role="tablist" aria-label="סוג היסטוריה">
+          <button type="button" role="tab" aria-selected={historyTab === "notes"} className={historyTab === "notes" ? "active" : ""} onClick={() => setHistoryTab("notes")}>תווים <span>{items.length}</span></button>
+          <button type="button" role="tab" aria-selected={historyTab === "ringtones"} className={historyTab === "ringtones" ? "active" : ""} onClick={() => setHistoryTab("ringtones")}>צלצולים <span>{ringtones.length}</span></button>
+        </div>
         <div className="history-list">
           {loading ? (
             <p className="empty-history">טוען את ההיסטוריה…</p>
-          ) : items.length === 0 ? (
+          ) : historyTab === "notes" && items.length === 0 ? (
             <p className="empty-history">עדיין אין תוצאות שמורות. התוצאה הראשונה תישמר כאן אוטומטית.</p>
-          ) : (
+          ) : historyTab === "notes" ? (
             items.map((item) => (
               <article className="history-item" key={item.id}>
                 <button className="history-open" type="button" onClick={() => onOpenItem(item)}>
@@ -126,6 +146,23 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
                       .catch(() => setMessage("לא הצלחנו למחוק את היצירה."));
                   }}
                 ><Trash2 size={16} /></button>
+              </article>
+            ))
+          ) : ringtones.length === 0 ? (
+            <p className="empty-history">עדיין אין צלצולים שמורים. אחרי הורדת צלצול הוא יופיע כאן אוטומטית.</p>
+          ) : (
+            ringtones.map((item) => (
+              <article className="history-item" key={item.id}>
+                <a className="history-open" href="#/ringtone" onClick={onClose}>
+                  <span className="history-note ringtone"><AudioWaveform size={19} /></span>
+                  <span><strong>{item.title}</strong><small><Clock3 size={13} /> {formatSavedDate(item.createdAt)} · {Math.round(item.durationSeconds)} שניות</small></span>
+                </a>
+                <button className="history-delete" type="button" aria-label={`מחק את ${item.title}`} onClick={() => {
+                  if (!window.confirm(`למחוק את „${item.title}” מההיסטוריה?`)) return;
+                  void deleteRingtone(item.id, user.id)
+                    .then(() => setRingtones((current) => current.filter((entry) => entry.id !== item.id)))
+                    .catch(() => setMessage("לא הצלחנו למחוק את הצלצול."));
+                }}><Trash2 size={16} /></button>
               </article>
             ))
           )}
