@@ -654,7 +654,67 @@ function WorkspaceApp() {
   const canRecord = isRecordingSupported();
   const hasResults = notes.length > 0;
 
-  if (workspace === "home") return <main className="chooser-page"><nav className="topbar"><span className="brand"><span className="brand-mark"><Music2 size={22} /></span><span>כלי מוזיקה</span></span><div className="topbar-actions"><div className="privacy-pill"><LockKeyhole size={15} /> הקובץ נשאר אצלך בדפדפן</div>{!user ? <button className="account-button" type="button" onClick={() => void signInWithGoogle().catch(() => setError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."))}><span><UserRound size={18} /></span><span className="account-button-copy"><strong>התחברות</strong><small><History size={12} /> לשמירת היסטוריה</small></span></button> : <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>{profile?.avatar_url ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" /> : <span><UserRound size={18} /></span>}<span className="account-button-copy"><strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong><small><History size={12} /> היסטוריה</small></span></button>}</div></nav><AccountPanel open={accountOpen} refreshToken={historyRefreshToken} onClose={() => setAccountOpen(false)} onOpenItem={openSavedTranscription} /><section className="chooser-hero"><div className="eyebrow"><Sparkles size={16} /> כלי מוזיקה במקום אחד</div><h1>מה תרצה לעשות<br /><span>עם השיר שלך?</span></h1><p>בחר תוכנה. בהמשך נוסיף כאן עוד כלי מוזיקה.</p></section><section className="tool-choice-grid"><button className="tool-choice" onClick={() => window.location.assign("https://shmuel-lamed.github.io/Ringtones/")} type="button"><AudioWaveform size={34}/><h2>יצירת צלצול</h2><p>חותכים קטע מהשיר ומכינים צלצול לפלאפון.</p><b>ליצירת צלצול ←</b></button><button className="tool-choice" onClick={() => setWorkspace("notes")} type="button"><FileMusic size={34}/><h2>הפיכת שיר לתווים</h2><p>מזהים מנגינה ומורידים תווים, MIDI או MusicXML.</p><b>להמרת שיר לתווים ←</b></button></section></main>;
+  if (workspace === "home") {
+    return (
+      <main className="chooser-page">
+        <div className="chooser-aurora chooser-aurora-one" aria-hidden="true" />
+        <div className="chooser-aurora chooser-aurora-two" aria-hidden="true" />
+        <nav className="topbar chooser-topbar" aria-label="ניווט ראשי">
+          <span className="brand">
+            <span className="brand-mark"><Music2 size={22} /></span>
+            <span>כלי מוזיקה</span>
+          </span>
+          <div className="topbar-actions">
+            <div className="privacy-pill"><LockKeyhole size={15} /> העיבוד מתבצע אצלך במכשיר</div>
+            {!user ? (
+              <button className="account-button" type="button" onClick={() => void signInWithGoogle().catch(() => setError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."))}>
+                <span><UserRound size={18} /></span>
+                <span className="account-button-copy"><strong>התחברות</strong><small><History size={12} /> לשמירת היסטוריה</small></span>
+              </button>
+            ) : (
+              <button className="account-button" type="button" onClick={() => setAccountOpen(true)}>
+                {profile?.avatar_url ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" /> : <span><UserRound size={18} /></span>}
+                <span className="account-button-copy"><strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong><small><History size={12} /> היסטוריה</small></span>
+              </button>
+            )}
+          </div>
+        </nav>
+
+        <AccountPanel open={accountOpen} refreshToken={historyRefreshToken} onClose={() => setAccountOpen(false)} onOpenItem={openSavedTranscription} />
+
+        <section className="chooser-hero">
+          <div className="chooser-kicker"><Sparkles size={15} /> אולפן מוזיקה חכם בדפדפן</div>
+          <h1>השיר שלך.<br /><span>מה עושים איתו עכשיו?</span></h1>
+          <p>שני כלים מקצועיים, ממשק אחד פשוט. בחר פעולה והתחל לעבוד מיד.</p>
+          <div className="chooser-trust" aria-label="יתרונות">
+            <span><LockKeyhole size={15} /> פרטי</span>
+            <span><Check size={15} /> ללא התקנה</span>
+            <span><AudioLines size={15} /> עובד גם בנייד</span>
+          </div>
+        </section>
+
+        <section className="tool-choice-grid" aria-label="בחירת כלי">
+          <button className="tool-choice tool-choice-ringtone" onClick={() => window.location.assign("https://shmuel-lamed.github.io/Ringtones/")} type="button">
+            <span className="tool-choice-shine" aria-hidden="true" />
+            <span className="tool-choice-top"><span className="tool-choice-icon"><AudioWaveform size={32} /></span><small>עריכת שמע</small></span>
+            <span className="tool-choice-copy"><h2>יצירת צלצול</h2><p>בחר את הקטע המדויק מהשיר, חתוך אותו והורד צלצול מוכן לפלאפון.</p></span>
+            <span className="tool-choice-features"><span>חיתוך מדויק</span><span>תצוגת גל</span><span>הורדה מהירה</span></span>
+            <b>פתח את יוצר הצלצולים <ChevronLeft size={20} /></b>
+          </button>
+
+          <button className="tool-choice tool-choice-notes" onClick={() => setWorkspace("notes")} type="button">
+            <span className="tool-choice-shine" aria-hidden="true" />
+            <span className="tool-choice-top"><span className="tool-choice-icon"><FileMusic size={32} /></span><small>זיהוי מוזיקלי</small></span>
+            <span className="tool-choice-copy"><h2>הפיכת שיר לתווים</h2><p>העלה שיר או הקלט מנגינה וקבל תווים, MIDI ו־MusicXML שאפשר להמשיך לערוך.</p></span>
+            <span className="tool-choice-features"><span>זיהוי תווים</span><span>נגינה מקדימה</span><span>ייצוא מקצועי</span></span>
+            <b>פתח את ממיר התווים <ChevronLeft size={20} /></b>
+          </button>
+        </section>
+
+        <footer className="chooser-footer"><span className="brand"><span className="brand-mark"><Music2 size={18} /></span><span>כלי מוזיקה</span></span><p>הקבצים נשארים אצלך במכשיר ואינם מועלים לשרת.</p></footer>
+      </main>
+    );
+  }
   return (
     <main>
       <nav className="topbar">
