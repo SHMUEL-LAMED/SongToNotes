@@ -685,12 +685,23 @@ function WorkspaceApp() {
 
         <section className="chooser-hero">
           <div className="chooser-kicker"><Sparkles size={15} /> אולפן מוזיקה חכם בדפדפן</div>
-          <h1>השיר שלך.<br /><span>מה עושים איתו עכשיו?</span></h1>
-          <p>שני כלים מקצועיים, ממשק אחד פשוט. בחר פעולה והתחל לעבוד מיד.</p>
+          <h1>כל מה שהמוזיקה שלך<br /><span>יכולה להפוך להיות.</span></h1>
+          <p>אולפן חכם אחד שמקשיב לשיר, מוציא ממנו תווים ויוצר ממנו צלצול — במהירות, בפרטיות ובלי להתקין דבר.</p>
           <div className="chooser-trust" aria-label="יתרונות">
             <span><LockKeyhole size={15} /> פרטי</span>
             <span><Check size={15} /> ללא התקנה</span>
             <span><AudioLines size={15} /> עובד גם בנייד</span>
+          </div>
+          <div className="hero-soundstage" aria-hidden="true">
+            <span className="soundstage-orbit"><Music2 size={27} /></span>
+            <span className="soundstage-line soundstage-line-one" />
+            <span className="soundstage-line soundstage-line-two" />
+            <div className="soundstage-bars">
+              {[18, 34, 55, 78, 46, 92, 64, 40, 72, 100, 68, 48, 82, 57, 29, 43, 24].map((height, index) => (
+                <i key={index} style={{ "--bar-height": `${height}%`, "--bar-delay": `${index * -0.08}s` } as React.CSSProperties} />
+              ))}
+            </div>
+            <span className="soundstage-caption">AUDIO · NOTES · CREATE</span>
           </div>
         </section>
 
