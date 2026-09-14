@@ -1345,6 +1345,33 @@ input[type="range"]::-moz-range-thumb {
 .engine-note.is-slow { color: #b45309; border-color: rgba(180, 83, 9, 0.3); background: rgba(245, 158, 11, 0.1); }
 :root[data-theme="dark"] .engine-note.is-slow { color: #fbbf24; }
 
+/* ---- the AI separation panel, shared by the vocal and ringtone tools ---- */
+
+.ai-separator {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--accent-hue) 80% 60% / 0.3);
+  background: linear-gradient(
+    135deg,
+    hsl(var(--accent-hue) 85% 60% / 0.09),
+    hsl(calc(var(--accent-hue) + 45) 85% 60% / 0.07)
+  );
+}
+.ai-separator-head { display: flex; align-items: flex-start; gap: 13px; }
+.ai-separator h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ai-separator p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+.ai-separator .notice-message { font-size: 13px; }
+.ai-status { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
 /* ---- transport ---- */
 
 .playback-card { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
