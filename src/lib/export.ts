@@ -1,6 +1,5 @@
 import { Midi } from "@tonejs/midi";
 import { scientificName } from "./key";
-import type { Score } from "./score";
 import type { DetectedNote, KeySignature } from "./types";
 
 export type MidiOptions = {
@@ -66,20 +65,6 @@ export function notesToCsv(
   ];
   // A BOM keeps Excel from mangling the file when it is opened directly.
   return `\uFEFF${rows.join("\r\n")}`;
-}
-
-export function scoreSummary(score: Score) {
-  const events = score.staves.reduce(
-    (total, staff) =>
-      total +
-      staff.measures.reduce(
-        (count, measure) =>
-          count + measure.filter((event) => event.midis.length).length,
-        0,
-      ),
-    0,
-  );
-  return { events, measures: score.measureCount };
 }
 
 export function downloadFile(data: BlobPart, filename: string, type: string) {

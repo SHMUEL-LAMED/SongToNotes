@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useId, useMemo, useRef } from "react";
 import { formatTime } from "../lib/audio";
 import type { TrimRange } from "../lib/audio";
 
@@ -11,15 +11,21 @@ type WaveformProps = {
 
 const WIDTH = 1000;
 const HEIGHT = 96;
+/** Anything shorter than this is a stray click rather than a selection. */
+const MIN_SELECTION = 0.4;
 
 /**
  * Waveform overview with a draggable region. Transcribing only the interesting
  * part of a long file is both faster and more accurate, since the tempo and
  * key estimates stop averaging over sections that do not belong together.
+ *
+ * The drawing itself is decorative: the selection is also exposed as two real
+ * number fields, so it can be set precisely and without a pointer.
  */
 export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ anchor: number } | null>(null);
+  const clipId = useId();
 
   const path = useMemo(() => {
     const buckets = peaks.length / 2;
@@ -60,13 +66,31 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
     const start = Math.min(drag.anchor, current);
     const end = Math.max(drag.anchor, current);
     // A stray click should not create a sliver of a selection.
-    if (end - start < 0.4) return;
+    if (end - start < MIN_SELECTION) return;
     onTrimChange({ start, end });
   }
 
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
     dragRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  /** Keeps the pair ordered and inside the file whichever end was typed in. */
+  function setEdge(edge: "start" | "end", raw: number) {
+    if (!Number.isFinite(raw)) return;
+    const current = trim ?? { start: 0, end: duration };
+    const value = Math.max(0, Math.min(duration, raw));
+    const next =
+      edge === "start"
+        ? { start: Math.min(value, current.end - MIN_SELECTION), end: current.end }
+        : { start: current.start, end: Math.max(value, current.start + MIN_SELECTION) };
+    const start = Math.max(0, Math.min(next.start, duration - MIN_SELECTION));
+    const end = Math.min(duration, Math.max(next.end, start + MIN_SELECTION));
+    if (end - start >= duration - 0.001) {
+      onTrimChange(null);
+      return;
+    }
+    onTrimChange({ start, end });
   }
 
   const selection = trim
@@ -77,7 +101,7 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
     : null;
 
   return (
-    <div className="waveform" dir="ltr">
+    <div className="waveform" dir="ltr" role="group" aria-label="גל הקול ובחירת הקטע לניתוח">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -85,8 +109,8 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        role="img"
-        aria-label="גל הקול של הקובץ. אפשר לסמן קטע לניתוח."
+        aria-hidden="true"
+        focusable="false"
       >
         <rect width={WIDTH} height={HEIGHT} fill="#0b1120" />
         <path d={path} fill="#7c5cff" opacity={selection ? 0.22 : 0.6} />
@@ -104,10 +128,10 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
               d={path}
               fill="#2dd4bf"
               opacity="0.75"
-              clipPath="url(#trim-clip)"
+              clipPath={`url(#${clipId})`}
             />
             <defs>
-              <clipPath id="trim-clip">
+              <clipPath id={clipId}>
                 <rect
                   x={selection.x}
                   y={0}
@@ -135,7 +159,7 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
           </>
         )}
       </svg>
-      <div className="waveform-legend">
+      <div className="waveform-legend" dir="rtl">
         {trim ? (
           <>
             <span>
@@ -148,6 +172,30 @@ export function Waveform({ peaks, duration, trim, onTrimChange }: WaveformProps)
         ) : (
           <span>סמן קטע בגל הקול כדי לנתח רק אותו · {formatTime(duration)}</span>
         )}
+      </div>
+      <div className="waveform-range" dir="rtl">
+        <label>
+          <span>התחלה (שניות)</span>
+          <input
+            type="number"
+            min={0}
+            max={Math.max(0, duration - MIN_SELECTION).toFixed(1)}
+            step={0.1}
+            value={(trim?.start ?? 0).toFixed(1)}
+            onChange={(event) => setEdge("start", Number(event.target.value))}
+          />
+        </label>
+        <label>
+          <span>סיום (שניות)</span>
+          <input
+            type="number"
+            min={MIN_SELECTION}
+            max={duration.toFixed(1)}
+            step={0.1}
+            value={(trim?.end ?? duration).toFixed(1)}
+            onChange={(event) => setEdge("end", Number(event.target.value))}
+          />
+        </label>
       </div>
     </div>
   );
