@@ -3,16 +3,20 @@ import {
   BadgeCheck,
   Headphones,
   LockKeyhole,
+  Music2,
   Search,
   Sparkles,
   Zap,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   CATEGORY_LABELS,
   TOOLS,
   type ToolCategory,
 } from "../lib/tools";
+
+/** The equaliser silhouette in the hero — a fixed shape, not live audio. */
+const BAR_HEIGHTS = [18, 34, 55, 78, 46, 92, 64, 40, 72, 100, 68, 48, 82, 57, 29, 43, 24];
 
 type Props = {
   onOpen: (id: string) => void;
@@ -51,13 +55,13 @@ export function Hub({ onOpen }: Props) {
           <Sparkles size={16} /> {TOOLS.length} כלי מוזיקה · הכול בדפדפן
         </div>
         <h1>
-          כל מה שצריך
+          כל מה שהמוזיקה שלך
           <br />
-          <span>כדי לעבוד עם מוזיקה</span>
+          <span>יכולה להפוך להיות.</span>
         </h1>
         <p>
-          תווים מכל שיר, צלצולים, קריוקי, האטה לתרגול, מטרונום, טיונר ופסנתר —
-          כלים מקצועיים שרצים במכשיר שלך, בלי העלאה לשרת ובלי התקנה.
+          אולפן חכם אחד שמקשיב לשיר ומוציא ממנו תווים, צלצול, קריוקי או גרסה
+          מואטת לתרגול — במהירות, בפרטיות ובלי להתקין דבר.
         </p>
         <div className="hero-points">
           <span>
@@ -69,6 +73,27 @@ export function Hub({ onOpen }: Props) {
           <span>
             <Headphones size={16} /> איכות אולפן
           </span>
+        </div>
+        <div className="hero-soundstage" aria-hidden="true">
+          <span className="soundstage-orbit">
+            <Music2 size={27} />
+          </span>
+          <span className="soundstage-line soundstage-line-one" />
+          <span className="soundstage-line soundstage-line-two" />
+          <div className="soundstage-bars">
+            {BAR_HEIGHTS.map((height, index) => (
+              <i
+                key={index}
+                style={
+                  {
+                    "--bar-height": `${height}%`,
+                    "--bar-delay": `${index * -0.08}s`,
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
+          <span className="soundstage-caption">AUDIO · NOTES · CREATE</span>
         </div>
       </section>
 

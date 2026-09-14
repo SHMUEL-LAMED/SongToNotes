@@ -2141,3 +2141,126 @@ footer .brand-mark { font-size: 19px; }
 .history-tabs button.active span { background: var(--accent-soft); }
 
 .history-note.ringtone { color: var(--mint); background: rgba(45, 212, 191, 0.14); }
+
+/* ==========================================================================
+   Hero soundstage
+   Ported from the studio redesign on main. The original was pinned to the
+   dark palette with literal colours; here it is rebuilt on the tokens so it
+   reads in both themes and takes each page's accent hue.
+   ========================================================================== */
+
+.hero-soundstage {
+  position: relative;
+  width: min(680px, 100%);
+  height: 155px;
+  margin: 34px auto -14px;
+  display: grid;
+  place-items: center;
+  perspective: 700px;
+}
+
+/* The pool of light the stage stands in. */
+.hero-soundstage::before {
+  content: "";
+  position: absolute;
+  width: 72%;
+  height: 95px;
+  bottom: 4px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    hsl(var(--accent-hue) 80% 55% / 0.22),
+    transparent 68%
+  );
+  filter: blur(14px);
+  transform: rotateX(65deg);
+}
+
+.soundstage-orbit {
+  position: absolute;
+  top: 18px;
+  z-index: 2;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 21px;
+  color: #fff;
+  background: linear-gradient(
+    145deg,
+    hsl(var(--accent-hue) 76% 52%),
+    hsl(calc(var(--accent-hue) + 45) 70% 44%)
+  );
+  box-shadow: var(--shadow-accent), inset 0 1px rgba(255, 255, 255, 0.35);
+  animation: stage-float 4s ease-in-out infinite;
+}
+
+.soundstage-line {
+  position: absolute;
+  top: 48px;
+  width: 230px;
+  height: 54px;
+  border: 1px solid hsl(var(--accent-hue) 70% 55% / 0.25);
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0;
+}
+.soundstage-line-one { transform: scaleX(1.45); }
+.soundstage-line-two { transform: scaleX(2.25); opacity: 0.45; }
+
+.soundstage-bars {
+  position: absolute;
+  bottom: 22px;
+  width: min(560px, 88%);
+  height: 70px;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: clamp(4px, 1.1vw, 10px);
+}
+.soundstage-bars i {
+  width: 8px;
+  height: var(--bar-height);
+  display: block;
+  border-radius: 999px;
+  transform-origin: bottom;
+  background: linear-gradient(
+    to top,
+    hsl(calc(var(--accent-hue) + 80) 70% 50% / 0.35),
+    hsl(var(--accent-hue) 75% 58%) 58%,
+    hsl(var(--accent-hue) 85% 78%)
+  );
+  box-shadow: 0 0 18px hsl(var(--accent-hue) 80% 60% / 0.28);
+  animation: sound-pulse 1.8s var(--bar-delay) ease-in-out infinite alternate;
+}
+
+.soundstage-caption {
+  position: absolute;
+  bottom: -6px;
+  color: var(--text-muted);
+  font: 700 10px/1 system-ui, sans-serif;
+  letter-spacing: 4px;
+  direction: ltr;
+  opacity: 0.6;
+}
+
+@keyframes sound-pulse {
+  to { transform: scaleY(0.34); opacity: 0.42; }
+}
+@keyframes stage-float {
+  50% { transform: translateY(-7px) rotate(2deg); }
+}
+
+/* Seventeen animating bars is a lot of motion for a decorative element, so
+   the whole stage holds still when the visitor asks for less of it. */
+@media (prefers-reduced-motion: reduce) {
+  .soundstage-bars i,
+  .soundstage-orbit { animation: none !important; }
+}
+
+@media (max-width: 720px) {
+  .hero-soundstage { height: 132px; margin-top: 24px; }
+  .soundstage-bars { height: 58px; bottom: 16px; }
+  .soundstage-bars i { width: 5px; }
+  .soundstage-orbit { width: 53px; height: 53px; border-radius: 17px; }
+}
