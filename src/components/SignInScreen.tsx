@@ -56,7 +56,7 @@ export function SignInScreen() {
           ללא חשבון אפשר להמיר ולהוריד תווים, אבל התוצאות לא נשמרות בהיסטוריה.
         </small>
         <div className="auth-privacy">
-          <LockKeyhole size={15} /> קובצי השמע נשארים במכשיר שלך ולא נשמרים בשרת
+          <LockKeyhole size={15} /> קובצי השמע מעובדים באופן זמני ואינם נשמרים בשרת
         </div>
       </section>
     </main>

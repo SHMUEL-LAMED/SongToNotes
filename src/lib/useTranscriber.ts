@@ -4,6 +4,10 @@ import type {
   WorkerResponse,
 } from "../workers/transcribe.worker";
 import type { DetectedNote } from "./types";
+import {
+  isCloudTranscriptionConfigured,
+  transcribeInCloud,
+} from "./cloudTranscriber";
 
 /**
  * The model runs permissively and every user-facing control filters the notes
@@ -25,6 +29,10 @@ export type TranscriberState = {
   timings: Timings | null;
   /** True while the run has moved to the main thread for GPU access. */
   onMainThread: boolean;
+  /** True while audio is being uploaded/processed by the server GPU. */
+  inCloud: boolean;
+  /** True when the cloud failed and this run continued locally. */
+  fellBackToLocal: boolean;
 };
 
 /**
@@ -51,6 +59,7 @@ function mainThreadHasWebgl() {
 
 export function useTranscriber() {
   const workerRef = useRef<Worker | null>(null);
+  const cloudAbortRef = useRef<AbortController | null>(null);
   const jobRef = useRef(0);
   const pendingRef = useRef<{
     resolve: (notes: DetectedNote[]) => void;
@@ -69,9 +78,13 @@ export function useTranscriber() {
     backend: null,
     timings: null,
     onMainThread: false,
+    inCloud: false,
+    fellBackToLocal: false,
   });
 
   const teardown = useCallback(() => {
+    cloudAbortRef.current?.abort();
+    cloudAbortRef.current = null;
     workerRef.current?.terminate();
     workerRef.current = null;
   }, []);
@@ -112,6 +125,7 @@ export function useTranscriber() {
           error: null,
           backend: timings.backend,
           timings,
+          inCloud: false,
         }));
         pendingRef.current?.resolve(notes);
         pendingRef.current = null;
@@ -124,6 +138,7 @@ export function useTranscriber() {
           isRunning: false,
           progress: 0,
           error: message,
+          inCloud: false,
         }));
         pendingRef.current?.reject(new Error(message));
         pendingRef.current = null;
@@ -154,6 +169,7 @@ export function useTranscriber() {
           progress: 100,
           error: null,
           timings: message.timings,
+          inCloud: false,
         }));
         pendingRef.current?.resolve(message.notes);
         pendingRef.current = null;
@@ -163,6 +179,7 @@ export function useTranscriber() {
           isRunning: false,
           progress: 0,
           error: message.message,
+          inCloud: false,
         }));
         pendingRef.current?.reject(new Error(message.message));
         pendingRef.current = null;
@@ -177,6 +194,7 @@ export function useTranscriber() {
         isRunning: false,
         progress: 0,
         error: message,
+        inCloud: false,
       }));
       pendingRef.current?.reject(new Error(message));
       pendingRef.current = null;
@@ -192,6 +210,8 @@ export function useTranscriber() {
     // Inference cannot be interrupted mid-tensor, so the worker is discarded
     // and a fresh one is created for the next run.
     jobRef.current += 1;
+    cloudAbortRef.current?.abort();
+    cloudAbortRef.current = null;
     pendingRef.current.reject(new Error("הניתוח בוטל."));
     pendingRef.current = null;
     teardown();
@@ -200,33 +220,85 @@ export function useTranscriber() {
       isRunning: false,
       progress: 0,
       error: null,
+      inCloud: false,
     }));
   }, [teardown]);
 
   const transcribe = useCallback(
     (samples: Float32Array) => {
-      const worker = ensureWorker();
       jobRef.current += 1;
       const jobId = jobRef.current;
+      const useCloud = isCloudTranscriptionConfigured();
       setState((previous) => ({
         ...previous,
         isRunning: true,
         progress: 0,
         error: null,
         onMainThread: false,
+        inCloud: useCloud,
+        fellBackToLocal: false,
       }));
 
       return new Promise<DetectedNote[]>((resolve, reject) => {
         pendingRef.current = { resolve, reject };
-        const request: WorkerRequest = {
-          type: "transcribe",
-          jobId,
-          samples,
-          detectionLevel: DETECTION_LEVEL,
-          requireGpu: !mainThreadGpuFailedRef.current && mainThreadHasWebgl(),
+
+        const runLocally = () => {
+          if (jobRef.current !== jobId) return;
+          const worker = ensureWorker();
+          const request: WorkerRequest = {
+            type: "transcribe",
+            jobId,
+            samples,
+            detectionLevel: DETECTION_LEVEL,
+            requireGpu: !mainThreadGpuFailedRef.current && mainThreadHasWebgl(),
+          };
+          // The sample buffer is handed over rather than copied.
+          worker.postMessage(request, [samples.buffer]);
         };
-        // The sample buffer is handed over rather than copied.
-        worker.postMessage(request, [samples.buffer]);
+
+        if (!useCloud) {
+          runLocally();
+          return;
+        }
+
+        const controller = new AbortController();
+        cloudAbortRef.current = controller;
+        void transcribeInCloud(samples, controller.signal, (progress) => {
+          if (jobRef.current !== jobId) return;
+          setState((previous) => ({ ...previous, progress }));
+        })
+          .then(({ notes, timings }) => {
+            if (jobRef.current !== jobId) return;
+            cloudAbortRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              isRunning: false,
+              progress: 100,
+              error: null,
+              backend: "cloud-gpu",
+              timings,
+              inCloud: false,
+            }));
+            pendingRef.current?.resolve(notes);
+            pendingRef.current = null;
+          })
+          .catch((error: unknown) => {
+            if (jobRef.current !== jobId) return;
+            cloudAbortRef.current = null;
+            const message =
+              error instanceof Error ? error.message : "שרת ה־GPU נכשל.";
+            if (message === "הניתוח בוטל.") return;
+            // Preserve availability: a cold-start, quota, or network problem
+            // must not prevent the user from getting a result.
+            setState((previous) => ({
+              ...previous,
+              progress: 0,
+              backend: null,
+              inCloud: false,
+              fellBackToLocal: true,
+            }));
+            runLocally();
+          });
       });
     },
     [ensureWorker],
