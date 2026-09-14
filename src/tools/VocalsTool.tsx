@@ -3,12 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { Transport } from "../components/Transport";
 import {
-  DEMUCS_SAMPLE_RATE,
-  isNeuralSeparationSupported,
-  separateWithDemucs,
-  stemsToInstrumental,
-  type NeuralProgress,
-} from "../lib/demucs";
+  separateStems,
+  type SeparationProgress,
+} from "../lib/stemSeparation";
 import { channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import type { SeparateTarget } from "../lib/separate";
@@ -101,49 +98,28 @@ export function VocalsTool() {
     if (!audio || !context) return;
     setAiBusy(true);
     setAiProgress(0);
-    setAiStatus("טוען את מנוע ההפרדה…");
+    setAiStatus("מכין את מודל ההפרדה…");
     try {
-      const buffer = audio.buffer;
-      const left = buffer.getChannelData(0);
-      const right =
-        buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
-      const report = (progress: NeuralProgress) => {
-        setAiProgress(Math.round(progress.fraction * 100));
-        setAiStatus(
-          progress.stage === "downloading"
-            ? `מוריד את מודל ההפרדה… ${Math.round(progress.fraction * 100)}%`
-            : `מפריד שירה מכלי נגינה… ${Math.round(progress.fraction * 100)}%`,
-        );
+      const report = (progress: SeparationProgress) => {
+        setAiProgress(Math.round(progress.progress * 100));
+        setAiStatus(progress.message);
       };
-      const stems = await separateWithDemucs(
-        left,
-        right,
-        buffer.sampleRate,
-        report,
-      );
-      const picked =
-        target === "instrumental"
-          ? stemsToInstrumental(stems)
-          : stems.vocals;
+      const stems = await separateStems(audio.buffer, report);
+      const picked = target === "instrumental" ? stems.instrumental : stems.vocals;
       setRendered({
         key: settingsKey,
-        buffer: channelsToBuffer(
-          context,
-          [picked.left, picked.right],
-          buffer.sampleRate,
-        ),
+        buffer: channelsToBuffer(context, picked, stems.sampleRate),
         wasMono: false,
       });
       setUsedAi(true);
       setAiProgress(100);
       setAiStatus("ההפרדה הושלמה.");
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "ההפרדה נכשלה.";
+      const message = caught instanceof Error ? caught.message : "ההפרדה נכשלה.";
       setAiStatus(
         message === "Failed to fetch"
           ? "לא הצלחנו להוריד את מודל ההפרדה. בדוק את החיבור לאינטרנט ונסה שוב."
-          : `ההפרדה לא הושלמה: ${message}`,
+          : `ההפרדה לא הושלמה: ${message}. כדאי לנסות שוב ולהשאיר את הכרטיסייה פתוחה בזמן העיבוד.`,
       );
     } finally {
       setAiBusy(false);
@@ -166,9 +142,9 @@ export function VocalsTool() {
   };
 
   const isMono = audio ? audio.buffer.numberOfChannels < 2 : false;
-  const aiAvailable = isNeuralSeparationSupported();
-  const wrongRateForAi =
-    audio !== null && audio.buffer.sampleRate !== DEMUCS_SAMPLE_RATE;
+  // The separator falls back to WebAssembly where WebGPU is missing and
+  // resamples the song itself, so there is nothing left to gate on.
+  const hasGpu = typeof navigator !== "undefined" && "gpu" in navigator;
   const busy = separation.isRunning || aiBusy;
 
   return (
@@ -218,9 +194,7 @@ export function VocalsTool() {
           <div className="notice-message" role="status">
             הקובץ הזה במונו, ולכן אין הפרש בין ערוצים לעבוד איתו. ההפרדה המהירה
             תיתן תוצאה חלקית בלבד —{" "}
-            {aiAvailable
-              ? "הפרדת ה־AI שלמטה כן מתמודדת עם מונו."
-              : "הפרדת AI תעבוד כאן, אבל היא דורשת WebGPU שאינו זמין בדפדפן הזה."}
+            הפרדת ה־AI שלמטה כן מתמודדת עם מונו.
           </div>
         )}
 
@@ -341,50 +315,40 @@ export function VocalsTool() {
                     <Sparkles size={16} /> הפרדה אמיתית עם AI
                   </h3>
                   <p>
-                    מודל הפרדת מקורות שרץ במכשיר שלך ומפריד שירה, תופים, בס
-                    וכלים לרצועות נפרדות. עובד גם על מונו ועל שירים שבהם השירה
-                    אינה במרכז. בפעם הראשונה יורד מודל בגודל כ־170MB, ואחר כך
-                    הוא נשמר בדפדפן. השיר עצמו לא נשלח לשום מקום.
+                    מודל Demucs רץ במכשיר שלך ומפריד שירה, תופים, בס וכלים
+                    לרצועות נפרדות. עובד גם על מונו ועל שירים שבהם השירה אינה
+                    במרכז. בפעם הראשונה יורד מודל בגודל כ־172MB, ואחר כך הוא
+                    נשמר בדפדפן. השיר עצמו לא נשלח לשום מקום.
+                    {!hasGpu &&
+                      " בדפדפן הזה אין WebGPU, ולכן ההפרדה תרוץ על המעבד ותיקח הרבה יותר זמן."}
                   </p>
                 </div>
               </div>
-              {!aiAvailable ? (
-                <p className="notice-message">
-                  ההפרדה הזו דורשת WebGPU, שאינו זמין בדפדפן הזה. אפשר לנסות
-                  ב־Chrome או ב־Edge מעודכנים במחשב.
-                </p>
-              ) : wrongRateForAi ? (
-                <p className="notice-message">
-                  המודל עובד רק על קבצים בקצב דגימה 44.1kHz, והקובץ הזה ב־
-                  {Math.round(audio.buffer.sampleRate / 100) / 10}kHz.
-                </p>
-              ) : (
-                <>
-                  <button
-                    className="primary-button compact"
-                    type="button"
-                    onClick={runAi}
-                    disabled={busy}
+              <>
+                <button
+                  className="primary-button compact"
+                  type="button"
+                  onClick={runAi}
+                  disabled={busy}
+                >
+                  <Sparkles size={17} />
+                  {target === "instrumental"
+                    ? "הפק אינסטרומנטלי עם AI"
+                    : "הפק שירה בלבד עם AI"}
+                </button>
+                {aiBusy && (
+                  <div
+                    className="progress-track"
+                    role="progressbar"
+                    aria-label="התקדמות הפרדת ה־AI"
+                    aria-valuenow={aiProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
                   >
-                    <Sparkles size={17} />
-                    {target === "instrumental"
-                      ? "הפק אינסטרומנטלי עם AI"
-                      : "הפק שירה בלבד עם AI"}
-                  </button>
-                  {aiBusy && (
-                    <div
-                      className="progress-track"
-                      role="progressbar"
-                      aria-label="התקדמות הפרדת ה־AI"
-                      aria-valuenow={aiProgress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <div style={{ width: `${aiProgress}%` }} />
-                    </div>
-                  )}
-                </>
-              )}
+                    <div style={{ width: `${Math.max(2, aiProgress)}%` }} />
+                  </div>
+                )}
+              </>
               {aiStatus && (
                 <small className="ai-status" role="status">
                   {aiStatus}

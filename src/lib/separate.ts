@@ -18,7 +18,7 @@
  * where they overlap the voice.
  *
  * Nothing here is Demucs — a source-separation network still does better on a
- * dense mix, and {@link ../lib/demucs} offers exactly that where the device
+ * dense mix, and {@link ./stemSeparation} offers exactly that where the device
  * can run it. But this needs no download, no GPU and no waiting, and on most
  * commercial recordings it is a usable karaoke track.
  */

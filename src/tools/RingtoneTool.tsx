@@ -20,12 +20,9 @@ import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import {
-  DEMUCS_SAMPLE_RATE,
-  isNeuralSeparationSupported,
-  separateWithDemucs,
-  stemsToInstrumental,
-  type NeuralProgress,
-} from "../lib/demucs";
+  separateStems,
+  type SeparationProgress,
+} from "../lib/stemSeparation";
 import { channelsToBuffer, normalise } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { saveRingtone } from "../lib/ringtoneHistory";
@@ -275,40 +272,22 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
 
   // ---- AI backing track ----
 
-  const aiAvailable = isNeuralSeparationSupported();
-  const wrongRateForAi = audio.buffer.sampleRate !== DEMUCS_SAMPLE_RATE;
+  // The separator falls back to WebAssembly where WebGPU is missing and
+  // resamples the song itself, so there is nothing left to gate on — only a
+  // warning worth giving before someone waits.
+  const hasGpu = typeof navigator !== "undefined" && "gpu" in navigator;
 
   const makeInstrumental = useCallback(async () => {
     setAiBusy(true);
     setAiProgress(0);
-    setAiStatus("טוען את מנוע ההפרדה…");
+    setAiStatus("מכין את מודל ההפרדה…");
     try {
-      const buffer = audio.buffer;
-      const left = buffer.getChannelData(0);
-      const right =
-        buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
-      const report = (progress: NeuralProgress) => {
-        const percent = Math.round(progress.fraction * 100);
-        setAiProgress(percent);
-        setAiStatus(
-          progress.stage === "downloading"
-            ? `מוריד את מודל ההפרדה… ${percent}%`
-            : `מפריד שירה מכלי נגינה… ${percent}%`,
-        );
-      };
-      const stems = await separateWithDemucs(
-        left,
-        right,
-        buffer.sampleRate,
-        report,
-      );
-      const backing = stemsToInstrumental(stems);
+      const stems = await separateStems(audio.buffer, (progress: SeparationProgress) => {
+        setAiProgress(Math.round(progress.progress * 100));
+        setAiStatus(progress.message);
+      });
       setInstrumental(
-        channelsToBuffer(
-          context,
-          [backing.left, backing.right],
-          buffer.sampleRate,
-        ),
+        channelsToBuffer(context, stems.instrumental, stems.sampleRate),
       );
       setUseInstrumental(true);
       setAiProgress(100);
@@ -318,7 +297,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
       setAiStatus(
         message === "Failed to fetch"
           ? "לא הצלחנו להוריד את מודל ההפרדה. בדוק את החיבור לאינטרנט ונסה שוב."
-          : `ההפרדה לא הושלמה: ${message}`,
+          : `ההפרדה לא הושלמה: ${message}. כדאי לנסות שוב ולהשאיר את הכרטיסייה פתוחה בזמן העיבוד.`,
       );
     } finally {
       setAiBusy(false);
@@ -585,23 +564,15 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
               <Sparkles size={16} /> צלצול אינסטרומנטלי
             </h3>
             <p>
-              מודל הפרדת מקורות שרץ במכשיר שלך מסיר את השירה ומשאיר רק את
-              הנגינה — צלצול בלי מילים. בפעם הראשונה יורד מודל בגודל כ־170MB,
-              ואחר כך הוא נשמר בדפדפן. השיר עצמו לא נשלח לשום מקום.
+              מודל Demucs רץ במכשיר שלך, מסיר את השירה ומשאיר רק את הנגינה —
+              צלצול בלי מילים. בפעם הראשונה יורד מודל בגודל כ־172MB, ואחר כך
+              הוא נשמר בדפדפן. השיר עצמו לא נשלח לשום מקום.
+              {!hasGpu &&
+                " בדפדפן הזה אין WebGPU, ולכן ההפרדה תרוץ על המעבד ותיקח הרבה יותר זמן."}
             </p>
           </div>
         </div>
-        {!aiAvailable ? (
-          <p className="notice-message">
-            ההפרדה הזו דורשת WebGPU, שאינו זמין בדפדפן הזה. אפשר לנסות ב־Chrome
-            או ב־Edge מעודכנים במחשב.
-          </p>
-        ) : wrongRateForAi ? (
-          <p className="notice-message">
-            המודל עובד רק על קבצים בקצב דגימה 44.1kHz, והקובץ הזה ב־
-            {Math.round(audio.buffer.sampleRate / 100) / 10}kHz.
-          </p>
-        ) : instrumental ? (
+        {instrumental ? (
           <label className="checkbox-field">
             <input
               type="checkbox"
@@ -629,7 +600,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
                 aria-valuemin={0}
                 aria-valuemax={100}
               >
-                <div style={{ width: `${aiProgress}%` }} />
+                <div style={{ width: `${Math.max(2, aiProgress)}%` }} />
               </div>
             )}
           </>

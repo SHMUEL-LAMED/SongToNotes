@@ -341,6 +341,20 @@ export function midSideSplit(
   keep: "sides" | "centre",
 ): Float32Array[] {
   const left = buffer.getChannelData(0);
+  if (buffer.numberOfChannels < 2) {
+    // A mono file has no side channel. Keep the vocal-frequency band for the
+    // "voice" result instead of pretending a stereo separation succeeded.
+    if (keep === "centre") {
+      const upper = lowPass(left, buffer.sampleRate, 5_000);
+      const bass = lowPass(left, buffer.sampleRate, 120);
+      const voice = new Float32Array(left.length);
+      for (let index = 0; index < voice.length; index += 1) {
+        voice[index] = left[index] * (1 - amount) + (upper[index] - bass[index]) * amount;
+      }
+      return [voice.slice(), voice];
+    }
+    return [left.slice(), left.slice()];
+  }
   const right =
     buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : buffer.getChannelData(0);
   const outLeft = new Float32Array(buffer.length);
@@ -468,6 +482,19 @@ export function removeVocals(
   keepBassBelowHz: number,
 ): Float32Array[] {
   const left = buffer.getChannelData(0);
+  if (buffer.numberOfChannels < 2) {
+    // True centre cancellation is impossible in mono, but a broad vocal-band
+    // reduction still produces a useful practice/karaoke track and, crucially,
+    // never returns the silent file the previous implementation produced.
+    const upper = lowPass(left, buffer.sampleRate, 5_000);
+    const bass = lowPass(left, buffer.sampleRate, keepBassBelowHz || 140);
+    const output = new Float32Array(left.length);
+    for (let index = 0; index < output.length; index += 1) {
+      const vocalBand = upper[index] - bass[index];
+      output[index] = left[index] - vocalBand * amount * 0.82;
+    }
+    return [output.slice(), output];
+  }
   const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
   const mid = new Float32Array(buffer.length);
   for (let index = 0; index < buffer.length; index += 1) {

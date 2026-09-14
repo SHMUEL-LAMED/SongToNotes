@@ -39,6 +39,12 @@ export const ACCEPTED_EXTENSIONS = [
  */
 const MAX_BYTES = 80 * 1024 * 1024;
 
+const ACCEPT = [
+  "audio/*",
+  "video/*",
+  ...ACCEPTED_EXTENSIONS.map((extension) => `.${extension}`),
+].join(",");
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
@@ -178,13 +184,20 @@ export function AudioPicker({
   allowRecording = false,
   children,
 }: PickerProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [recorder] = useState(() => new MicRecorder());
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [recordError, setRecordError] = useState<string | null>(null);
+
+  const pickFromInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    // Clear first so choosing the same file again still fires change in every
+    // browser, including Chrome/Android and Safari/iOS.
+    event.currentTarget.value = "";
+    if (file) onPick(file);
+  };
 
   useEffect(() => () => recorder.cancel(), [recorder]);
 
@@ -275,6 +288,16 @@ export function AudioPicker({
           </span>
         </div>
         {children}
+        <label className="secondary-button compact replace-file-button">
+          <UploadCloud size={16} /> החלף קובץ
+          <input
+            className="native-file-input"
+            type="file"
+            accept={ACCEPT}
+            onChange={pickFromInput}
+            aria-label="החלפת קובץ שמע"
+          />
+        </label>
         <button className="icon-button" onClick={onClear} aria-label="הסר קובץ" type="button">
           <X size={18} />
         </button>
@@ -284,17 +307,18 @@ export function AudioPicker({
 
   return (
     <>
-      <button
+      <label
         className={`drop-zone ${isDragging ? "is-dragging" : ""}`}
-        onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
           event.preventDefault();
+          if (isLoading) return;
           setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
+          if (isLoading) return;
           // Dragging a selection of text or an image out of another tab also
           // fires a drop; without the guard that cleared the current song and
           // replaced it with an error.
@@ -309,28 +333,28 @@ export function AudioPicker({
           );
           onPick(audioish ?? dropped[0]);
         }}
-        type="button"
-        disabled={isLoading}
+        aria-disabled={isLoading}
       >
         <span className="upload-icon">
           <UploadCloud size={32} />
         </span>
         <strong>{isLoading ? "טוען את הקובץ…" : "גרור לכאן שיר או לחץ לבחירה"}</strong>
         <span>{hint ?? `MP3, WAV, OGG, FLAC, M4A, AAC · עד ${formatBytes(MAX_BYTES)}`}</span>
-      </button>
-      {/* A bare `audio/*` hides files whose type the phone failed to work out,
-          which on Android is most of what sits in a cloud drive. Listing the
-          extensions too brings them back into the picker. */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept={`audio/*,video/*,${ACCEPTED_EXTENSIONS.map((extension) => `.${extension}`).join(",")}`}
-        hidden
-        onChange={(event) => {
-          onPick(event.target.files?.[0]);
-          event.target.value = "";
-        }}
-      />
+        {/* The input sits inside the label rather than being clicked from
+            script: iOS Safari and several Android WebViews refuse a
+            programmatic `.click()` on a file input, which is what made the
+            picker simply not open there. A bare `audio/*` also hides files
+            whose type the phone failed to work out — on Android that is most
+            of what sits in a cloud drive — so the extensions are listed too. */}
+        <input
+          className="native-file-input"
+          type="file"
+          accept={ACCEPT}
+          disabled={isLoading}
+          onChange={pickFromInput}
+          aria-label="בחירת קובץ שמע"
+        />
+      </label>
       {allowRecording && isRecordingSupported() && (
         <div className="source-alternatives">
           <button className="secondary-button" onClick={startRecording} type="button">
