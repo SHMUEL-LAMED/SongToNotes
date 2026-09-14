@@ -1003,6 +1003,88 @@ a { color: inherit; text-decoration: none; }
 .trim-length strong { display: block; font-size: 22px; letter-spacing: -0.5px; }
 .trim-length span { font-size: 12px; color: var(--text-muted); }
 
+/* ---- the ringtone editor's section picker and fine tuning ---- */
+
+.section-picker {
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.section-picker-head h3 {
+  margin: 0 0 4px;
+  font-size: 15.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-picker-head h3 svg { color: var(--accent); }
+.section-picker-head small { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+.section-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.section-choices button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  text-align: start;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-solid);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s, transform 0.18s, background 0.18s;
+}
+.section-choices button:hover { transform: translateY(-2px); border-color: var(--accent); }
+.section-choices button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.section-choices b { font-size: 14px; }
+.section-choices small { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+.section-time {
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.fine-tune {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.nudge-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nudge-row > span { font-size: 13px; color: var(--text-muted); margin-inline-end: 3px; }
+.nudge-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-solid);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.nudge-row button:hover { border-color: var(--accent); }
+.fine-tune-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+@media (max-width: 720px) {
+  .section-choices { grid-template-columns: 1fr; }
+}
+
 /* ---- settings ---- */
 
 .settings-panel,
@@ -1365,6 +1447,33 @@ input[type="range"]::-moz-range-thumb {
 }
 .engine-note.is-slow { color: #b45309; border-color: rgba(180, 83, 9, 0.3); background: rgba(245, 158, 11, 0.1); }
 :root[data-theme="dark"] .engine-note.is-slow { color: #fbbf24; }
+
+/* ---- the AI separation panel, shared by the vocal and ringtone tools ---- */
+
+.ai-separator {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--accent-hue) 80% 60% / 0.3);
+  background: linear-gradient(
+    135deg,
+    hsl(var(--accent-hue) 85% 60% / 0.09),
+    hsl(calc(var(--accent-hue) + 45) 85% 60% / 0.07)
+  );
+}
+.ai-separator-head { display: flex; align-items: flex-start; gap: 13px; }
+.ai-separator h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ai-separator p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+.ai-separator .notice-message { font-size: 13px; }
+.ai-status { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
 
 /* ---- transport ---- */
 
