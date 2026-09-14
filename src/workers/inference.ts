@@ -12,9 +12,14 @@ const HOP_SIZE = AUDIO_N_SAMPLES - OVERLAP_LENGTH_FRAMES;
 
 const OUTPUT_TENSORS = ["Identity_1", "Identity_2", "Identity"];
 
-/** GPU inference is much faster when several windows share one execution. */
-function preferredBatchSize(backend: string) {
-  return backend === "webgl" ? 8 : 1;
+/**
+ * This exported graph declares a dynamic batch, but several WebGL drivers
+ * silently reuse the first item for the whole batch. Processing one window at
+ * a time is a little slower and is the only reliable way to guarantee that
+ * every two-second section of the song is actually analysed.
+ */
+function preferredBatchSize() {
+  return 1;
 }
 
 export type ModelOutput = {
@@ -50,8 +55,7 @@ export async function runInference(
   samples: Float32Array,
   onProgress: (fraction: number) => void,
 ): Promise<ModelOutput> {
-  const backend = tf.getBackend();
-  const preferredBatch = preferredBatchSize(backend);
+  const preferredBatch = preferredBatchSize();
   const leftPadding = Math.floor(OVERLAP_LENGTH_FRAMES / 2);
   const paddedLength = leftPadding + samples.length;
   const windowCount = Math.max(1, Math.ceil(paddedLength / HOP_SIZE));
@@ -153,5 +157,10 @@ export async function runInference(
   }
 
   onProgress(1);
+  if (expectedFrames > 0 && produced < expectedFrames * 0.85) {
+    throw new Error(
+      `הניתוח נעצר לפני סוף הקטע (${produced} מתוך ${expectedFrames} מסגרות). נסה שוב.`,
+    );
+  }
   return { frames, onsets, contours };
 }
