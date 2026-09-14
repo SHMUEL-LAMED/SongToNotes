@@ -61,6 +61,7 @@ import {
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "./lib/refine";
 import { buildScore } from "./lib/score";
 import { NotePlayer } from "./lib/synth";
+import { moveTabFocus } from "./lib/tablist";
 import { alignOffset, estimateTempo } from "./lib/tempo";
 import type { DetectedNote, ViewMode } from "./lib/types";
 import { useTranscriber } from "./lib/useTranscriber";
@@ -706,13 +707,14 @@ function WorkspaceApp() {
         </section>
 
         <section className="tool-choice-grid" aria-label="בחירת כלי">
-          <button className="tool-choice tool-choice-ringtone" onClick={() => window.location.assign("https://shmuel-lamed.github.io/Ringtones/")} type="button">
+          {/* A real link, so it can be opened in a new tab, copied and crawled. */}
+          <a className="tool-choice tool-choice-ringtone" href="https://shmuel-lamed.github.io/Ringtones/">
             <span className="tool-choice-shine" aria-hidden="true" />
             <span className="tool-choice-top"><span className="tool-choice-icon"><AudioWaveform size={32} /></span><small>עריכת שמע</small></span>
             <span className="tool-choice-copy"><h2>יצירת צלצול</h2><p>בחר את הקטע המדויק מהשיר, חתוך אותו והורד צלצול מוכן לפלאפון.</p></span>
             <span className="tool-choice-features"><span>חיתוך מדויק</span><span>תצוגת גל</span><span>הורדה מהירה</span></span>
             <b>פתח את יוצר הצלצולים <ChevronLeft size={20} /></b>
-          </button>
+          </a>
 
           <button className="tool-choice tool-choice-notes" onClick={() => setWorkspace("notes")} type="button">
             <span className="tool-choice-shine" aria-hidden="true" />
@@ -787,8 +789,8 @@ function WorkspaceApp() {
       />
 
       <section className="hero" id="top">
-        <div className="hero-glow hero-glow-one" />
-        <div className="hero-glow hero-glow-two" />
+        <div className="hero-glow hero-glow-one" aria-hidden="true" />
+        <div className="hero-glow hero-glow-two" aria-hidden="true" />
         <div className="eyebrow">
           <Sparkles size={16} /> זיהוי תווים חכם
         </div>
@@ -1300,6 +1302,8 @@ function WorkspaceApp() {
                 id="tab-sheet"
                 aria-selected={activeTab === "sheet"}
                 aria-controls="panel-sheet"
+                tabIndex={activeTab === "sheet" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "sheet" ? "active" : ""}
                 onClick={() => setActiveTab("sheet")}
                 type="button"
@@ -1311,6 +1315,8 @@ function WorkspaceApp() {
                 id="tab-piano"
                 aria-selected={activeTab === "piano"}
                 aria-controls="panel-piano"
+                tabIndex={activeTab === "piano" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "piano" ? "active" : ""}
                 onClick={() => setActiveTab("piano")}
                 type="button"
@@ -1322,6 +1328,8 @@ function WorkspaceApp() {
                 id="tab-notes"
                 aria-selected={activeTab === "notes"}
                 aria-controls="panel-notes"
+                tabIndex={activeTab === "notes" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "notes" ? "active" : ""}
                 onClick={() => setActiveTab("notes")}
                 type="button"
