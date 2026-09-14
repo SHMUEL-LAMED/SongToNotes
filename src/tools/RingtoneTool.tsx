@@ -1,4 +1,4 @@
-import { Download, Smartphone, Sparkles } from "lucide-react";
+import { Download, Guitar, Music2, Smartphone, Sparkles, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AudioPicker, useAudioFile, type LoadedAudio } from "../components/AudioPicker";
 import { useAuth } from "../lib/auth";
@@ -8,6 +8,7 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { normalise, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { saveRingtone } from "../lib/ringtoneHistory";
+import { analyseRingtoneSections, findNaturalBoundary } from "../lib/ringtoneAnalysis";
 import { useRenderedAudio } from "../lib/useRenderedAudio";
 import { encodeWav } from "../lib/wav";
 
@@ -99,6 +100,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const [fadeOut, setFadeOut] = useState(2);
   const [gain, setGain] = useState(100);
   const [normalize, setNormalize] = useState(true);
+  const sections = useMemo(() => analyseRingtoneSections(audio.buffer), [audio.buffer]);
 
   const peaks = useMemo(() => buildPeaks(audio.buffer), [audio]);
 
@@ -163,8 +165,58 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const length = range.end - range.start;
   const tooLongForIphone = length > MAX_LENGTH;
 
+  const chooseSection = (start: number) => {
+    const end = Math.min(audio.buffer.duration, start + DEFAULT_LENGTH);
+    const naturalStart = findNaturalBoundary(audio.buffer, start, -5, 2);
+    const naturalEnd = findNaturalBoundary(audio.buffer, end, -2, 6);
+    setTrim({
+      start: naturalStart,
+      end: Math.min(
+        audio.buffer.duration,
+        naturalEnd - naturalStart >= 10 ? naturalEnd : naturalStart + DEFAULT_LENGTH,
+      ),
+    });
+  };
+
+  const snapToNaturalBoundaries = () => {
+    const start = findNaturalBoundary(audio.buffer, range.start, -5, 2);
+    const end = findNaturalBoundary(audio.buffer, range.end, -2, 6);
+    setTrim({
+      start,
+      end: Math.min(audio.buffer.duration, end - start >= 5 ? end : start + length),
+    });
+  };
+
   return (
     <>
+            <div className="ringtone-section-picker">
+              <div className="section-picker-heading">
+                <div>
+                  <h2>בחר את החלק המתאים לצלצול</h2>
+                  <p>
+                    זיהינו אוטומטית את מבנה השיר. אפשר לבחור הצעה ואז לכוון בדיוק על גל הקול.
+                  </p>
+                </div>
+                <span className="analysis-confidence">
+                  {sections.confidence >= 0.62 ? "זוהתה חזרה ברורה" : "ההצעות מוכנות לעריכה"}
+                </span>
+              </div>
+              <div className="ringtone-section-options">
+                <button type="button" onClick={() => chooseSection(sections.chorus)}>
+                  <Music2 size={20} />
+                  <span><strong>הפזמון שזוהה</strong><small>הקטע החוזר והבולט ביותר</small></span>
+                </button>
+                <button type="button" onClick={() => chooseSection(sections.verse)}>
+                  <Sparkles size={20} />
+                  <span><strong>הבית שזוהה</strong><small>קטע מוקדם ושקט יותר</small></span>
+                </button>
+                <button type="button" onClick={() => chooseSection(sections.instrumental)}>
+                  <Guitar size={20} />
+                  <span><strong>קטע מוזיקלי</strong><small>קטע יציב שמתאים לצלצול</small></span>
+                </button>
+              </div>
+            </div>
+
             <Waveform
               peaks={peaks}
               duration={audio.buffer.duration}
@@ -223,6 +275,9 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
                 }
               >
                 <Sparkles size={15} /> 30 שניות
+              </button>
+              <button className="secondary-button" type="button" onClick={snapToNaturalBoundaries}>
+                <Wand2 size={15} /> התאם לחיתוך טבעי
               </button>
             </div>
 
