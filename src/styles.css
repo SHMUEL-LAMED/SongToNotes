@@ -2264,3 +2264,67 @@ footer .brand-mark { font-size: 19px; }
   .soundstage-bars i { width: 5px; }
   .soundstage-orbit { width: 53px; height: 53px; border-radius: 17px; }
 }
+.ringtone-section-picker {
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.section-picker-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 15px;
+}
+
+.section-picker-heading h2 { margin: 0 0 5px; font-size: 1.05rem; }
+.section-picker-heading p { margin: 0; color: var(--text-muted); font-size: .88rem; }
+.analysis-confidence {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.ringtone-section-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ringtone-section-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--surface);
+  text-align: start;
+  cursor: pointer;
+}
+
+.ringtone-section-options button:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.ringtone-section-options svg { flex: 0 0 auto; color: var(--accent); }
+.ringtone-section-options span,
+.ringtone-section-options strong,
+.ringtone-section-options small { display: block; min-width: 0; }
+.ringtone-section-options small { margin-top: 3px; color: var(--text-muted); font-size: .72rem; }
+
+@media (max-width: 700px) {
+  .section-picker-heading { display: block; }
+  .analysis-confidence { display: inline-block; margin-top: 10px; }
+  .ringtone-section-options { grid-template-columns: 1fr; }
+}
