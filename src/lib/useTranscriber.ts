@@ -52,6 +52,7 @@ function mainThreadHasWebgl() {
 export function useTranscriber() {
   const workerRef = useRef<Worker | null>(null);
   const jobRef = useRef(0);
+  const progressRef = useRef(0);
   const pendingRef = useRef<{
     resolve: (notes: DetectedNote[]) => void;
     reject: (error: Error) => void;
@@ -142,6 +143,7 @@ export function useTranscriber() {
       const message = event.data;
       if (message.jobId !== jobRef.current) return;
       if (message.type === "progress") {
+        progressRef.current = message.progress;
         setState((previous) => ({ ...previous, progress: message.progress }));
       } else if (message.type === "backend") {
         setState((previous) => ({ ...previous, backend: message.backend }));
@@ -178,6 +180,7 @@ export function useTranscriber() {
         progress: 0,
         error: message,
       }));
+      progressRef.current = 0;
       pendingRef.current?.reject(new Error(message));
       pendingRef.current = null;
       worker.terminate();
@@ -206,6 +209,11 @@ export function useTranscriber() {
   const transcribe = useCallback(
     (samples: Float32Array) => {
       const worker = ensureWorker();
+      // Keep one local copy until the worker proves it can make progress. Some
+      // browser/driver combinations accept the transferred buffer and then
+      // stall while initialising WebGL, which used to leave the UI forever at
+      // 0–4%. The watchdog transparently retries on the main thread.
+      const watchdogSamples = samples.slice();
       jobRef.current += 1;
       const jobId = jobRef.current;
       setState((previous) => ({
@@ -215,6 +223,7 @@ export function useTranscriber() {
         error: null,
         onMainThread: false,
       }));
+      progressRef.current = 0;
 
       return new Promise<DetectedNote[]>((resolve, reject) => {
         pendingRef.current = { resolve, reject };
@@ -227,9 +236,19 @@ export function useTranscriber() {
         };
         // The sample buffer is handed over rather than copied.
         worker.postMessage(request, [samples.buffer]);
+        window.setTimeout(() => {
+          if (
+            jobRef.current !== jobId ||
+            !pendingRef.current ||
+            progressRef.current > 4
+          ) return;
+          worker.terminate();
+          if (workerRef.current === worker) workerRef.current = null;
+          void runOnMainThread(jobId, watchdogSamples);
+        }, 12_000);
       });
     },
-    [ensureWorker],
+    [ensureWorker, runOnMainThread],
   );
 
   return { ...state, transcribe, cancel };
