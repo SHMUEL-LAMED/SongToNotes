@@ -153,7 +153,7 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
           ) : (
             ringtones.map((item) => (
               <article className="history-item" key={item.id}>
-                <a className="history-open" href="https://shmuel-lamed.github.io/Ringtones/">
+                <a className="history-open" href="#/ringtone" onClick={onClose}>
                   <span className="history-note ringtone"><AudioWaveform size={19} /></span>
                   <span><strong>{item.title}</strong><small><Clock3 size={13} /> {formatSavedDate(item.createdAt)} · {Math.round(item.durationSeconds)} שניות</small></span>
                 </a>

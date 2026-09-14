@@ -99,6 +99,34 @@ export async function listRingtones(userId?: string | null): Promise<SavedRingto
   return [...saved, ...missing].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/**
+ * Records a ringtone the visitor just downloaded. It is written to this
+ * device first so it survives with or without an account, and mirrored to the
+ * profile when there is one — the same shape `listRingtones` uploads later for
+ * anything made before signing in.
+ */
+export async function saveRingtone(
+  item: Omit<SavedRingtone, "id" | "createdAt">,
+  userId?: string | null,
+) {
+  const entry: SavedRingtone = {
+    ...item,
+    id:
+      globalThis.crypto?.randomUUID?.() ??
+      `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    createdAt: new Date().toISOString(),
+  };
+  writeLocalRingtones([entry, ...listLocalRingtones()]);
+  if (!userId) return entry;
+
+  const { error } = await supabase
+    .from("ringtones")
+    .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
+  // The local copy already holds it; the next profile read uploads it again.
+  if (error) console.warn("Ringtone could not be saved to the profile", error);
+  return entry;
+}
+
 export async function deleteRingtone(id: string, userId?: string | null) {
   writeLocalRingtones(listLocalRingtones().filter((item) => item.id !== id));
   if (!userId) return;
