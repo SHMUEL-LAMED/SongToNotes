@@ -127,13 +127,20 @@ export function AudioPicker({
   allowRecording = false,
   children,
 }: PickerProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [recorder] = useState(() => new MicRecorder());
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [recordError, setRecordError] = useState<string | null>(null);
+
+  const pickFromInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    // Clear first so choosing the same file again still fires change in every
+    // browser, including Chrome/Android and Safari/iOS.
+    event.currentTarget.value = "";
+    if (file) onPick(file);
+  };
 
   useEffect(() => () => recorder.cancel(), [recorder]);
 
@@ -224,6 +231,16 @@ export function AudioPicker({
           </span>
         </div>
         {children}
+        <label className="secondary-button compact replace-file-button">
+          <UploadCloud size={16} /> החלף קובץ
+          <input
+            className="native-file-input"
+            type="file"
+            accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,audio/*,video/*"
+            onChange={pickFromInput}
+            aria-label="החלפת קובץ שמע"
+          />
+        </label>
         <button className="icon-button" onClick={onClear} aria-label="הסר קובץ" type="button">
           <X size={18} />
         </button>
@@ -233,38 +250,36 @@ export function AudioPicker({
 
   return (
     <>
-      <button
+      <label
         className={`drop-zone ${isDragging ? "is-dragging" : ""}`}
-        onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
           event.preventDefault();
+          if (isLoading) return;
           setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
+          if (isLoading) return;
           onPick(event.dataTransfer.files[0]);
         }}
-        type="button"
-        disabled={isLoading}
+        aria-disabled={isLoading}
       >
         <span className="upload-icon">
           <UploadCloud size={32} />
         </span>
         <strong>{isLoading ? "טוען את הקובץ…" : "גרור לכאן שיר או לחץ לבחירה"}</strong>
         <span>{hint ?? "MP3, WAV, OGG, FLAC, M4A, AAC · עד 150MB"}</span>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,audio/*"
-        hidden
-        onChange={(event) => {
-          onPick(event.target.files?.[0]);
-          event.target.value = "";
-        }}
-      />
+        <input
+          className="native-file-input"
+          type="file"
+          accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,audio/*,video/*"
+          disabled={isLoading}
+          onChange={pickFromInput}
+          aria-label="בחירת קובץ שמע"
+        />
+      </label>
       {allowRecording && isRecordingSupported() && (
         <div className="source-alternatives">
           <button className="secondary-button" onClick={startRecording} type="button">
