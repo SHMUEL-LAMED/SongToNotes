@@ -69,6 +69,7 @@ export async function runInference(
   // large first execution. Once it succeeds, WebGL switches to the faster
   // eight-window batches used by the original optimized path.
   let batchSize = 1;
+  let batchingSupported = preferredBatch > 1;
 
   for (let start = 0; start < windowCount; ) {
     onProgress(start / windowCount);
@@ -107,12 +108,21 @@ export async function runInference(
           1,
         ]);
         const results = model.execute(batch, OUTPUT_TENSORS) as tf.Tensor3D[];
+        // Some browser/backend combinations accept an eight-window input but
+        // silently execute the graph's fixed batch dimension (1). Advancing by
+        // eight in that situation made the final transcription contain only
+        // the first roughly two seconds of every batch. Treat it exactly like
+        // a rejected batch and retry every window individually.
+        if (size > 1 && results.some((tensor) => tensor.shape[0] !== size)) {
+          throw new Error("MODEL_FIXED_BATCH_SIZE");
+        }
         return results.map(unwrap);
       });
     } catch (error) {
       // Some exported graphs pin the batch dimension to one. Drop to
       // single-window evaluation and carry on rather than failing.
       if (size > 1) {
+        batchingSupported = false;
         batchSize = 1;
         continue;
       }
@@ -138,7 +148,7 @@ export async function runInference(
 
     start += size;
     onProgress(Math.min(1, start / windowCount));
-    if (batchSize === 1 && preferredBatch > 1) batchSize = preferredBatch;
+    if (batchSize === 1 && batchingSupported) batchSize = preferredBatch;
     if (produced >= expectedFrames) break;
   }
 
