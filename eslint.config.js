@@ -26,4 +26,14 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The offline worker is shipped verbatim from public/ and runs in the
+    // service worker scope, not the page's.
+    files: ["public/sw.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: { ...globals.serviceworker },
+    },
+  },
 );

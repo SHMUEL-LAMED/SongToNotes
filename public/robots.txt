@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://shmuel-lamed.github.io/SongToNotes/sitemap.xml

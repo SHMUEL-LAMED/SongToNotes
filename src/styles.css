@@ -402,6 +402,99 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ==========================================================================
+   App notices
+   Connectivity and update messages. They belong to the app rather than to a
+   tool, so they float clear of the page instead of pushing the layout around.
+   ========================================================================== */
+
+.app-notices {
+  position: fixed;
+  inset-inline: 0;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 16px;
+  pointer-events: none;
+}
+
+.app-notice {
+  pointer-events: auto;
+  width: min(560px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+  animation: notice-rise 0.35s var(--ease) both;
+}
+
+.app-notice p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.app-notice p strong { color: var(--text); }
+
+.app-notice-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-ring);
+}
+
+.app-notice-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-notice-close:hover { background: var(--surface-sunken); color: var(--text); }
+
+.app-notice-action {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.app-notice-action:hover { filter: brightness(1.07); }
+
+@keyframes notice-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 520px) {
+  .app-notice { flex-wrap: wrap; }
+  .app-notice-action { width: 100%; }
+}
+
+/* ==========================================================================
    Hub
    ========================================================================== */
 

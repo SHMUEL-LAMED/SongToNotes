@@ -1,0 +1,51 @@
+{
+  "name": "כלי מוזיקה — שיר לתווים, צלצולים וקריוקי",
+  "short_name": "כלי מוזיקה",
+  "description": "שמונה כלי מוזיקה בדפדפן: תווים ו-MIDI משיר, צלצולים, הסרת שירה, האטה לתרגול, מטרונום, מכוון, פסנתר ומזהה קצב וסולם. הכול רץ במכשיר שלכם.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "id": "/SongToNotes/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#070911",
+  "background_color": "#070911",
+  "categories": ["music", "productivity", "utilities"],
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "שיר לתווים",
+      "short_name": "תווים",
+      "description": "הפיכת שיר או הקלטה לתווים ול-MIDI",
+      "url": "./#/notes",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "יצירת צלצול",
+      "short_name": "צלצול",
+      "description": "חיתוך הקטע הכי טוב בשיר לצלצול",
+      "url": "./#/ringtone",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "הסרת שירה",
+      "short_name": "קריוקי",
+      "description": "הפרדת שירה ומוזיקה לגרסת קריוקי",
+      "url": "./#/vocals",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "מטרונום",
+      "short_name": "מטרונום",
+      "description": "מטרונום מדויק עם טאפ-טמפו",
+      "url": "./#/metronome",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

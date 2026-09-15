@@ -1,6 +1,7 @@
 import { Music2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { AccountPanel } from "./components/AccountPanel";
+import { AppNotices } from "./components/AppNotices";
 import { Hub } from "./components/Hub";
 import { ToolShell } from "./components/ToolShell";
 import { useAuth } from "./lib/auth";
@@ -78,6 +79,8 @@ function WorkspaceApp() {
         onClose={() => setAccountOpen(false)}
         onOpenItem={openSaved}
       />
+
+      <AppNotices />
 
       {shellError && (
         <div className="shell-error error-message" role="alert">
