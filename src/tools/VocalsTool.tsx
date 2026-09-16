@@ -1,6 +1,7 @@
 import { Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { channelsToBuffer, normalise } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
@@ -21,6 +22,7 @@ export function VocalsTool() {
   const [progress, setProgress] = useState<SeparationProgress | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [context] = useState(sharedContext);
+  const runningRef = useRef(false);
 
   useEffect(() => () => void context?.close(), [context]);
 
@@ -32,7 +34,10 @@ export function VocalsTool() {
   }, [context, mode, stems]);
 
   const processAudio = async () => {
-    if (!audio || progress) return;
+    // A ref, not the progress state: two clicks in the same tick both see the
+    // old state and would start two runs of a 172MB model download.
+    if (!audio || runningRef.current) return;
+    runningRef.current = true;
     setProcessingError(null);
     try {
       const result = await separateStems(audio.buffer, setProgress);
@@ -42,15 +47,24 @@ export function VocalsTool() {
       console.error(cause);
       setProgress(null);
       setProcessingError("הפרדת ה־AI נכשלה. נסה שוב ב־Chrome מעודכן והשאר את הכרטיסייה פתוחה בזמן העיבוד.");
+    } finally {
+      runningRef.current = false;
     }
   };
 
-  const exportWav = () => {
-    if (!rendered || !audio) return;
+  const buildFile = () => {
+    if (!rendered || !audio) return null;
     const channels = Array.from({ length: rendered.numberOfChannels }, (_, index) => rendered.getChannelData(index));
     const blob = encodeWav({ channels, sampleRate: rendered.sampleRate });
     const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
-    downloadFile(blob, `${base}-${mode === "instrumental" ? "instrumental" : "vocals"}.wav`, "audio/wav");
+    const name = `${base}-${mode === "instrumental" ? "instrumental" : "vocals"}.wav`;
+    return new File([blob], name, { type: "audio/wav" });
+  };
+
+  const exportWav = () => {
+    const file = buildFile();
+    if (!file) return;
+    downloadFile(file, file.name, "audio/wav");
   };
 
   return (
@@ -128,6 +142,10 @@ export function VocalsTool() {
               </div>
               <div className="download-buttons">
                 <button onClick={exportWav} type="button" disabled={!rendered}><Download size={17} /> הורד WAV</button>
+                <ShareButton
+                  build={buildFile}
+                  title={mode === "instrumental" ? "גרסה אינסטרומנטלית" : "ערוץ השירה"}
+                />
               </div>
             </div>
           </>

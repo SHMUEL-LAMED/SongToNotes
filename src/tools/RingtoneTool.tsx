@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AudioPicker, useAudioFile, type LoadedAudio } from "../components/AudioPicker";
 import { useAuth } from "../lib/auth";
 import { Transport } from "../components/Transport";
+import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
-import { normalise, channelsToBuffer } from "../lib/dsp";
+import { applyGain, normalise, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { saveRingtone } from "../lib/ringtoneHistory";
 import { analyseRingtoneSections, findNaturalBoundary } from "../lib/ringtoneAnalysis";
@@ -121,13 +122,12 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
       const length = Math.max(1, to - from);
       const inSamples = Math.max(1, Math.min(length / 2, Math.round(fadeIn * sampleRate)));
       const outSamples = Math.max(1, Math.min(length / 2, Math.round(fadeOut * sampleRate)));
-      const level = gain / 100;
 
       const channels = Array.from({ length: buffer.numberOfChannels }, (_, channelIndex) => {
         const source = buffer.getChannelData(channelIndex);
         const output = new Float32Array(length);
         for (let index = 0; index < length; index += 1) {
-          let envelope = level;
+          let envelope = 1;
           if (fadeIn > 0 && index < inSamples) envelope *= index / inSamples;
           if (fadeOut > 0 && index > length - outSamples) {
             envelope *= (length - index) / outSamples;
@@ -136,17 +136,34 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
         }
         return output;
       });
+      // The gain has to come after the normalisation, not before it: peak
+      // normalising scales whatever it is handed to the same ceiling, so a
+      // level baked into the envelope was being scaled straight back out and
+      // the volume dial did nothing at all whenever the box was ticked.
       if (normalize) normalise(channels);
+      applyGain(channels, gain / 100);
       return channelsToBuffer(context, channels, sampleRate);
     },
   );
 
-  const exportWav = () => {
-    if (!rendered) return;
+  const buildFile = () => {
+    if (!rendered) return null;
     const channels = Array.from({ length: rendered.numberOfChannels }, (_, index) =>
       rendered.getChannelData(index),
     );
     const blob = encodeWav({ channels, sampleRate: rendered.sampleRate });
+    const title = audio.file.name.replace(/\.[^/.]+$/, "");
+    return new File([blob], `${safeFilename(title)}-ringtone.wav`, { type: "audio/wav" });
+  };
+
+  const exportWav = () => {
+    if (!rendered) return;
+    const blob = encodeWav({
+      channels: Array.from({ length: rendered.numberOfChannels }, (_, index) =>
+        rendered.getChannelData(index),
+      ),
+      sampleRate: rendered.sampleRate,
+    });
     const title = audio.file.name.replace(/\.[^/.]+$/, "");
     downloadFile(blob, `${safeFilename(title)}-ringtone.wav`, "audio/wav");
     // The profile history is a record of what was made, not a copy of the
@@ -354,6 +371,12 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
                     WAV<small>{formatTime(length)} · מוכן לטלפון</small>
                   </span>
                 </button>
+                <ShareButton
+                  build={buildFile}
+                  title="הצלצול שיצרתי"
+                  label="שתף"
+                  hint="ישירות לוואטסאפ או לאפליקציית הקבצים"
+                />
               </div>
             </div>
     </>

@@ -69,7 +69,10 @@ export function Transport({ buffer, loop = null, label, onTime }: Props) {
             player.pause();
             setIsPlaying(false);
           } else {
-            void player.play().then(() => setIsPlaying(true));
+            // Only flip the button once the player confirms it started, so a
+            // browser that refuses to open an audio context does not leave a
+            // pause button sitting over silence.
+            void player.play().then((started) => setIsPlaying(started));
           }
         }}
         aria-label={isPlaying ? "השהה" : "נגן"}

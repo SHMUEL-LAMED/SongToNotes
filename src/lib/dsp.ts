@@ -528,6 +528,33 @@ export function normalise(channels: Float32Array[], ceiling = 0.98) {
   return channels;
 }
 
+/**
+ * Applies a gain in place with a soft knee instead of hard clipping.
+ *
+ * Below the knee the signal is untouched, so anything at or under unity comes
+ * out bit-identical; above it the curve saturates towards 1 rather than
+ * squaring off the peaks. That is what lets a boost above 100% actually be
+ * heard as louder — a straight multiply followed by clamping would just
+ * distort, and re-normalising afterwards would cancel the boost entirely.
+ */
+export function applyGain(channels: Float32Array[], level: number, knee = 0.9) {
+  if (level === 1) return channels;
+  const headroom = 1 - knee;
+  for (const channel of channels) {
+    for (let index = 0; index < channel.length; index += 1) {
+      const value = channel[index] * level;
+      const magnitude = Math.abs(value);
+      if (magnitude <= knee) {
+        channel[index] = value;
+        continue;
+      }
+      const saturated = knee + headroom * Math.tanh((magnitude - knee) / headroom);
+      channel[index] = value < 0 ? -saturated : saturated;
+    }
+  }
+  return channels;
+}
+
 export function channelsToBuffer(
   context: BaseAudioContext,
   channels: Float32Array[],

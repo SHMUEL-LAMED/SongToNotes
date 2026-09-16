@@ -65,10 +65,11 @@ export class BufferPlayer {
     return this.context;
   }
 
-  async play(from?: number) {
-    if (!this.buffer) return;
+  /** Resolves to whether playback actually started. */
+  async play(from?: number): Promise<boolean> {
+    if (!this.buffer) return false;
     const context = this.ensureContext();
-    if (!context || !this.gain) return;
+    if (!context || !this.gain) return false;
     if (context.state === "suspended") await context.resume();
     this.halt();
 
@@ -98,6 +99,7 @@ export class BufferPlayer {
     this.offset = start;
     this.startedAt = context.currentTime;
     this.playing = true;
+    return true;
   }
 
   pause() {
