@@ -40,6 +40,7 @@ import { scoreToMusicXml } from "../lib/musicxml";
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "../lib/refine";
 import { buildScore } from "../lib/score";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
+import { moveTabFocus } from "../lib/tablist";
 import { alignOffset, estimateTempo } from "../lib/tempo";
 import type { DetectedNote } from "../lib/types";
 import { useTranscriber } from "../lib/useTranscriber";
@@ -981,6 +982,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                 id="tab-sheet"
                 aria-selected={activeTab === "sheet"}
                 aria-controls="panel-sheet"
+                tabIndex={activeTab === "sheet" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "sheet" ? "active" : ""}
                 onClick={() => setActiveTab("sheet")}
                 type="button"
@@ -992,6 +995,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                 id="tab-piano"
                 aria-selected={activeTab === "piano"}
                 aria-controls="panel-piano"
+                tabIndex={activeTab === "piano" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "piano" ? "active" : ""}
                 onClick={() => setActiveTab("piano")}
                 type="button"
@@ -1003,6 +1008,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                 id="tab-notes"
                 aria-selected={activeTab === "notes"}
                 aria-controls="panel-notes"
+                tabIndex={activeTab === "notes" ? 0 : -1}
+                onKeyDown={moveTabFocus}
                 className={activeTab === "notes" ? "active" : ""}
                 onClick={() => setActiveTab("notes")}
                 type="button"

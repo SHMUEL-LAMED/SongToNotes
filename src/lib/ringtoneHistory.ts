@@ -96,7 +96,11 @@ export async function listRingtones(userId?: string | null): Promise<SavedRingto
     if (uploadError) console.warn("Local ringtones could not be uploaded", uploadError);
   }
 
-  return [...saved, ...missing].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // A row saved without a timestamp used to take the whole history down with
+  // a TypeError here, rather than just sorting last.
+  return [...saved, ...missing].sort((a, b) =>
+    String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")),
+  );
 }
 
 /**
