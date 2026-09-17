@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -47,8 +48,24 @@ function inlineBasicPitchModel(): Plugin {
   };
 }
 
+/**
+ * Size of the separation model shipped with this build, or 0 when the build
+ * has none. The page uses it to show download progress even when the server
+ * leaves out Content-Length.
+ */
+function separationModelBytes() {
+  try {
+    return statSync(new URL("./models/htdemucs_embedded.onnx", import.meta.url)).size;
+  } catch {
+    return 0;
+  }
+}
+
 export default defineConfig({
   base: "/SongToNotes/",
+  define: {
+    __SEPARATION_MODEL_BYTES__: JSON.stringify(separationModelBytes()),
+  },
   plugins: [
     react(),
     inlineBasicPitchModel(),
@@ -56,6 +73,14 @@ export default defineConfig({
       targets: [
         {
           src: "node_modules/@spotify/basic-pitch/model/*",
+          dest: "model",
+        },
+        // The vocal-separation network ships with the site rather than being
+        // fetched from a third-party host by every visitor. `npm run build`
+        // downloads it first (scripts/fetch-separation-model.mjs); a dev
+        // server without it falls back to the upstream URL.
+        {
+          src: "models/htdemucs_embedded.onnx",
           dest: "model",
         },
       ],

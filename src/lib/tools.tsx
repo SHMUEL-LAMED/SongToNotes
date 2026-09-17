@@ -41,7 +41,7 @@ export const TOOLS: ToolDefinition[] = [
     title: "שיר לתווים",
     tagline: "מנגינה נכנסת, תווים יוצאים",
     description:
-      "מעלים שיר או מזמזמים למיקרופון, והמודל מזהה תווים, קצב וסולם ומכין תווים, MIDI ו־MusicXML.",
+      "מעלים שיר או מזמזמים למיקרופון, והאתר מזהה תווים, קצב וסולם ומכין תווים, MIDI ו־MusicXML.",
     icon: FileMusic,
     hue: 258,
     category: "create",
@@ -121,7 +121,7 @@ export const TOOLS: ToolDefinition[] = [
     title: "מזהה קצב וסולם",
     tagline: "BPM וסולם בשניות",
     description:
-      "ניתוח מהיר של כל שיר: קצב, סולם, פרופיל הצלילים ועוצמה — בלי להריץ את מודל התווים.",
+      "ניתוח מהיר של כל שיר: קצב, סולם, פרופיל הצלילים ועוצמה — בלי לחכות לניתוח התווים המלא.",
     icon: Activity,
     hue: 158,
     category: "analyze",

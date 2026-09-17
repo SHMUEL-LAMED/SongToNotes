@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "fetch-model": "node scripts/fetch-separation-model.mjs",
+    "prebuild": "npm run fetch-model",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173",

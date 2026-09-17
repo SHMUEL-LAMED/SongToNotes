@@ -9,9 +9,10 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // The browser smoke test drives the built site from Node, so it needs the
-    // Node globals rather than the browser ones the site is written against.
-    files: ["tests/**/*.mjs"],
+    // The browser smoke test and the build scripts run under Node, so they
+    // need the Node globals rather than the browser ones the site is written
+    // against.
+    files: ["tests/**/*.mjs", "scripts/**/*.mjs"],
     // The browser globals are there too, for the callbacks handed to
     // `page.evaluate`, which run inside the page rather than in Node.
     languageOptions: {

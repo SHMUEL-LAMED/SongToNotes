@@ -11,7 +11,9 @@
  *    load instead of being pinned to whatever shipped first.
  *  - The ONNX runtime WebAssembly binary (~27MB) and anything else oversized is
  *    never stored, because filling the origin's storage quota would evict the
- *    caches that actually matter.
+ *    caches that actually matter. The one large file worth keeping — the
+ *    vocal-separation model — is stored by the page itself, under a cache
+ *    name outside the `musictools-` prefix so the clean-up below leaves it be.
  */
 
 const VERSION = "v2";

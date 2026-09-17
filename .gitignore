@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The separation model is fetched at build time (npm run fetch-model).
+models/
 .env
 .env.*
 !.env.example

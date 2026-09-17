@@ -11,34 +11,91 @@ export type SeparatedStems = {
   sampleRate: number;
 };
 
+/**
+ * A failure whose message is written for the person on screen. Anything else
+ * that escapes the separator is a technical error that belongs in the console,
+ * not in front of a visitor — see {@link describeSeparationError}.
+ */
+export class SeparationError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "SeparationError";
+  }
+}
+
 const MODEL_SAMPLE_RATE = 44_100;
-let processorPromise: Promise<import("demucs-web").DemucsProcessor> | null = null;
 
 /**
- * Download the model ourselves instead of asking demucs-web to fetch it.
- * Besides exposing real progress, this lets us reject a filtered/login/error
- * page before ONNX tries (and fails) to treat its HTML as a music model.
+ * The model is copied into the build next to the rest of the site (see
+ * `scripts/fetch-separation-model.mjs`), so a visitor never has to reach a
+ * third-party host: whatever network lets them open the site lets them use
+ * the separation. The upstream URL stays as a fallback for a build that was
+ * made without the model, such as a local dev server.
  */
-async function downloadModel(
-  url: string,
+const SITE_MODEL_URL = `${import.meta.env.BASE_URL}model/htdemucs_embedded.onnx`;
+
+/**
+ * How big that copy is, stamped in at build time, so the progress bar moves
+ * even where the server leaves out Content-Length. Zero when the build shipped
+ * without the model.
+ */
+const SITE_MODEL_BYTES: number = __SEPARATION_MODEL_BYTES__;
+
+/**
+ * Where the weights are kept once they have arrived, so the wait happens once
+ * per device rather than once per visit. The offline worker deliberately
+ * refuses to store anything this large in its own caches, so this one lives
+ * under a different name that the worker never touches.
+ */
+const MODEL_CACHE = "songtonotes-models-v1";
+
+const PREPARING = "מכין את ההפרדה…";
+const NETWORK_MESSAGE =
+  "לא הצלחנו לטעון את ההפרדה המלאה. בדוק את החיבור לאינטרנט ונסה שוב.";
+const UNAVAILABLE_MESSAGE = "ההפרדה המלאה אינה זמינה כרגע. נסה שוב מאוחר יותר.";
+const INCOMPLETE_MESSAGE = "הטעינה לא הושלמה. נסה שוב עם חיבור יציב.";
+const GENERIC_MESSAGE =
+  "ההפרדה לא הושלמה. כדאי לנסות שוב ולהשאיר את הכרטיסייה פתוחה בזמן העיבוד.";
+
+let processorPromise: Promise<import("demucs-web").DemucsProcessor> | null = null;
+
+/** The sentence to show for whatever the separator threw. */
+export function describeSeparationError(error: unknown): string {
+  console.error(error);
+  if (error instanceof SeparationError) return error.message;
+  // A runtime chunk that cannot be fetched is the same connection problem as
+  // a model that cannot be fetched, and deserves the same advice.
+  if (error instanceof TypeError && /fetch|import/i.test(error.message)) {
+    return NETWORK_MESSAGE;
+  }
+  return GENERIC_MESSAGE;
+}
+
+async function openModelCache(): Promise<Cache | null> {
+  if (typeof caches === "undefined") return null;
+  try {
+    return await caches.open(MODEL_CACHE);
+  } catch {
+    // Private browsing or a locked-down browser: the model still loads, it is
+    // just fetched again next time.
+    return null;
+  }
+}
+
+/**
+ * Reads the whole model, reporting how far along it is. `expectedBytes` is
+ * the size known from the build, used when the server does not say; a server
+ * that compresses on the fly reports the compressed size, which the decoded
+ * byte count then overtakes, so the fraction is clamped rather than trusted.
+ */
+async function readBody(
+  response: Response,
+  expectedBytes: number,
   onProgress: (update: SeparationProgress) => void,
 ): Promise<ArrayBuffer> {
-  let response: Response;
-  try {
-    response = await fetch(url, { cache: "force-cache" });
-  } catch {
-    throw new Error("לא הצלחנו להגיע לשרת של מודל ההפרדה. בדוק חיבור לאינטרנט או חסימה של סינון הרשת.");
-  }
-
-  if (!response.ok) {
-    throw new Error(`שרת מודל ההפרדה החזיר שגיאה (${response.status}). נסה שוב מאוחר יותר.`);
-  }
-
-  const total = Number(response.headers.get("content-length")) || 0;
-  if (!response.body || !total) {
-    const buffer = await response.arrayBuffer();
-    if (!buffer.byteLength) throw new Error("מודל ההפרדה ירד כריק. נסה שוב.");
-    return buffer;
+  const total = Number(response.headers.get("content-length")) || expectedBytes;
+  if (!response.body) {
+    return response.arrayBuffer();
   }
 
   const reader = response.body.getReader();
@@ -50,15 +107,18 @@ async function downloadModel(
     if (value) {
       chunks.push(value);
       loaded += value.byteLength;
+      const fraction = total ? Math.min(1, loaded / total) : 0;
       onProgress({
         phase: "model",
-        progress: loaded / total,
-        message: `מוריד את מודל ההפרדה בפעם הראשונה… ${Math.round((loaded / total) * 100)}%`,
+        progress: fraction,
+        message: total
+          ? `מכין את ההפרדה בפעם הראשונה… ${Math.round(fraction * 100)}%`
+          : "מכין את ההפרדה בפעם הראשונה…",
       });
     }
   }
-  if (loaded !== total) {
-    throw new Error("הורדת מודל ההפרדה לא הושלמה. נסה שוב עם חיבור יציב.");
+  if (total && loaded < total) {
+    throw new SeparationError(INCOMPLETE_MESSAGE);
   }
   const combined = new Uint8Array(loaded);
   let offset = 0;
@@ -67,6 +127,61 @@ async function downloadModel(
     offset += chunk.byteLength;
   }
   return combined.buffer;
+}
+
+/**
+ * Fetches the model from one location. `null` means it is not there — a
+ * missing file, or a filtered/login page served in its place, which would
+ * otherwise reach ONNX as HTML and fail with a message nobody can act on.
+ */
+async function fetchModelFrom(url: string): Promise<Response | null> {
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new SeparationError(NETWORK_MESSAGE, { cause: error });
+  }
+  const type = response.headers.get("content-type") ?? "";
+  if (!response.ok || /text\/html/i.test(type)) {
+    return null;
+  }
+  return response;
+}
+
+async function loadModelWeights(
+  onProgress: (update: SeparationProgress) => void,
+): Promise<ArrayBuffer> {
+  onProgress({ phase: "model", progress: 0, message: PREPARING });
+  const cache = await openModelCache();
+
+  const stored = await cache?.match(SITE_MODEL_URL).catch(() => undefined);
+  if (stored) {
+    const buffer = await stored.arrayBuffer();
+    if (buffer.byteLength) return buffer;
+  }
+
+  let response = await fetchModelFrom(SITE_MODEL_URL);
+  let expectedBytes = SITE_MODEL_BYTES;
+  if (!response) {
+    const demucs = await import("demucs-web");
+    response = await fetchModelFrom(demucs.CONSTANTS.DEFAULT_MODEL_URL);
+    expectedBytes = 0;
+  }
+  if (!response) {
+    throw new SeparationError(UNAVAILABLE_MESSAGE);
+  }
+
+  // The copy for next time is written as the bytes stream past, so it costs
+  // no second pass over 180MB. A full quota simply means downloading again.
+  const keep = cache
+    ? cache.put(SITE_MODEL_URL, response.clone()).catch(() => undefined)
+    : Promise.resolve();
+  const buffer = await readBody(response, expectedBytes, onProgress);
+  await keep;
+  if (!buffer.byteLength) {
+    throw new SeparationError(UNAVAILABLE_MESSAGE);
+  }
+  return buffer;
 }
 
 async function resampleStereo(buffer: AudioBuffer) {
@@ -99,9 +214,13 @@ function sumInstrumental(result: DemucsResult): [Float32Array, Float32Array] {
 async function getProcessor(onProgress: (update: SeparationProgress) => void) {
   if (!processorPromise) {
     processorPromise = (async () => {
-      const [ort, demucs] = await Promise.all([import("onnxruntime-web"), import("demucs-web")]);
+      const [ort, demucs, model] = await Promise.all([
+        import("onnxruntime-web"),
+        import("demucs-web"),
+        loadModelWeights(onProgress),
+      ]);
       ort.env.wasm.numThreads = 1;
-      const model = await downloadModel(demucs.CONSTANTS.DEFAULT_MODEL_URL, onProgress);
+      onProgress({ phase: "model", progress: 1, message: "כמעט מוכן…" });
       const makeProcessor = (executionProviders: string[]) =>
         new demucs.DemucsProcessor({
           ort,
@@ -114,15 +233,17 @@ async function getProcessor(onProgress: (update: SeparationProgress) => void) {
         });
 
       // WebGPU is faster but some phones expose it without supporting the
-      // operators used by Demucs. Retry with WebAssembly using the already
-      // downloaded model instead of leaving the user with a dead button.
+      // operators used by the network. Retry with WebAssembly using the
+      // weights already in hand instead of leaving the user with a dead
+      // button — quietly, because which engine ran is not the visitor's
+      // concern.
       if ("gpu" in navigator) {
         try {
           const processor = makeProcessor(["webgpu"]);
           await processor.loadModel(model);
           return processor;
-        } catch {
-          onProgress({ phase: "model", progress: 1, message: "WebGPU אינו נתמך במכשיר הזה; ממשיך במצב תאימות…" });
+        } catch (error) {
+          console.warn("WebGPU separation unavailable, using WebAssembly", error);
         }
       }
       const processor = makeProcessor(["wasm"]);
@@ -136,12 +257,19 @@ async function getProcessor(onProgress: (update: SeparationProgress) => void) {
   return processorPromise;
 }
 
-export async function separateStems(buffer: AudioBuffer, onProgress: (update: SeparationProgress) => void): Promise<SeparatedStems> {
-  onProgress({ phase: "model", progress: 0, message: "מכין את מודל ה־AI…" });
+export async function separateStems(
+  buffer: AudioBuffer,
+  onProgress: (update: SeparationProgress) => void,
+): Promise<SeparatedStems> {
+  onProgress({ phase: "model", progress: 0, message: PREPARING });
   const processor = await getProcessor(onProgress);
   const { left, right } = await resampleStereo(buffer);
-  processor.onProgress = ({ progress, currentSegment, totalSegments }) => {
-    onProgress({ phase: "separation", progress, message: `מפריד את השיר באמת… קטע ${currentSegment} מתוך ${totalSegments}` });
+  processor.onProgress = ({ progress }) => {
+    onProgress({
+      phase: "separation",
+      progress,
+      message: `מפריד את השיר… ${Math.round(progress * 100)}%`,
+    });
   };
   const result = await processor.separate(left, right);
   return {
