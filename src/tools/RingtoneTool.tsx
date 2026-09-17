@@ -15,6 +15,7 @@ import {
   useAudioFile,
   type LoadedAudio,
 } from "../components/AudioPicker";
+import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
@@ -23,7 +24,7 @@ import {
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
-import { channelsToBuffer, normalise } from "../lib/dsp";
+import { applyGain, channelsToBuffer, normalise } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { saveRingtone } from "../lib/ringtoneHistory";
 import {
@@ -247,15 +248,13 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
         1,
         Math.min(frames / 2, Math.round(fadeOut * sampleRate)),
       );
-      const level = gain / 100;
-
       const channels = Array.from(
         { length: buffer.numberOfChannels },
         (_, channelIndex) => {
           const source = buffer.getChannelData(channelIndex);
           const output = new Float32Array(frames);
           for (let index = 0; index < frames; index += 1) {
-            let envelope = level;
+            let envelope = 1;
             if (fadeIn > 0 && index < inSamples) envelope *= index / inSamples;
             if (fadeOut > 0 && index > frames - outSamples) {
               envelope *= (frames - index) / outSamples;
@@ -265,7 +264,11 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
           return output;
         },
       );
+      // The volume has to come after normalisation, or the normaliser stretches
+      // whatever it is given back to the same ceiling and the dial does
+      // nothing — which, with normalise on by default, was almost always.
       if (normalize) normalise(channels);
+      applyGain(channels, gain / 100);
       return channelsToBuffer(context, channels, sampleRate);
     },
   );
@@ -306,20 +309,25 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
 
   // ---- export ----
 
-  const exportWav = () => {
-    if (!rendered) return;
+  const title = audio.file.name.replace(/\.[^/.]+$/, "");
+
+  const buildFile = () => {
+    if (!rendered) return null;
     const channels = Array.from(
       { length: rendered.numberOfChannels },
       (_, index) => rendered.getChannelData(index),
     );
     const blob = encodeWav({ channels, sampleRate: rendered.sampleRate });
-    const title = audio.file.name.replace(/\.[^/.]+$/, "");
     const suffix = useInstrumental ? "-instrumental" : "";
-    downloadFile(
-      blob,
-      `${safeFilename(title)}${suffix}-ringtone.wav`,
-      "audio/wav",
-    );
+    return new File([blob], `${safeFilename(title)}${suffix}-ringtone.wav`, {
+      type: "audio/wav",
+    });
+  };
+
+  const exportWav = () => {
+    const file = buildFile();
+    if (!file) return;
+    downloadFile(file, file.name, "audio/wav");
     // The profile history is a record of what was made, not a copy of the
     // audio: the file itself never leaves the device.
     void saveRingtone(
@@ -389,7 +397,13 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
         peaks={peaks}
         duration={duration}
         trim={trim}
+        clickMoves
+        selectLabel="הצלצול"
         onTrimChange={(next) => {
+          // A ringtone always has a region; the "whole song" state the strip
+          // can express means nothing here, so a cleared selection keeps the
+          // last one rather than turning four minutes into the ringtone.
+          if (!next) return;
           setTrim(next);
           setActiveSection(null);
           setSnapNote(null);
@@ -635,6 +649,11 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
               </small>
             </span>
           </button>
+          <ShareButton
+            build={buildFile}
+            title={`צלצול — ${title}`}
+            hint="לוואטסאפ, ל־AirDrop או לקבצים"
+          />
         </div>
       </div>
     </>

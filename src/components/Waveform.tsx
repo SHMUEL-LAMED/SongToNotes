@@ -14,6 +14,13 @@ type WaveformProps = {
   emptyLabel?: string;
   /** Length of the region the keyboard handles create out of nothing. */
   defaultSpan?: number;
+  /**
+   * A click (a press that never moves) slides the existing region so it
+   * starts where the click landed, keeping its length. That is what a
+   * fixed-length cut like a ringtone wants; dragging still draws a fresh
+   * region, and grabbing an edge still resizes.
+   */
+  clickMoves?: boolean;
 };
 
 const WIDTH = 1000;
@@ -35,13 +42,17 @@ export function Waveform({
   clearLabel = "נתח את כל השיר",
   emptyLabel = "סמן קטע בגל הקול כדי לנתח רק אותו",
   defaultSpan = 30,
+  clickMoves = false,
 }: WaveformProps) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   // `anchor` is the edge that stays put for the length of the drag: the point
   // the pointer went down on when drawing a fresh region, or the opposite
-  // handle when an existing one is being resized.
-  const dragRef = useRef<{ anchor: number; resizing: boolean } | null>(null);
+  // handle when an existing one is being resized. `pending` marks a press
+  // that has not moved yet, when the release is what decides what it meant.
+  const dragRef = useRef<{ anchor: number; resizing: boolean; pending: boolean } | null>(
+    null,
+  );
 
   const path = useMemo(() => {
     const buckets = peaks.length / 2;
@@ -82,18 +93,25 @@ export function Waveform({
     if (trim) {
       const tolerance = grabTolerance();
       if (Math.abs(at - trim.start) <= tolerance) {
-        dragRef.current = { anchor: trim.end, resizing: true };
+        dragRef.current = { anchor: trim.end, resizing: true, pending: false };
         event.currentTarget.setPointerCapture(event.pointerId);
         return;
       }
       if (Math.abs(at - trim.end) <= tolerance) {
-        dragRef.current = { anchor: trim.start, resizing: true };
+        dragRef.current = { anchor: trim.start, resizing: true, pending: false };
         event.currentTarget.setPointerCapture(event.pointerId);
         return;
       }
     }
-    dragRef.current = { anchor: at, resizing: false };
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (clickMoves && trim) {
+      // The region is kept until the pointer either moves (a fresh drawing)
+      // or lifts (a move); clearing it here would make a plain click flash
+      // the selection away and back.
+      dragRef.current = { anchor: at, resizing: false, pending: true };
+      return;
+    }
+    dragRef.current = { anchor: at, resizing: false, pending: false };
     onTrimChange(null);
   }
 
@@ -112,12 +130,19 @@ export function Waveform({
       onTrimChange({ start: Math.max(0, clamped - 0.4), end: clamped });
       return;
     }
+    drag.pending = false;
     onTrimChange({ start, end });
   }
 
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    const drag = dragRef.current;
     dragRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+    if (drag?.pending && trim) {
+      const length = trim.end - trim.start;
+      const start = Math.max(0, Math.min(drag.anchor, duration - length));
+      onTrimChange({ start, end: Math.min(duration, start + length) });
+    }
   }
 
   const selection = trim
@@ -139,7 +164,11 @@ export function Waveform({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         role="img"
-        aria-label="גל הקול של הקובץ. אפשר לסמן קטע."
+        aria-label={
+          clickMoves
+            ? "גל הקול של הקובץ. לחיצה מזיזה את הקטע, גרירה מסמנת קטע חדש."
+            : "גל הקול של הקובץ. אפשר לסמן קטע."
+        }
       >
         <rect width={WIDTH} height={HEIGHT} className="waveform-bg" />
         <path d={path} className="waveform-body" opacity={selection ? 0.28 : 0.7} />
@@ -225,9 +254,12 @@ export function Waveform({
             <span>
               {selectLabel}: {formatTime(trim.start)}–{formatTime(trim.end)}
             </span>
-            <button type="button" onClick={() => onTrimChange(null)}>
-              {clearLabel}
-            </button>
+            {/* A fixed-length cut has no "whole file" state to go back to. */}
+            {!clickMoves && (
+              <button type="button" onClick={() => onTrimChange(null)}>
+                {clearLabel}
+              </button>
+            )}
           </>
         ) : (
           <span>
