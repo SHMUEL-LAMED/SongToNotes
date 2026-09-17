@@ -50,7 +50,7 @@ export function AppNotices() {
             <RefreshCw size={17} />
           </span>
           <p>
-            <strong>יש גרסה חדשה.</strong> רענון קצר ויהיו לך השיפורים האחרונים.
+            <strong>יש גרסה חדשה.</strong> רענן כדי לעדכן.
           </p>
           <button type="button" className="app-notice-action" onClick={applyUpdate}>
             רענן עכשיו

@@ -515,27 +515,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
         <div className="eyebrow">
           <FileMusic size={16} /> זיהוי תווים חכם
         </div>
-        <h1>
-          הופכים כל מנגינה
-          <br />
-          <span>לתווים שאפשר לעבוד איתם</span>
-        </h1>
-        <p>
-          מעלים שיר, מקליטים זמזום או בוחרים קטע מתוך הקלטה — והמערכת מזהה את
-          התווים, את הקצב ואת הסולם, ומכינה תווים, MIDI ו־MusicXML ישירות
-          בדפדפן.
-        </p>
-        <div className="hero-points">
-          <span>
-            <Check size={16} /> היסטוריה אישית ושמורה
-          </span>
-          <span>
-            <Check size={16} /> עיבוד מקומי ופרטי
-          </span>
-          <span>
-            <Check size={16} /> האזנה לתוצאה לפני הורדה
-          </span>
-        </div>
+        <h1>שיר לתווים</h1>
+        <p>בחר שיר או הקלט מנגינה ליצירת תווים.</p>
       </section>
 
       <section className="workspace-section">
@@ -622,8 +603,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                   onChange={(event) => update("sensitivity", Number(event.target.value))}
                 />
                 <small>
-                  רגישות גבוהה מזהה יותר תווים, כולל צלילים חלשים. אפשר לשנות גם
-                  אחרי הניתוח.
+                  רגישות גבוהה כוללת גם צלילים חלשים.
                 </small>
               </label>
               <div className="setting-field">
@@ -648,8 +628,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                 </div>
                 <small>
                   {settings.engine === "fast"
-                    ? "מנתח שיר שלם תוך שניות, בלי הורדות ובלי כרטיס מסך. מומלץ כמעט תמיד."
-                    : "מודל למידה עמוקה: מדויק יותר על הקלטות צפופות, אבל מוריד כ־3MB ויכול לקחת כמה דקות."}
+                    ? "לזיהוי מהיר."
+                    : "זיהוי מעמיק עשוי להימשך כמה דקות."}
                 </small>
               </div>
             </div>
@@ -690,8 +670,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
               <div className="processing-bottom">
                 <small>
                   {settings.engine === "deep"
-                    ? "הזיהוי המעמיק מריץ מודל למידה עמוקה על המכשיר שלך. זה עשוי לקחת כמה דקות לשיר שלם — והשיר לא נשלח לשום שרת."
-                    : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
+                    ? "מזהה תווים… זה עשוי להימשך כמה דקות."
+                    : "מזהה תווים…"}
                 </small>
                 {transcriber.isRunning && (
                   <button className="secondary-button" onClick={transcriber.cancel} type="button">
@@ -756,7 +736,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
             <p className="engine-note">
               {transcriber.engine === "deep"
                 ? `הזיהוי המעמיק הסתיים ב־${formatDuration(transcriber.elapsed)}.`
-                : `הזיהוי המהיר הסתיים ב־${formatDuration(transcriber.elapsed)} — הכול במכשיר שלך.`}
+                : `הזיהוי המהיר הסתיים ב־${formatDuration(transcriber.elapsed)}.`}
             </p>
           )}
 
@@ -855,7 +835,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
           <div className="refine-panel">
             <div className="settings-title">
               <Wand2 size={18} /> כוונון התוצאה
-              <em>כל שינוי מתעדכן מיד, בלי לנתח מחדש</em>
+              <em>השינויים מתעדכנים מיד</em>
             </div>
             <div className="refine-grid">
               <label className="setting-field range-field">
@@ -888,7 +868,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
               </label>
 
               <label className="setting-field">
-                <span>רשת קוונטיזציה</span>
+                <span>חלוקת התווים</span>
                 <select
                   value={settings.stepsPerBeat}
                   onChange={(event) => update("stepsPerBeat", Number(event.target.value))}
@@ -897,7 +877,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                   <option value={2}>שמיניות</option>
                   <option value={3}>טריולות</option>
                   <option value={4}>שש־עשרוניות</option>
-                  <option value={8}>שלושים־ושתיים</option>
+                  <option value={8}>חלקי שלושים ושתיים</option>
                 </select>
                 <small>רשת עדינה שומרת פרטים, גסה יותר קלה לקריאה.</small>
               </label>
@@ -1164,7 +1144,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
               <button onClick={() => printSheet(sheetSvgRef.current, title)} type="button">
                 <Printer size={17} />
                 <span>
-                  הדפסה / PDF<small>דף תווים מוכן לנגן</small>
+                  הדפסה / PDF<small>דף תווים להדפסה</small>
                 </span>
               </button>
               <button onClick={() => download("abc")} type="button">
@@ -1184,32 +1164,6 @@ export function TranscriberTool({ initial, onSaved }: Props) {
         </section>
       )}
 
-      <section className="how-it-works">
-        <div className="section-heading">
-          <span>פשוט ומהיר</span>
-          <h2>כך זה עובד</h2>
-        </div>
-        <div className="process-grid">
-          <div>
-            <span>01</span>
-            <AudioLines />
-            <h3>מעלים או מקליטים</h3>
-            <p>בוחרים קובץ, גוררים אותו לחלון או מזמזמים ישירות למיקרופון.</p>
-          </div>
-          <div>
-            <span>02</span>
-            <AudioWaveform />
-            <h3>המנוע מקשיב</h3>
-            <p>מודל מוזיקלי מזהה גובה, התחלה ומשך לכל צליל, ומעריך קצב וסולם.</p>
-          </div>
-          <div>
-            <span>03</span>
-            <FileMusic />
-            <h3>מכווננים ומורידים</h3>
-            <p>מאזינים לתוצאה, מכווננים אותה בזמן אמת ומורידים להמשך עריכה.</p>
-          </div>
-        </div>
-      </section>
     </>
   );
 }

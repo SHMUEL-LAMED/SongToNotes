@@ -55,7 +55,7 @@ export function formatBytes(bytes: number) {
 export function validateAudioFile(candidate: File): string | null {
   if (candidate.size === 0) return "קובץ האודיו ריק. יש לבחור קובץ שמכיל הקלטה.";
   if (candidate.size > MAX_BYTES) {
-    return `הקובץ גדול מ־${formatBytes(MAX_BYTES)} ולא ייפתח בלי לקרוס. אפשר לקצר אותו או להמיר אותו ל־MP3 קודם.`;
+    return `הקובץ גדול מ־${formatBytes(MAX_BYTES)} . קצר אותו או המר ל־MP3.`;
   }
 
   const parts = candidate.name.split(".");

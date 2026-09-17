@@ -79,10 +79,7 @@ export function SpeedTool() {
         </span>
         <div>
           <h1>מאט ומאיץ</h1>
-          <p>
-            מאטים שיר בלי לשנות את הגובה כדי ללמוד סולו, או משנים טון כדי
-            להתאים לקול. אפשר לסמן קטע בגל הקול ולנגן אותו בלולאה.
-          </p>
+          <p>שנה את המהירות והטון של השיר.</p>
         </div>
       </div>
 
@@ -165,7 +162,7 @@ export function SpeedTool() {
               <div className="processing-box">
                 <div className="processing-top">
                   <span>
-                    <Wand2 size={18} /> מותח את השיר לקצב החדש…
+                    <Wand2 size={18} /> מעבד את השיר…
                   </span>
                 </div>
                 <div className="progress-track indeterminate">
@@ -196,7 +193,7 @@ export function SpeedTool() {
                 </span>
                 <div>
                   <h3>הורדת הגרסה המעובדת</h3>
-                  <p>השיר כולו במהירות ובטון שבחרת, לתרגול בלי אינטרנט.</p>
+                  <p>השיר במהירות ובטון שבחרת.</p>
                 </div>
               </div>
               <div className="download-buttons">
