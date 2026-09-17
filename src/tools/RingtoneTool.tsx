@@ -132,7 +132,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const [normalize, setNormalize] = useState(true);
   const [sections, setSections] = useState<SongSections | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKind | null>(null);
-  const [snapNote, setSnapNote] = useState<string | null>(null);
+  const [, setSnapNote] = useState<string | null>(null);
 
   // The backing track produced by the AI separator, when one has been made.
   const [instrumental, setInstrumental] = useState<AudioBuffer | null>(null);
