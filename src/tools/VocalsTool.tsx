@@ -1,6 +1,7 @@
 import { Cpu, Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import {
   separateStems,
@@ -126,19 +127,25 @@ export function VocalsTool() {
     }
   }, [audio, context, settingsKey, target]);
 
-  const exportWav = () => {
-    if (!result || !audio) return;
+  const buildFile = () => {
+    if (!result || !audio) return null;
     const channels = Array.from(
       { length: result.numberOfChannels },
       (_, index) => result.getChannelData(index),
     );
     const blob = encodeWav({ channels, sampleRate: result.sampleRate });
     const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
-    downloadFile(
-      blob,
+    return new File(
+      [blob],
       `${base}-${target === "instrumental" ? "karaoke" : "vocals"}.wav`,
-      "audio/wav",
+      { type: "audio/wav" },
     );
+  };
+
+  const exportWav = () => {
+    const file = buildFile();
+    if (!file) return;
+    downloadFile(file, file.name, "audio/wav");
   };
 
   const isMono = audio ? audio.buffer.numberOfChannels < 2 : false;
@@ -376,6 +383,10 @@ export function VocalsTool() {
                     </small>
                   </span>
                 </button>
+                <ShareButton
+                  build={buildFile}
+                  title={target === "instrumental" ? "גרסת קריוקי" : "השירה בלבד"}
+                />
               </div>
             </div>
           </>

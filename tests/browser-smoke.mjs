@@ -87,8 +87,10 @@ log(await page.locator(".hub-hero").isVisible(), "unknown route falls back to th
 await page.goto(`${BASE}#/ringtone`, { waitUntil: "load" });
 await page.waitForTimeout(300);
 await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
-await page.waitForSelector(".ringtone-section-picker", { timeout: 30_000 });
-log(true, "ringtone: demo.wav decodes and the editor appears");
+await page.waitForSelector(".section-picker", { timeout: 30_000 });
+log(true, "ringtone: demo.wav decodes and the section picker appears");
+const sectionButtons = await page.locator(".section-choices button").count();
+log(sectionButtons === 3, "ringtone: chorus, verse and instrumental are offered", `found ${sectionButtons}`);
 
 await page.waitForTimeout(600);
 const downloadEnabled = await page.locator(".download-buttons button").first().isEnabled();
@@ -120,8 +122,25 @@ await page.waitForTimeout(300);
 const endAfter = await endField.inputValue();
 log(Number(endAfter) < Number(endBefore), "waveform: the end handle moves independently", `${endBefore} -> ${endAfter}`);
 
+// a plain click slides the ringtone rather than wiping the selection
+const lengthBeforeClick = Number(await endField.inputValue()) - Number(await startField.inputValue());
+const strip = page.locator(".waveform svg");
+const box = await strip.boundingBox();
+await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
+await page.waitForTimeout(300);
+const startAfterClick = Number(await startField.inputValue());
+const lengthAfterClick = Number(await endField.inputValue()) - startAfterClick;
+log(
+  Math.abs(lengthAfterClick - lengthBeforeClick) < 0.25 && startAfterClick > Number(startBack),
+  "waveform: a click moves the ringtone and keeps its length",
+  `start ${startBack} -> ${startAfterClick}, length ${lengthBeforeClick.toFixed(1)} -> ${lengthAfterClick.toFixed(1)}`,
+);
+const legend = await page.locator(".waveform-legend").textContent();
+log(/\d:\d\d–\d:\d\d/.test(legend ?? ""), "waveform: the selection survives the click", legend?.trim() ?? "");
+log((await page.locator(".waveform-legend button").count()) === 0, "waveform: no 'whole song' button on a fixed-length cut");
+
 // the volume dial must change the rendered audio even with normalise ticked
-const normaliseBox = page.locator(".checkbox-field input[type=checkbox]");
+const normaliseBox = page.locator(".checkbox-field input[type=checkbox]").first();
 log(await normaliseBox.isChecked(), "ringtone: normalise is on by default");
 
 // --- the exported file, not just the UI state ---
@@ -142,8 +161,9 @@ const rmsOf = (path) => {
   return { peak, rms: Math.sqrt(sum / count), frames: count };
 };
 
+const gainSlider = page.locator(".range-field", { hasText: "עוצמה" }).locator("input[type=range]");
 const exportAtGain = async (gain) => {
-  await page.locator(".range-field input[type=range]").nth(2).fill(String(gain));
+  await gainSlider.fill(String(gain));
   await page.waitForTimeout(900);
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -172,6 +192,27 @@ await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
 await page.waitForSelector(".analyze-stats", { timeout: 60_000 });
 const bpm = await page.locator(".stat-card.is-hero strong").first().textContent();
 log(Boolean(bpm) && bpm !== "—", "analyze: reports a BPM", bpm ?? "");
+
+// --- vocals tool: the fast separation runs on a worker and yields a file ---
+await page.goto(`${BASE}#/vocals`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".transport", { timeout: 60_000 });
+await page.waitForFunction(
+  () => {
+    const button = document.querySelector(".download-buttons button");
+    return button && !button.disabled;
+  },
+  null,
+  { timeout: 60_000 },
+);
+const [karaoke] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".download-buttons button").first().click(),
+]);
+const karaokeStats = rmsOf(await karaoke.path());
+log(karaokeStats.frames > 1000 && karaokeStats.rms > 0.001, "vocals: the karaoke export is real audio",
+  `rms ${karaokeStats.rms.toFixed(3)}, ${karaokeStats.frames} samples`);
 
 // --- speed tool renders a stretched buffer ---
 await page.goto(`${BASE}#/speed`, { waitUntil: "load" });
