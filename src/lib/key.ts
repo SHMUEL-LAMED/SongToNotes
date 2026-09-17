@@ -23,6 +23,21 @@ const NATURAL_PITCH_CLASS: Record<string, number> = {
   B: 11,
 };
 
+const HEBREW_NAMES = [
+  "דו",
+  "דו♯",
+  "רה",
+  "רה♯",
+  "מי",
+  "פה",
+  "פה♯",
+  "סול",
+  "סול♯",
+  "לה",
+  "לה♯",
+  "סי",
+];
+
 const HEBREW_LETTERS: Record<string, string> = {
   C: "דו",
   D: "רה",
@@ -143,6 +158,16 @@ export function keyToAbc(key: KeySignature) {
   const spelled = spellPitch(key.tonicPitchClass + 60, key.fifths);
   const accidental = spelled.alter > 0 ? "#" : spelled.alter < 0 ? "b" : "";
   return `${spelled.letter}${accidental}${key.mode === "minor" ? "m" : ""}`;
+}
+
+export function hebrewNoteName(midi: number, fifths = 0) {
+  const spelled = spellPitch(midi, fifths);
+  const accidental = spelled.alter > 0 ? "♯" : spelled.alter < 0 ? "♭" : "";
+  return `${HEBREW_LETTERS[spelled.letter]}${accidental} ${spelled.octave}`;
+}
+
+export function plainNoteName(midi: number) {
+  return `${HEBREW_NAMES[((midi % 12) + 12) % 12]} ${Math.floor(midi / 12) - 1}`;
 }
 
 export function scientificName(midi: number, fifths = 0) {

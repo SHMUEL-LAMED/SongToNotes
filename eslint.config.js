@@ -9,6 +9,17 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // The browser smoke test drives the built site from Node, so it needs the
+    // Node globals rather than the browser ones the site is written against.
+    files: ["tests/**/*.mjs"],
+    // The browser globals are there too, for the callbacks handed to
+    // `page.evaluate`, which run inside the page rather than in Node.
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2022,
@@ -24,6 +35,16 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    // The offline worker is shipped verbatim from public/ and runs in the
+    // service worker scope, not the page's.
+    files: ["public/sw.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: { ...globals.serviceworker },
     },
   },
 );

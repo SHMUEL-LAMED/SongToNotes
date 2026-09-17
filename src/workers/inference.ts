@@ -12,9 +12,14 @@ const HOP_SIZE = AUDIO_N_SAMPLES - OVERLAP_LENGTH_FRAMES;
 
 const OUTPUT_TENSORS = ["Identity_1", "Identity_2", "Identity"];
 
-/** GPU inference is much faster when several windows share one execution. */
-function preferredBatchSize(backend: string) {
-  return backend === "webgl" ? 8 : 1;
+/**
+ * This exported graph declares a dynamic batch, but several WebGL drivers
+ * silently reuse the first item for the whole batch. Processing one window at
+ * a time is a little slower and is the only reliable way to guarantee that
+ * every two-second section of the song is actually analysed.
+ */
+function preferredBatchSize() {
+  return 1;
 }
 
 export type ModelOutput = {
@@ -50,8 +55,7 @@ export async function runInference(
   samples: Float32Array,
   onProgress: (fraction: number) => void,
 ): Promise<ModelOutput> {
-  const backend = tf.getBackend();
-  const preferredBatch = preferredBatchSize(backend);
+  const preferredBatch = preferredBatchSize();
   const leftPadding = Math.floor(OVERLAP_LENGTH_FRAMES / 2);
   const paddedLength = leftPadding + samples.length;
   const windowCount = Math.max(1, Math.ceil(paddedLength / HOP_SIZE));
@@ -69,6 +73,7 @@ export async function runInference(
   // large first execution. Once it succeeds, WebGL switches to the faster
   // eight-window batches used by the original optimized path.
   let batchSize = 1;
+  let batchingSupported = preferredBatch > 1;
 
   for (let start = 0; start < windowCount; ) {
     onProgress(start / windowCount);
@@ -107,12 +112,21 @@ export async function runInference(
           1,
         ]);
         const results = model.execute(batch, OUTPUT_TENSORS) as tf.Tensor3D[];
+        // Some browser/backend combinations accept an eight-window input but
+        // silently execute the graph's fixed batch dimension (1). Advancing by
+        // eight in that situation made the final transcription contain only
+        // the first roughly two seconds of every batch. Treat it exactly like
+        // a rejected batch and retry every window individually.
+        if (size > 1 && results.some((tensor) => tensor.shape[0] !== size)) {
+          throw new Error("MODEL_FIXED_BATCH_SIZE");
+        }
         return results.map(unwrap);
       });
     } catch (error) {
       // Some exported graphs pin the batch dimension to one. Drop to
       // single-window evaluation and carry on rather than failing.
       if (size > 1) {
+        batchingSupported = false;
         batchSize = 1;
         continue;
       }
@@ -138,10 +152,15 @@ export async function runInference(
 
     start += size;
     onProgress(Math.min(1, start / windowCount));
-    if (batchSize === 1 && preferredBatch > 1) batchSize = preferredBatch;
+    if (batchSize === 1 && batchingSupported) batchSize = preferredBatch;
     if (produced >= expectedFrames) break;
   }
 
   onProgress(1);
+  if (expectedFrames > 0 && produced < expectedFrames * 0.85) {
+    throw new Error(
+      `הניתוח נעצר לפני סוף הקטע (${produced} מתוך ${expectedFrames} מסגרות). נסה שוב.`,
+    );
+  }
   return { frames, onsets, contours };
 }

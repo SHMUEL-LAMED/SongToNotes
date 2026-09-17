@@ -171,7 +171,11 @@ export async function transcribeSamples(
     true,
     null,
     null,
-    true,
+    // Keep the complete polyphonic model output here. Melody extraction is a
+    // user-facing option applied later in refineNotes; enabling Basic Pitch's
+    // melodia trick here as well filtered the song twice and often left only
+    // a handful of notes from its opening seconds.
+    false,
     11,
   );
 

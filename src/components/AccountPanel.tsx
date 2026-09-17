@@ -1,5 +1,5 @@
 import { AudioWaveform, Clock3, History, LogOut, Save, Trash2, UserRound, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
   deleteTranscription,
@@ -12,7 +12,6 @@ import {
   listRingtones,
   type SavedRingtone,
 } from "../lib/ringtoneHistory";
-import { moveTabFocus } from "../lib/tablist";
 
 type Props = {
   open: boolean;
@@ -21,18 +20,12 @@ type Props = {
   onOpenItem: (item: SavedTranscription) => void;
 };
 
-const savedDateFormat = new Intl.DateTimeFormat("he-IL", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
-
 function formatSavedDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : savedDateFormat.format(date);
+  return new Intl.DateTimeFormat("he-IL", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props) {
   const { user, profile, updateName, signOut } = useAuth();
@@ -45,57 +38,6 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
   const [historyTab, setHistoryTab] = useState<"notes" | "ringtones">("notes");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const panelRef = useRef<HTMLElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-  // Held in a ref so the trap below depends only on whether the panel is open.
-  // Keying it on the callback would re-arm — and so re-steal the focus — on
-  // every render of the page around it.
-  const closeRef = useRef(onClose);
-  useEffect(() => {
-    closeRef.current = onClose;
-  }, [onClose]);
-
-  // A panel that claims `aria-modal` has to behave like one: Escape closes it,
-  // Tab stays inside it, and the button that opened it gets the focus back.
-  useEffect(() => {
-    if (!open || !user) return;
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusTimer = window.setTimeout(() => {
-      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-    }, 0);
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const stops = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (element) => element.offsetParent !== null,
-      );
-      if (!stops.length) return;
-      const first = stops[0];
-      const last = stops[stops.length - 1];
-      if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      } else if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", onKeyDown, true);
-      returnFocusRef.current?.focus();
-    };
-  }, [open, user]);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -133,7 +75,6 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
   return (
     <div className="account-overlay" role="presentation" onMouseDown={onClose}>
       <aside
-        ref={panelRef}
         className="account-panel"
         role="dialog"
         aria-modal="true"
@@ -179,10 +120,10 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
 
         <div className="history-heading"><History size={19} /><strong>ההיסטוריה המלאה שלי</strong></div>
         <div className="history-tabs" role="tablist" aria-label="סוג היסטוריה">
-          <button type="button" role="tab" id="history-tab-notes" aria-controls="history-panel" aria-selected={historyTab === "notes"} tabIndex={historyTab === "notes" ? 0 : -1} onKeyDown={moveTabFocus} className={historyTab === "notes" ? "active" : ""} onClick={() => setHistoryTab("notes")}>תווים <span>{items.length}</span></button>
-          <button type="button" role="tab" id="history-tab-ringtones" aria-controls="history-panel" aria-selected={historyTab === "ringtones"} tabIndex={historyTab === "ringtones" ? 0 : -1} onKeyDown={moveTabFocus} className={historyTab === "ringtones" ? "active" : ""} onClick={() => setHistoryTab("ringtones")}>צלצולים <span>{ringtones.length}</span></button>
+          <button type="button" role="tab" aria-selected={historyTab === "notes"} className={historyTab === "notes" ? "active" : ""} onClick={() => setHistoryTab("notes")}>תווים <span>{items.length}</span></button>
+          <button type="button" role="tab" aria-selected={historyTab === "ringtones"} className={historyTab === "ringtones" ? "active" : ""} onClick={() => setHistoryTab("ringtones")}>צלצולים <span>{ringtones.length}</span></button>
         </div>
-        <div className="history-list" id="history-panel" role="tabpanel" aria-labelledby={`history-tab-${historyTab}`}>
+        <div className="history-list">
           {loading ? (
             <p className="empty-history">טוען את ההיסטוריה…</p>
           ) : historyTab === "notes" && items.length === 0 ? (
@@ -212,7 +153,7 @@ export function AccountPanel({ open, refreshToken, onClose, onOpenItem }: Props)
           ) : (
             ringtones.map((item) => (
               <article className="history-item" key={item.id}>
-                <a className="history-open" href="https://shmuel-lamed.github.io/Ringtones/">
+                <a className="history-open" href="#/ringtone" onClick={onClose}>
                   <span className="history-note ringtone"><AudioWaveform size={19} /></span>
                   <span><strong>{item.title}</strong><small><Clock3 size={13} /> {formatSavedDate(item.createdAt)} · {Math.round(item.durationSeconds)} שניות</small></span>
                 </a>

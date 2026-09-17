@@ -1,75 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  WorkerRequest,
-  WorkerResponse,
-} from "../workers/transcribe.worker";
-import type { DetectedNote } from "./types";
+  NoteEngineId,
+  NotesRequest,
+  NotesResponse,
+} from "../workers/notes.worker";
+import type { DetectedNote, ViewMode } from "./types";
+
+export type { NoteEngineId };
 
 /**
- * The model runs permissively and every user-facing control filters the notes
- * afterwards, so the expensive pass happens once per recording rather than
- * once per slider move.
+ * The detector runs permissively and every user-facing control filters the
+ * notes afterwards, so moving a slider never costs another pass over the
+ * audio. Only the melody/chords choice reaches the engine itself, because the
+ * two readings are different algorithms rather than two filters.
  */
-const DETECTION_LEVEL = 0.35;
+const DETECTION_LEVEL = 0.72;
 
-import type { Timings } from "./pitchModel";
+/**
+ * How long the deep engine may sit at nothing before the run is moved to the
+ * page's own thread. Some driver and browser combinations accept the
+ * transferred samples and then stall while setting up WebGL, which used to
+ * leave the bar at 0–4% for as long as the visitor was willing to wait. The
+ * fast engine is not given a watchdog: it has no GPU to stall on, and it
+ * reports its first progress within a few hundred milliseconds.
+ */
+const DEEP_STALL_TIMEOUT = 15_000;
 
-export type { Timings };
+export type TranscribeOptions = {
+  engine: NoteEngineId;
+  mode: ViewMode;
+};
 
 export type TranscriberState = {
   isRunning: boolean;
   progress: number;
   error: string | null;
-  /** Which tfjs backend the run settled on, once it has chosen. */
-  backend: string | null;
-  timings: Timings | null;
-  /** True while the run has moved to the main thread for GPU access. */
+  /** Which engine produced the notes on screen, once one has. */
+  engine: NoteEngineId | null;
+  /** Milliseconds the finished run took. */
+  elapsed: number | null;
+  /** True while a stalled run has been moved onto the page's own thread. */
   onMainThread: boolean;
 };
 
-/**
- * Whether this thread could give tfjs a GPU. Used to decide if it is worth
- * asking the worker to hand a job back: if there is no WebGL here either, the
- * retry would only cost a round trip and lose the responsive UI for nothing.
- */
-function mainThreadHasWebgl() {
-  try {
-    const canvas = document.createElement("canvas");
-    const context =
-      canvas.getContext("webgl2") ||
-      canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl");
-    if (!context) return false;
-    (context as WebGLRenderingContext)
-      .getExtension("WEBGL_lose_context")
-      ?.loseContext();
-    return true;
-  } catch {
-    return false;
-  }
-}
+const IDLE: TranscriberState = {
+  isRunning: false,
+  progress: 0,
+  error: null,
+  engine: null,
+  elapsed: null,
+  onMainThread: false,
+};
 
 export function useTranscriber() {
   const workerRef = useRef<Worker | null>(null);
   const jobRef = useRef(0);
+  const progressRef = useRef(0);
   const pendingRef = useRef<{
     resolve: (notes: DetectedNote[]) => void;
     reject: (error: Error) => void;
   } | null>(null);
-  // Set once a main-thread retry has also landed on the CPU kernels. Some
-  // browsers hand out a WebGL context that tfjs then cannot use, so the only
-  // reliable evidence is having tried; after that, runs stay in the worker
-  // where at least the page keeps responding.
-  const mainThreadGpuFailedRef = useRef(false);
 
-  const [state, setState] = useState<TranscriberState>({
-    isRunning: false,
-    progress: 0,
-    error: null,
-    backend: null,
-    timings: null,
-    onMainThread: false,
-  });
+  const [state, setState] = useState<TranscriberState>(IDLE);
 
   const teardown = useCallback(() => {
     workerRef.current?.terminate();
@@ -78,119 +70,108 @@ export function useTranscriber() {
 
   useEffect(() => teardown, [teardown]);
 
+  const fail = useCallback((message: string) => {
+    progressRef.current = 0;
+    setState((previous) => ({
+      ...previous,
+      isRunning: false,
+      progress: 0,
+      error: message,
+    }));
+    pendingRef.current?.reject(new Error(message));
+    pendingRef.current = null;
+  }, []);
+
   /**
-   * Second attempt when the worker could not reach the GPU. A worker needs a
-   * WebGL2 context on an OffscreenCanvas, which several browsers — notably
-   * older mobile Safari — do not provide, and falling through to the
-   * JavaScript kernels there turns a few seconds of work into a minute or
-   * more. The main thread has a real canvas, so the GPU is usually available;
-   * the page stops responding for the duration, which is far the lesser cost.
-   *
-   * The model code is pulled in on demand so this path adds nothing to the
-   * initial download.
+   * Runs the detector here instead of on a worker — either because the worker
+   * could not be created at all, or because it stalled. The page stops
+   * responding for the duration, which is far the lesser cost.
    */
-  const runOnMainThread = useCallback(
-    async (jobId: number, samples: Float32Array) => {
-      if (jobRef.current !== jobId) return;
+  const runHere = useCallback(
+    async (samples: Float32Array, options: TranscribeOptions, token: number) => {
+      if (jobRef.current !== token) return;
       setState((previous) => ({ ...previous, onMainThread: true }));
       try {
-        const { transcribeSamples } = await import("./pitchModel");
-        const { notes, timings } = await transcribeSamples(
-          samples,
-          DETECTION_LEVEL,
-          (progress) => {
-            if (jobRef.current !== jobId) return;
-            setState((previous) => ({ ...previous, progress }));
-          },
-        );
-        if (timings.backend !== "webgl") mainThreadGpuFailedRef.current = true;
-        if (jobRef.current !== jobId) return;
-        setState((previous) => ({
-          ...previous,
+        const started = Date.now();
+        const report = (progress: number) => {
+          if (jobRef.current !== token) return;
+          progressRef.current = progress;
+          setState((previous) => ({ ...previous, progress }));
+        };
+        let notes: DetectedNote[];
+        if (options.engine === "deep") {
+          const { transcribeSamples } = await import("./pitchModel");
+          notes = (await transcribeSamples(samples, DETECTION_LEVEL, report))
+            .notes;
+        } else {
+          const { detectNotes } = await import("./noteEngine");
+          notes = detectNotes(
+            samples,
+            { sensitivity: DETECTION_LEVEL, mode: options.mode },
+            report,
+          ).notes;
+        }
+        if (jobRef.current !== token) return;
+        setState({
           isRunning: false,
           progress: 100,
           error: null,
-          backend: timings.backend,
-          timings,
-        }));
+          engine: options.engine,
+          elapsed: Date.now() - started,
+          onMainThread: true,
+        });
         pendingRef.current?.resolve(notes);
         pendingRef.current = null;
       } catch (error) {
-        if (jobRef.current !== jobId) return;
-        const message =
-          error instanceof Error ? error.message : "העיבוד נכשל.";
-        setState((previous) => ({
-          ...previous,
-          isRunning: false,
-          progress: 0,
-          error: message,
-        }));
-        pendingRef.current?.reject(new Error(message));
-        pendingRef.current = null;
+        if (jobRef.current !== token) return;
+        fail(error instanceof Error ? error.message : "העיבוד נכשל.");
       }
     },
-    [],
+    [fail],
   );
 
   const ensureWorker = useCallback(() => {
     if (workerRef.current) return workerRef.current;
     const worker = new Worker(
-      new URL("../workers/transcribe.worker.ts", import.meta.url),
+      new URL("../workers/notes.worker.ts", import.meta.url),
       { type: "module" },
     );
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    worker.onmessage = (event: MessageEvent<NotesResponse>) => {
       const message = event.data;
       if (message.jobId !== jobRef.current) return;
       if (message.type === "progress") {
+        progressRef.current = message.progress;
         setState((previous) => ({ ...previous, progress: message.progress }));
-      } else if (message.type === "backend") {
-        setState((previous) => ({ ...previous, backend: message.backend }));
-      } else if (message.type === "no-gpu") {
-        void runOnMainThread(message.jobId, message.samples);
-      } else if (message.type === "done") {
+        return;
+      }
+      if (message.type === "done") {
         setState((previous) => ({
           ...previous,
           isRunning: false,
           progress: 100,
           error: null,
-          timings: message.timings,
+          engine: message.engine,
+          elapsed: message.elapsed,
         }));
         pendingRef.current?.resolve(message.notes);
         pendingRef.current = null;
-      } else if (message.type === "error") {
-        setState((previous) => ({
-          ...previous,
-          isRunning: false,
-          progress: 0,
-          error: message.message,
-        }));
-        pendingRef.current?.reject(new Error(message.message));
-        pendingRef.current = null;
-        worker.terminate();
-        if (workerRef.current === worker) workerRef.current = null;
+        return;
       }
+      fail(message.message);
+      teardown();
     };
     worker.onerror = (event) => {
-      const message = event.message || "העיבוד נכשל.";
-      setState((previous) => ({
-        ...previous,
-        isRunning: false,
-        progress: 0,
-        error: message,
-      }));
-      pendingRef.current?.reject(new Error(message));
-      pendingRef.current = null;
-      worker.terminate();
-      if (workerRef.current === worker) workerRef.current = null;
+      fail(event.message || "העיבוד נכשל.");
+      teardown();
     };
     workerRef.current = worker;
     return worker;
-  }, [runOnMainThread]);
+  }, [fail, teardown]);
 
   const cancel = useCallback(() => {
     if (!pendingRef.current) return;
-    // Inference cannot be interrupted mid-tensor, so the worker is discarded
-    // and a fresh one is created for the next run.
+    // A run cannot be interrupted between frames from outside, so the worker
+    // is discarded and the next run starts a fresh one.
     jobRef.current += 1;
     pendingRef.current.reject(new Error("הניתוח בוטל."));
     pendingRef.current = null;
@@ -204,32 +185,61 @@ export function useTranscriber() {
   }, [teardown]);
 
   const transcribe = useCallback(
-    (samples: Float32Array) => {
-      const worker = ensureWorker();
+    (samples: Float32Array, options: TranscribeOptions) => {
       jobRef.current += 1;
       const jobId = jobRef.current;
-      setState((previous) => ({
-        ...previous,
+      progressRef.current = 0;
+      setState({
         isRunning: true,
         progress: 0,
         error: null,
+        engine: null,
+        elapsed: null,
         onMainThread: false,
-      }));
+      });
 
       return new Promise<DetectedNote[]>((resolve, reject) => {
         pendingRef.current = { resolve, reject };
-        const request: WorkerRequest = {
+        let worker: Worker;
+        try {
+          worker = ensureWorker();
+        } catch {
+          // Module workers are not available everywhere. Running here costs
+          // responsiveness for a second or two, which is a great deal better
+          // than not working at all.
+          void runHere(samples, options, jobId);
+          return;
+        }
+
+        // One copy is held back only for the deep engine, which is the one
+        // that can stall; the fast engine hands its samples over outright.
+        const spare = options.engine === "deep" ? samples.slice() : null;
+        const request: NotesRequest = {
           type: "transcribe",
           jobId,
           samples,
-          detectionLevel: DETECTION_LEVEL,
-          requireGpu: !mainThreadGpuFailedRef.current && mainThreadHasWebgl(),
+          engine: options.engine,
+          mode: options.mode,
+          sensitivity: DETECTION_LEVEL,
         };
-        // The sample buffer is handed over rather than copied.
         worker.postMessage(request, [samples.buffer]);
+
+        if (!spare) return;
+        window.setTimeout(() => {
+          if (
+            jobRef.current !== jobId ||
+            !pendingRef.current ||
+            progressRef.current > 4
+          ) {
+            return;
+          }
+          worker.terminate();
+          if (workerRef.current === worker) workerRef.current = null;
+          void runHere(spare, options, jobId);
+        }, DEEP_STALL_TIMEOUT);
       });
     },
-    [ensureWorker],
+    [ensureWorker, runHere],
   );
 
   return { ...state, transcribe, cancel };

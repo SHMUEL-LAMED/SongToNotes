@@ -1,5 +1,6 @@
 import { Midi } from "@tonejs/midi";
 import { scientificName } from "./key";
+import type { Score } from "./score";
 import type { DetectedNote, KeySignature } from "./types";
 
 export type MidiOptions = {
@@ -67,6 +68,20 @@ export function notesToCsv(
   return `\uFEFF${rows.join("\r\n")}`;
 }
 
+export function scoreSummary(score: Score) {
+  const events = score.staves.reduce(
+    (total, staff) =>
+      total +
+      staff.measures.reduce(
+        (count, measure) =>
+          count + measure.filter((event) => event.midis.length).length,
+        0,
+      ),
+    0,
+  );
+  return { events, measures: score.measureCount };
+}
+
 export function downloadFile(data: BlobPart, filename: string, type: string) {
   const url = URL.createObjectURL(new Blob([data], { type }));
   const link = document.createElement("a");
@@ -79,6 +94,34 @@ export function downloadFile(data: BlobPart, filename: string, type: string) {
   // Firefox cancels the download if the object URL is revoked in the same
   // tick, so the cleanup waits a beat.
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/**
+ * Whether this browser can hand a file to another app. On a phone that is the
+ * difference between a finished ringtone and a file the visitor then has to
+ * find in Downloads; on a desktop browser it is usually absent, so the button
+ * that uses this stays hidden rather than failing when pressed.
+ */
+export function canShareFiles(file: File) {
+  return Boolean(
+    typeof navigator !== "undefined" &&
+      typeof navigator.share === "function" &&
+      navigator.canShare?.({ files: [file] }),
+  );
+}
+
+export type ShareOutcome = "shared" | "dismissed" | "failed";
+
+export async function shareFile(file: File, title: string): Promise<ShareOutcome> {
+  try {
+    await navigator.share({ files: [file], title });
+    return "shared";
+  } catch (error) {
+    // Closing the sheet rejects with AbortError, which is not a failure and
+    // must not raise an error message at the visitor.
+    if (error instanceof Error && error.name === "AbortError") return "dismissed";
+    return "failed";
+  }
 }
 
 export function safeFilename(name: string) {
