@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useId, useMemo, useRef } from "react";
 import { formatTime } from "../lib/audio";
 import type { TrimRange } from "../lib/audio";
 
@@ -12,6 +12,8 @@ type WaveformProps = {
   selectLabel?: string;
   clearLabel?: string;
   emptyLabel?: string;
+  /** Length of the region the keyboard handles create out of nothing. */
+  defaultSpan?: number;
 };
 
 const WIDTH = 1000;
@@ -32,9 +34,14 @@ export function Waveform({
   selectLabel = "קטע נבחר",
   clearLabel = "נתח את כל השיר",
   emptyLabel = "סמן קטע בגל הקול כדי לנתח רק אותו",
+  defaultSpan = 30,
 }: WaveformProps) {
+  const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
-  const dragRef = useRef<{ anchor: number } | null>(null);
+  // `anchor` is the edge that stays put for the length of the drag: the point
+  // the pointer went down on when drawing a fresh region, or the opposite
+  // handle when an existing one is being resized.
+  const dragRef = useRef<{ anchor: number; resizing: boolean } | null>(null);
 
   const path = useMemo(() => {
     const buckets = peaks.length / 2;
@@ -61,9 +68,31 @@ export function Waveform({
     return Math.max(0, Math.min(1, ratio)) * duration;
   }
 
+  /** How far from an edge still counts as grabbing it, in seconds. */
+  function grabTolerance() {
+    const width = svgRef.current?.getBoundingClientRect().width ?? WIDTH;
+    return (duration * 14) / Math.max(1, width);
+  }
+
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
-    const anchor = timeAt(event.clientX);
-    dragRef.current = { anchor };
+    const at = timeAt(event.clientX);
+    // Landing on a handle resizes the region from that edge. Without this the
+    // only way to correct a selection was to draw the whole thing again,
+    // which on a long file meant losing an edge that was already right.
+    if (trim) {
+      const tolerance = grabTolerance();
+      if (Math.abs(at - trim.start) <= tolerance) {
+        dragRef.current = { anchor: trim.end, resizing: true };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        return;
+      }
+      if (Math.abs(at - trim.end) <= tolerance) {
+        dragRef.current = { anchor: trim.start, resizing: true };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
+    dragRef.current = { anchor: at, resizing: false };
     event.currentTarget.setPointerCapture(event.pointerId);
     onTrimChange(null);
   }
@@ -74,8 +103,15 @@ export function Waveform({
     const current = timeAt(event.clientX);
     const start = Math.min(drag.anchor, current);
     const end = Math.max(drag.anchor, current);
-    // A stray click should not create a sliver of a selection.
-    if (end - start < 0.4) return;
+    // A stray click should not create a sliver of a selection — but while
+    // resizing there is already a region, so the edges stay where the pointer
+    // is and only the minimum length is enforced.
+    if (end - start < 0.4) {
+      if (!drag.resizing) return;
+      const clamped = Math.min(drag.anchor === start ? start + 0.4 : end, duration);
+      onTrimChange({ start: Math.max(0, clamped - 0.4), end: clamped });
+      return;
+    }
     onTrimChange({ start, end });
   }
 
@@ -110,7 +146,9 @@ export function Waveform({
         {selection && (
           <>
             <defs>
-              <clipPath id="trim-clip">
+              {/* A generated id, so two strips on one page never clip each
+                  other's selection through a shared `#trim-clip`. */}
+              <clipPath id={clipId}>
                 <rect x={selection.x} y={0} width={selection.width} height={HEIGHT} />
               </clipPath>
             </defs>
@@ -121,7 +159,7 @@ export function Waveform({
               height={HEIGHT}
               className="waveform-selection"
             />
-            <path d={path} className="waveform-selected" clipPath="url(#trim-clip)" />
+            <path d={path} className="waveform-selected" clipPath={`url(#${clipId})`} />
             <line
               x1={selection.x}
               x2={selection.x}
@@ -142,6 +180,45 @@ export function Waveform({
           <line x1={cursorX} x2={cursorX} y1={0} y2={HEIGHT} className="waveform-cursor" />
         )}
       </svg>
+      {/* The strip itself is pointer-only, so the region also gets a pair of
+          real sliders. They stay out of the way until focused, which is what
+          gives the selection a keyboard and screen-reader path — arrow keys
+          move an edge, and moving one with nothing selected creates the
+          region from scratch. */}
+      <div className="waveform-handles" dir="rtl">
+        <label>
+          <span>תחילת {selectLabel}</span>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0.1, duration)}
+            step={0.1}
+            value={trim ? trim.start : 0}
+            onChange={(event) => {
+              const start = Number(event.target.value);
+              const end = trim ? trim.end : Math.min(duration, start + defaultSpan);
+              onTrimChange({ start: Math.min(start, end - 0.4), end });
+            }}
+            aria-valuetext={`${formatTime(trim ? trim.start : 0)}`}
+          />
+        </label>
+        <label>
+          <span>סוף {selectLabel}</span>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0.1, duration)}
+            step={0.1}
+            value={trim ? trim.end : Math.min(duration, defaultSpan)}
+            onChange={(event) => {
+              const end = Number(event.target.value);
+              const start = trim ? trim.start : 0;
+              onTrimChange({ start, end: Math.max(end, start + 0.4) });
+            }}
+            aria-valuetext={`${formatTime(trim ? trim.end : Math.min(duration, defaultSpan))}`}
+          />
+        </label>
+      </div>
       <div className="waveform-legend">
         {trim ? (
           <>

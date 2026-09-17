@@ -62,6 +62,13 @@ type Props = {
   onSaved: () => void;
 };
 
+/** "3.4 שניות" / "2:05 דקות" — the run time, in words a person reads. */
+function formatDuration(milliseconds: number) {
+  const seconds = milliseconds / 1000;
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} שניות`;
+  return `${formatTime(seconds)} דקות`;
+}
+
 export function TranscriberTool({ initial, onSaved }: Props) {
   const { user } = useAuth();
   const audioFile = useAudioFile();
@@ -338,7 +345,10 @@ export function TranscriberTool({ initial, onSaved }: Props) {
       const info = await prepareForModel(audio.buffer, trim);
       if (runTokenRef.current !== token) return;
       setAnalysisOffset(info.startOffset);
-      const detected = await transcriber.transcribe(info.samples);
+      const detected = await transcriber.transcribe(info.samples, {
+        engine: settings.engine,
+        mode: settings.mode,
+      });
       if (runTokenRef.current !== token) return;
       if (!detected.length) {
         setError(
@@ -382,6 +392,33 @@ export function TranscriberTool({ initial, onSaved }: Props) {
       setIsStarting(false);
     }
   }, [audio, onSaved, refineOptions, settings, stopPlayback, title, transcriber, trim, user]);
+
+  // Melody and chords are two different readings of the audio rather than two
+  // filters over one result, and so is the choice of engine. Now that a pass
+  // costs seconds rather than minutes, flipping either simply re-runs it, and
+  // the promise that every control updates the page still holds.
+  const analysedWithRef = useRef<string | null>(null);
+  useEffect(() => {
+    const signature = `${settings.mode}-${settings.engine}`;
+    if (!rawNotes.length) {
+      if (!transcriber.isRunning && !isStarting) analysedWithRef.current = null;
+      return;
+    }
+    if (analysedWithRef.current === null) {
+      analysedWithRef.current = signature;
+      return;
+    }
+    if (analysedWithRef.current === signature) return;
+    analysedWithRef.current = signature;
+    void startTranscription();
+  }, [
+    isStarting,
+    rawNotes.length,
+    settings.engine,
+    settings.mode,
+    startTranscription,
+    transcriber.isRunning,
+  ]);
 
   const reset = useCallback(() => {
     runTokenRef.current += 1;
@@ -588,6 +625,32 @@ export function TranscriberTool({ initial, onSaved }: Props) {
                   אחרי הניתוח.
                 </small>
               </label>
+              <div className="setting-field">
+                <span id="engine-label">מנוע הזיהוי</span>
+                <div className="segmented-control" role="group" aria-labelledby="engine-label">
+                  <button
+                    className={settings.engine === "fast" ? "active" : ""}
+                    onClick={() => update("engine", "fast")}
+                    aria-pressed={settings.engine === "fast"}
+                    type="button"
+                  >
+                    מהיר
+                  </button>
+                  <button
+                    className={settings.engine === "deep" ? "active" : ""}
+                    onClick={() => update("engine", "deep")}
+                    aria-pressed={settings.engine === "deep"}
+                    type="button"
+                  >
+                    מעמיק
+                  </button>
+                </div>
+                <small>
+                  {settings.engine === "fast"
+                    ? "מנתח שיר שלם תוך שניות, בלי הורדות ובלי כרטיס מסך. מומלץ כמעט תמיד."
+                    : "מודל למידה עמוקה: מדויק יותר על הקלטות צפופות, אבל מוריד כ־3MB ויכול לקחת כמה דקות."}
+                </small>
+              </div>
             </div>
           </div>
 
@@ -625,8 +688,8 @@ export function TranscriberTool({ initial, onSaved }: Props) {
               </div>
               <div className="processing-bottom">
                 <small>
-                  {transcriber.onMainThread
-                    ? "העיבוד ברקע לא קיבל גישה לכרטיס המסך, ולכן הוא רץ ישירות בדף כדי להאיץ אותו. הדף עשוי לא להגיב עד לסיום."
+                  {settings.engine === "deep"
+                    ? "הזיהוי המעמיק מריץ מודל למידה עמוקה על המכשיר שלך. זה עשוי לקחת כמה דקות לשיר שלם — והשיר לא נשלח לשום שרת."
                     : "העיבוד רץ ברקע במכשיר שלך — הדף נשאר זמין, והשיר לא נשלח לשום שרת."}
                 </small>
                 {transcriber.isRunning && (
@@ -688,11 +751,11 @@ export function TranscriberTool({ initial, onSaved }: Props) {
             </div>
           </div>
 
-          {transcriber.timings && (
-            <p className={transcriber.timings.backend === "cpu" ? "engine-note is-slow" : "engine-note"}>
-              {transcriber.timings.backend === "cpu"
-                ? `הניתוח רץ על המעבד בלבד (${Math.round(transcriber.timings.infer / 1000)} שנ׳) — הדפדפן הזה לא סיפק האצת GPU בכלל. סימון קטע קצר בגל הקול יקצר את הזמן בהתאם.`
-                : `הניתוח רץ בהאצת GPU והסתיים ב־${Math.round(transcriber.timings.infer / 1000)} שנ׳${transcriber.onMainThread ? " (בדף עצמו, כי העיבוד ברקע לא קיבל גישה לכרטיס המסך)" : ""}.`}
+          {transcriber.elapsed !== null && (
+            <p className="engine-note">
+              {transcriber.engine === "deep"
+                ? `הזיהוי המעמיק הסתיים ב־${formatDuration(transcriber.elapsed)}.`
+                : `הזיהוי המהיר הסתיים ב־${formatDuration(transcriber.elapsed)} — הכול במכשיר שלך.`}
             </p>
           )}
 

@@ -402,6 +402,99 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ==========================================================================
+   App notices
+   Connectivity and update messages. They belong to the app rather than to a
+   tool, so they float clear of the page instead of pushing the layout around.
+   ========================================================================== */
+
+.app-notices {
+  position: fixed;
+  inset-inline: 0;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 16px;
+  pointer-events: none;
+}
+
+.app-notice {
+  pointer-events: auto;
+  width: min(560px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+  animation: notice-rise 0.35s var(--ease) both;
+}
+
+.app-notice p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.app-notice p strong { color: var(--text); }
+
+.app-notice-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-ring);
+}
+
+.app-notice-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-notice-close:hover { background: var(--surface-sunken); color: var(--text); }
+
+.app-notice-action {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.app-notice-action:hover { filter: brightness(1.07); }
+
+@keyframes notice-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 520px) {
+  .app-notice { flex-wrap: wrap; }
+  .app-notice-action { width: 100%; }
+}
+
+/* ==========================================================================
    Hub
    ========================================================================== */
 
@@ -964,6 +1057,37 @@ a { color: inherit; text-decoration: none; }
 .waveform-selected { fill: var(--wave-selected); opacity: 0.8; }
 .waveform-handle { stroke: var(--wave-selected); stroke-width: 2; }
 .waveform-cursor { stroke: var(--danger); stroke-width: 1.8; }
+
+/* The keyboard handles for the region. Collapsed to nothing until one of
+   them takes focus, so the strip looks unchanged for anyone using a pointer
+   while still being reachable with the Tab key. */
+.waveform-handles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 18px;
+  height: 0;
+  padding: 0 14px;
+  overflow: hidden;
+  opacity: 0;
+  transition: height 0.15s ease, opacity 0.15s ease, padding 0.15s ease;
+}
+.waveform-handles:focus-within {
+  height: auto;
+  padding: 12px 14px;
+  opacity: 1;
+  border-top: 1px solid var(--line);
+}
+.waveform-handles label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.waveform-handles input { width: 100%; accent-color: var(--accent); }
+@media (max-width: 560px) {
+  .waveform-handles { grid-template-columns: 1fr; }
+}
 .waveform-legend {
   display: flex;
   align-items: center;
@@ -1002,6 +1126,88 @@ a { color: inherit; text-decoration: none; }
 .trim-length { margin-inline-start: auto; text-align: center; }
 .trim-length strong { display: block; font-size: 22px; letter-spacing: -0.5px; }
 .trim-length span { font-size: 12px; color: var(--text-muted); }
+
+/* ---- the ringtone editor's section picker and fine tuning ---- */
+
+.section-picker {
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.section-picker-head h3 {
+  margin: 0 0 4px;
+  font-size: 15.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-picker-head h3 svg { color: var(--accent); }
+.section-picker-head small { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+.section-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.section-choices button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  text-align: start;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-solid);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s, transform 0.18s, background 0.18s;
+}
+.section-choices button:hover { transform: translateY(-2px); border-color: var(--accent); }
+.section-choices button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.section-choices b { font-size: 14px; }
+.section-choices small { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+.section-time {
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.fine-tune {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.nudge-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nudge-row > span { font-size: 13px; color: var(--text-muted); margin-inline-end: 3px; }
+.nudge-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-solid);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.nudge-row button:hover { border-color: var(--accent); }
+.fine-tune-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+@media (max-width: 720px) {
+  .section-choices { grid-template-columns: 1fr; }
+}
 
 /* ---- settings ---- */
 
@@ -1366,6 +1572,33 @@ input[type="range"]::-moz-range-thumb {
 .engine-note.is-slow { color: #b45309; border-color: rgba(180, 83, 9, 0.3); background: rgba(245, 158, 11, 0.1); }
 :root[data-theme="dark"] .engine-note.is-slow { color: #fbbf24; }
 
+/* ---- the AI separation panel, shared by the vocal and ringtone tools ---- */
+
+.ai-separator {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--accent-hue) 80% 60% / 0.3);
+  background: linear-gradient(
+    135deg,
+    hsl(var(--accent-hue) 85% 60% / 0.09),
+    hsl(calc(var(--accent-hue) + 45) 85% 60% / 0.07)
+  );
+}
+.ai-separator-head { display: flex; align-items: flex-start; gap: 13px; }
+.ai-separator h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ai-separator p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+.ai-separator .notice-message { font-size: 13px; }
+.ai-status { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
 /* ---- transport ---- */
 
 .playback-card { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
@@ -1553,6 +1786,9 @@ input[type="range"]::-moz-range-thumb {
 .download-buttons button svg { color: var(--accent); flex: none; }
 .download-buttons span { display: flex; flex-direction: column; font-weight: 700; font-size: 14.5px; min-width: 0; }
 .download-buttons small { font-weight: 500; font-size: 11.5px; color: var(--text-muted); }
+/* Sharing sits beside the download as the equal option it is on a phone,
+   distinguished by the accent tint rather than by being made secondary. */
+.download-buttons .share-button { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ---- how it works ---- */
 

@@ -1,3 +1,4 @@
+import type { NoteEngineId } from "../lib/useTranscriber";
 import type { DetectedNote, ViewMode } from "../lib/types";
 
 const SETTINGS_KEY = "songtonotes.settings.v1";
@@ -11,6 +12,8 @@ export type Settings = {
   beatsPerMeasure: number;
   transpose: number;
   withChords: boolean;
+  /** Which detector runs: the instant one, or the slow neural model. */
+  engine: NoteEngineId;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -22,6 +25,7 @@ const DEFAULT_SETTINGS: Settings = {
   beatsPerMeasure: 4,
   transpose: 0,
   withChords: true,
+  engine: "fast",
 };
 
 /** Persists the detection settings so a return visit starts where it left off. */
@@ -60,6 +64,7 @@ export function normalizeSettings(parsed: Partial<Settings> | null | undefined):
     transpose: Math.round(numberInRange(parsed.transpose, DEFAULT_SETTINGS.transpose, -12, 12)),
     withChords:
       typeof parsed.withChords === "boolean" ? parsed.withChords : DEFAULT_SETTINGS.withChords,
+    engine: parsed.engine === "deep" ? "deep" : DEFAULT_SETTINGS.engine,
   };
 }
 

@@ -1,6 +1,7 @@
 import { Download, Repeat, Snail, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
@@ -53,15 +54,21 @@ export function SpeedTool() {
     return { start: loop.start * factor, end: loop.end * factor };
   }, [loop, speed]);
 
-  const exportWav = () => {
-    if (!rendered || !audio) return;
+  const buildFile = () => {
+    if (!rendered || !audio) return null;
     const channels = Array.from({ length: rendered.numberOfChannels }, (_, index) =>
       rendered.getChannelData(index),
     );
     const blob = encodeWav({ channels, sampleRate: rendered.sampleRate });
     const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
     const suffix = `${speed}pct${semitones ? `${semitones > 0 ? "+" : ""}${semitones}st` : ""}`;
-    downloadFile(blob, `${base}-${suffix}.wav`, "audio/wav");
+    return new File([blob], `${base}-${suffix}.wav`, { type: "audio/wav" });
+  };
+
+  const exportWav = () => {
+    const file = buildFile();
+    if (!file) return;
+    downloadFile(file, file.name, "audio/wav");
   };
 
   return (
@@ -199,6 +206,7 @@ export function SpeedTool() {
                     WAV<small>{speed}% · {semitones > 0 ? "+" : ""}{semitones} חצאי טונים</small>
                   </span>
                 </button>
+                <ShareButton build={buildFile} title="גרסה לתרגול" />
               </div>
             </div>
           </>

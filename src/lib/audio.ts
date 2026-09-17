@@ -38,17 +38,56 @@ export function isAudioSupported() {
   return Boolean(getAudioContextClass() && getOfflineAudioContextClass());
 }
 
-export async function decodeAudioFile(data: ArrayBuffer): Promise<AudioBuffer> {
+/**
+ * Browsers cap how many AudioContexts a page may hold — six on Safari, and a
+ * closed one is not always returned to the pool straight away. Building a
+ * fresh one per decode is what made the seventh file a visitor opened fail
+ * with a message about hardware contexts, so decoding borrows a single
+ * long-lived one instead.
+ */
+let decodeContext: AudioContext | null = null;
+
+function getDecodeContext() {
   const AudioContextClass = getAudioContextClass();
-  if (!AudioContextClass) {
+  if (!AudioContextClass) return null;
+  if (!decodeContext || decodeContext.state === "closed") {
+    decodeContext = new AudioContextClass();
+  }
+  return decodeContext;
+}
+
+export async function decodeAudioFile(data: ArrayBuffer): Promise<AudioBuffer> {
+  const context = getDecodeContext();
+  if (!context) {
     throw new Error("הדפדפן הזה אינו תומך בעיבוד אודיו.");
   }
-  const context = new AudioContextClass();
-  try {
-    return await context.decodeAudioData(data);
-  } finally {
-    void context.close();
-  }
+  return new Promise<AudioBuffer>((resolve, reject) => {
+    // Whatever goes wrong here, the browser says so in English — "Unable to
+    // decode audio data" and the like — and the picker puts that straight in
+    // front of the visitor. Every failure means the same thing in practice,
+    // so it is said once, in Hebrew, with the way out.
+    const fail = () =>
+      reject(
+        new Error(
+          "הדפדפן לא הצליח לפענח את השמע. ייתכן שהקובץ פגום או שהפורמט אינו נתמך כאן — המרה ל־MP3 או ל־WAV בדרך כלל פותרת את זה.",
+        ),
+      );
+    // Older Safari implements only the callback form and returns undefined
+    // rather than a promise, so both shapes are handled: the callbacks are
+    // always passed, and the return value is used when there is one.
+    let returned: Promise<AudioBuffer> | undefined;
+    try {
+      returned = context.decodeAudioData(data, resolve, fail) as
+        | Promise<AudioBuffer>
+        | undefined;
+    } catch {
+      fail();
+      return;
+    }
+    if (returned && typeof returned.then === "function") {
+      returned.then(resolve, fail);
+    }
+  });
 }
 
 /**

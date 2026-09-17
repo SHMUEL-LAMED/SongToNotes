@@ -13,13 +13,37 @@ export const ACCEPTED_EXTENSIONS = [
   "mp3",
   "wav",
   "ogg",
+  "oga",
   "flac",
   "m4a",
+  "m4b",
+  "mp4",
   "aac",
   "opus",
   "webm",
+  "aif",
+  "aiff",
+  "caf",
+  "amr",
+  "3gp",
+  "mov",
+  "mkv",
+  "wma",
 ];
-const MAX_BYTES = 150 * 1024 * 1024;
+/**
+ * A file this size decodes to well over a gigabyte of 32-bit samples, which
+ * is where a phone stops decoding and starts reloading the tab. The old limit
+ * was 150MB and the crash it produced looked like the site being broken
+ * rather than the file being too big, so the bar now sits where the decode
+ * actually survives.
+ */
+const MAX_BYTES = 80 * 1024 * 1024;
+
+const ACCEPT = [
+  "audio/*",
+  "video/*",
+  ...ACCEPTED_EXTENSIONS.map((extension) => `.${extension}`),
+].join(",");
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatBytes(bytes: number) {
@@ -30,15 +54,25 @@ export function formatBytes(bytes: number) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function validateAudioFile(candidate: File): string | null {
   if (candidate.size === 0) return "קובץ האודיו ריק. יש לבחור קובץ שמכיל הקלטה.";
-  const extension = candidate.name.split(".").pop()?.toLowerCase() ?? "";
-  const looksAudio =
-    candidate.type.startsWith("audio/") ||
-    candidate.type.startsWith("video/") ||
-    ACCEPTED_EXTENSIONS.includes(extension);
-  if (!looksAudio) {
-    return "יש לבחור קובץ אודיו — למשל MP3, WAV, OGG, FLAC, M4A או AAC.";
+  if (candidate.size > MAX_BYTES) {
+    return `הקובץ גדול מ־${formatBytes(MAX_BYTES)} ולא ייפתח בלי לקרוס. אפשר לקצר אותו או להמיר אותו ל־MP3 קודם.`;
   }
-  if (candidate.size > MAX_BYTES) return "הקובץ גדול מדי. הגודל המרבי הוא 150MB.";
+
+  const parts = candidate.name.split(".");
+  const extension = parts.length > 1 ? parts.pop()!.toLowerCase() : "";
+  // A file picked from a cloud drive on Android very often arrives with an
+  // empty type and no extension at all. Rejecting it out of hand was the
+  // single most common way an upload failed here, and it failed on a guess:
+  // the decoder is the only thing that actually knows, so anything not
+  // obviously wrong is handed to it and judged on the result.
+  const clearlyNotAudio =
+    (candidate.type.startsWith("image/") ||
+      candidate.type.startsWith("text/") ||
+      candidate.type === "application/pdf") &&
+    !ACCEPTED_EXTENSIONS.includes(extension);
+  if (clearlyNotAudio) {
+    return "זה לא קובץ שמע. אפשר לבחור MP3, WAV, OGG, FLAC, M4A או AAC.";
+  }
   return null;
 }
 
@@ -67,6 +101,11 @@ export function useAudioFile() {
     [],
   );
 
+  // Picking a second file while the first is still decoding used to leave
+  // whichever finished last on screen. The token makes the most recent choice
+  // the one that wins, whatever order the decodes come back in.
+  const loadTokenRef = useRef(0);
+
   const load = useCallback(async (candidate?: File | null) => {
     if (!candidate) return;
     const problem = validateAudioFile(candidate);
@@ -74,33 +113,51 @@ export function useAudioFile() {
       setError(problem);
       return;
     }
+    loadTokenRef.current += 1;
+    const token = loadTokenRef.current;
     setIsLoading(true);
     setError(null);
     try {
-      const buffer = await decodeAudioFile(await candidate.arrayBuffer());
+      let data: ArrayBuffer;
+      try {
+        data = await candidate.arrayBuffer();
+      } catch {
+        // A file handed over by a cloud-drive app can vanish between being
+        // chosen and being read, and the browser's own message for that says
+        // nothing a person can act on.
+        throw new Error(
+          "לא הצלחנו לקרוא את הקובץ מהמכשיר. אם הוא נמצא ב־Drive או ב־iCloud, כדאי להוריד אותו למכשיר ולנסות שוב.",
+        );
+      }
+      const buffer = await decodeAudioFile(data);
+      if (loadTokenRef.current !== token) return;
       if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) {
-        throw new Error("קובץ האודיו ריק או פגום.");
+        throw new Error("הקובץ נפתח אבל אין בו שמע.");
       }
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       const url = URL.createObjectURL(candidate);
       urlRef.current = url;
       setAudio({ file: candidate, buffer, url });
     } catch (caught) {
+      if (loadTokenRef.current !== token) return;
+      const reason = caught instanceof Error ? caught.message : "";
       setError(
-        caught instanceof Error
-          ? `לא הצלחנו לפתוח את הקובץ. ${caught.message}`
-          : "לא הצלחנו לפתוח את הקובץ.",
+        reason
+          ? `לא הצלחנו לפתוח את „${candidate.name}”. ${reason}`
+          : `לא הצלחנו לפתוח את „${candidate.name}”. ייתכן שהפורמט אינו נתמך בדפדפן הזה — המרה ל־MP3 או ל־WAV בדרך כלל פותרת את זה.`,
       );
     } finally {
-      setIsLoading(false);
+      if (loadTokenRef.current === token) setIsLoading(false);
     }
   }, []);
 
   const clear = useCallback(() => {
+    loadTokenRef.current += 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     urlRef.current = null;
     setAudio(null);
     setError(null);
+    setIsLoading(false);
   }, []);
 
   return { audio, error, setError, isLoading, load, clear };
@@ -236,7 +293,7 @@ export function AudioPicker({
           <input
             className="native-file-input"
             type="file"
-            accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,audio/*,video/*"
+            accept={ACCEPT}
             onChange={pickFromInput}
             aria-label="החלפת קובץ שמע"
           />
@@ -262,7 +319,19 @@ export function AudioPicker({
           event.preventDefault();
           setIsDragging(false);
           if (isLoading) return;
-          onPick(event.dataTransfer.files[0]);
+          // Dragging a selection of text or an image out of another tab also
+          // fires a drop; without the guard that cleared the current song and
+          // replaced it with an error.
+          const dropped = Array.from(event.dataTransfer.files);
+          if (!dropped.length) return;
+          const audioish = dropped.find(
+            (file) =>
+              file.type.startsWith("audio/") ||
+              ACCEPTED_EXTENSIONS.includes(
+                file.name.split(".").pop()?.toLowerCase() ?? "",
+              ),
+          );
+          onPick(audioish ?? dropped[0]);
         }}
         aria-disabled={isLoading}
       >
@@ -270,11 +339,17 @@ export function AudioPicker({
           <UploadCloud size={32} />
         </span>
         <strong>{isLoading ? "טוען את הקובץ…" : "גרור לכאן שיר או לחץ לבחירה"}</strong>
-        <span>{hint ?? "MP3, WAV, OGG, FLAC, M4A, AAC · עד 150MB"}</span>
+        <span>{hint ?? `MP3, WAV, OGG, FLAC, M4A, AAC · עד ${formatBytes(MAX_BYTES)}`}</span>
+        {/* The input sits inside the label rather than being clicked from
+            script: iOS Safari and several Android WebViews refuse a
+            programmatic `.click()` on a file input, which is what made the
+            picker simply not open there. A bare `audio/*` also hides files
+            whose type the phone failed to work out — on Android that is most
+            of what sits in a cloud drive — so the extensions are listed too. */}
         <input
           className="native-file-input"
           type="file"
-          accept=".mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,audio/*,video/*"
+          accept={ACCEPT}
           disabled={isLoading}
           onChange={pickFromInput}
           aria-label="בחירת קובץ שמע"
