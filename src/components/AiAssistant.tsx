@@ -1,6 +1,7 @@
-import { Bot, LogIn, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, CircleHelp, LogIn, MousePointerClick, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { AiError, chat, type ChatMessage } from "../lib/aiApi";
+import { AiError, chat, type AssistantMode, type ChatMessage } from "../lib/aiApi";
+import { findTool } from "../lib/tools";
 import { useAuth } from "../lib/auth";
 
 type Props = {
@@ -39,6 +40,7 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
   const { user, signInWithGoogle } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>(loadHistory);
   const [draft, setDraft] = useState("");
+  const [mode, setMode] = useState<AssistantMode>("question");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -82,9 +84,15 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
       // The page the visitor is on travels with the question, quietly.
       const context = toolTitle ? `(הגולש נמצא כרגע בכלי "${toolTitle}".) ` : "";
       const history = next.slice(0, -1).concat({ role: "user", content: `${context}${clean}` });
-      const reply = await chat(history, controller.signal);
+      const reply = await chat(history, { mode, signal: controller.signal });
       if (controller.signal.aborted) return;
       setMessages([...next, { role: "assistant", content: reply.text }]);
+      if (mode === "execute" && reply.action?.type === "navigate") {
+        const destination = findTool(reply.action.route);
+        if (destination) {
+          window.location.hash = `#/${destination.id}`;
+        }
+      }
     } catch (caught) {
       if (controller.signal.aborted) return;
       setError(caught instanceof AiError || caught instanceof Error ? caught.message : "לא הצלחנו לענות.");
@@ -146,6 +154,27 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
             </button>
           </header>
 
+          <div className="segmented-control assistant-mode" role="group" aria-label="מצב העוזר">
+            <button
+              type="button"
+              className={mode === "question" ? "active" : ""}
+              aria-pressed={mode === "question"}
+              onClick={() => setMode("question")}
+              disabled={busy}
+            >
+              <CircleHelp size={15} /> מצב שאלה
+            </button>
+            <button
+              type="button"
+              className={mode === "execute" ? "active" : ""}
+              aria-pressed={mode === "execute"}
+              onClick={() => setMode("execute")}
+              disabled={busy}
+            >
+              <MousePointerClick size={15} /> מצב ביצוע
+            </button>
+          </div>
+
           <div className="assistant-messages" ref={listRef} aria-live="polite">
             {messages.length === 0 && (
               <div className="assistant-empty">
@@ -191,7 +220,7 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
                   }
                 }}
                 rows={1}
-                placeholder="כתוב שאלה…"
+                placeholder={mode === "execute" ? "כתוב מה לבצע…" : "כתוב שאלה…"}
                 aria-label="השאלה שלך"
                 disabled={busy}
                 dir="auto"
