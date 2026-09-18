@@ -5,8 +5,10 @@ import {
   Download,
   FileText,
   Languages,
+  ListChecks,
   LogIn,
   Play,
+  Sparkles,
   Wand2,
   X,
 } from "lucide-react";
@@ -17,6 +19,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
+import { AiError, transformText, type AiAction } from "../lib/aiApi";
 import { useAuth } from "../lib/auth";
 import {
   CANCELLED,
@@ -57,6 +60,23 @@ const WINDOW_SECONDS = 240;
 const LONG_SECONDS = WINDOW_SECONDS * 1.5;
 
 type Saved = { language: string | null };
+
+/** Where a translation can go; the label is what the model is told. */
+const TRANSLATE_TO = [
+  { id: "en", label: "אנגלית" },
+  { id: "he", label: "עברית" },
+  { id: "ar", label: "ערבית" },
+  { id: "ru", label: "רוסית" },
+  { id: "fr", label: "צרפתית" },
+  { id: "es", label: "ספרדית" },
+];
+
+type AiJob = Exclude<AiAction, "chat">;
+const AI_LABELS: Record<AiJob, string> = {
+  polish: "נוסח ערוך",
+  summarize: "סיכום",
+  translate: "תרגום",
+};
 
 function loadSaved(): Saved {
   const fallback: Saved = { language: "he" };
@@ -172,6 +192,14 @@ export function TranscriptTool({ initial = null }: Props) {
   // Where to pick up after a stop or a failure: the window that did not finish.
   const [resume, setResume] = useState<{ windows: SampleWindow[]; index: number } | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
+  // The language model's take on the text: one result at a time, kept apart
+  // from the transcript so the timestamps underneath stay true.
+  const [ai, setAi] = useState<{ job: AiJob; text: string; language?: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState<AiJob | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiCopied, setAiCopied] = useState(false);
+  const [translateTo, setTranslateTo] = useState("en");
+  const aiAbortRef = useRef<AbortController | null>(null);
   const [finished, setFinished] = useState<{ seconds: number; model: string } | null>(null);
   const saving = useSaveWork();
   const resetSave = saving.reset;
@@ -381,6 +409,53 @@ export function TranscriptTool({ initial = null }: Props) {
     }
   };
 
+  const runAi = async (job: AiJob) => {
+    if (!text.trim() || aiBusy) return;
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setAiBusy(job);
+    setAiError(null);
+    try {
+      const target = TRANSLATE_TO.find((item) => item.id === translateTo);
+      const reply = await transformText(job, text, {
+        language: job === "translate" ? target?.label : undefined,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setAi({ job, text: reply.text, language: job === "translate" ? target?.label : undefined });
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      setAiError(caught instanceof AiError || caught instanceof Error ? caught.message : "הפעולה נכשלה.");
+    } finally {
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+        setAiBusy(null);
+      }
+    }
+  };
+
+  const copyAi = async () => {
+    if (!ai) return;
+    try {
+      await navigator.clipboard.writeText(ai.text);
+      setAiCopied(true);
+      window.setTimeout(() => setAiCopied(false), 2000);
+    } catch {
+      setAiError("לא הצלחנו להעתיק. אפשר לסמן את הטקסט ולהעתיק ידנית.");
+    }
+  };
+
+  const downloadAi = () => {
+    if (!ai) return;
+    const suffix = ai.job === "polish" ? "ערוך" : ai.job === "summarize" ? "סיכום" : `תרגום-${ai.language ?? ""}`;
+    downloadFile(
+      new File([`\uFEFF${ai.text}`], `${safeFilename(`${title}-${suffix}`)}.txt`, { type: "text/plain;charset=utf-8" }),
+      `${safeFilename(`${title}-${suffix}`)}.txt`,
+      "text/plain;charset=utf-8",
+    );
+  };
+
   const saveTranscript = () => {
     if (!result || !segments.length) return;
     void saving.save({
@@ -394,7 +469,12 @@ export function TranscriptTool({ initial = null }: Props) {
         languageLabel: languageLabel(result.language),
         segments: segments.length,
       },
-      payload: { segments, language: result.language, model: result.model },
+      payload: {
+        segments,
+        language: result.language,
+        model: result.model,
+        ...(ai ? { ai: { job: ai.job, text: ai.text, language: ai.language ?? null } } : {}),
+      },
     });
   };
 
@@ -624,6 +704,111 @@ export function TranscriptTool({ initial = null }: Props) {
               </li>
             ))}
           </ol>
+
+          <div className="ai-separator transcript-ai">
+            <div className="ai-separator-head">
+              <span className="tool-intro-icon">
+                <Sparkles size={20} />
+              </span>
+              <div>
+                <h3>
+                  <Sparkles size={16} /> עיבוד עם AI
+                </h3>
+                <p>
+                  פיסוק ופסקאות, סיכום או תרגום — נעשה בשרת, בלי להתקין דבר. הכתוביות שומרות על
+                  הזמנים המקוריים.
+                </p>
+              </div>
+            </div>
+            <div className="transcript-ai-actions">
+              <button
+                type="button"
+                className="chip-toggle"
+                onClick={() => void runAi("polish")}
+                disabled={!text.trim() || aiBusy !== null || busy}
+              >
+                <Wand2 size={15} /> {aiBusy === "polish" ? "מנסח…" : "פיסוק ופסקאות"}
+              </button>
+              <button
+                type="button"
+                className="chip-toggle"
+                onClick={() => void runAi("summarize")}
+                disabled={!text.trim() || aiBusy !== null || busy}
+              >
+                <ListChecks size={15} /> {aiBusy === "summarize" ? "מסכם…" : "סיכום"}
+              </button>
+              <span className="transcript-ai-translate">
+                <button
+                  type="button"
+                  className="chip-toggle"
+                  onClick={() => void runAi("translate")}
+                  disabled={!text.trim() || aiBusy !== null || busy}
+                >
+                  <Languages size={15} /> {aiBusy === "translate" ? "מתרגם…" : "תרגום ל־"}
+                </button>
+                <select
+                  value={translateTo}
+                  onChange={(event) => setTranslateTo(event.target.value)}
+                  aria-label="שפת היעד לתרגום"
+                  disabled={aiBusy !== null}
+                >
+                  {TRANSLATE_TO.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </div>
+            {!user && !authLoading && (
+              <small className="ai-status" role="status">
+                כדי להשתמש ב־AI צריך להתחבר לחשבון.
+              </small>
+            )}
+            {aiBusy && (
+              <div className="progress-track indeterminate" aria-label="ה־AI עובד">
+                <div />
+              </div>
+            )}
+            {aiError && (
+              <div className="error-message" role="alert">
+                {aiError}
+              </div>
+            )}
+            {ai && !aiBusy && (
+              <div className="transcript-ai-result">
+                <div className="results-header">
+                  <span className="eyebrow-small">
+                    <Sparkles size={14} /> {AI_LABELS[ai.job]}
+                    {ai.language ? ` — ${ai.language}` : ""}
+                  </span>
+                  <div className="transcript-ai-tools">
+                    <button type="button" className="link-button" onClick={() => void copyAi()}>
+                      {aiCopied ? <Check size={14} /> : <Copy size={14} />} {aiCopied ? "הועתק" : "העתק"}
+                    </button>
+                    <button type="button" className="link-button" onClick={downloadAi}>
+                      <Download size={14} /> הורד TXT
+                    </button>
+                    {ai.job === "polish" && (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => {
+                          setText(ai.text);
+                          setNotice("הנוסח הערוך הוחלף בטקסט. השורות והזמנים של הכתוביות עודכנו בהתאם.");
+                        }}
+                      >
+                        <Check size={14} /> החלף את הטקסט בנוסח הערוך
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="transcript-ai-text" dir="auto">
+                  {ai.text}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="downloads-card transcript-downloads">
             <div>

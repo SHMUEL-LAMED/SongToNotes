@@ -227,6 +227,8 @@ const [karaoke] = await Promise.all([
 const karaokeStats = rmsOf(await karaoke.path());
 log(karaokeStats.frames > 1000 && karaokeStats.rms > 0.001, "vocals: the karaoke export is real audio",
   `rms ${karaokeStats.rms.toFixed(3)}, ${karaokeStats.frames} samples`);
+log(/בשרת/.test((await page.locator(".ai-separator p").first().textContent()) ?? ""),
+  "vocals: the AI separation is described as server work, nothing to download");
 
 // --- speed tool renders a stretched buffer ---
 await page.goto(`${BASE}#/speed`, { waitUntil: "load" });
@@ -479,6 +481,24 @@ const [srt] = await Promise.all([
 ]);
 const srtText = readFileSync(await srt.path(), "utf8");
 log(/00:00:04,500 --> 00:00:09,000\nברוכים הבאים לשיעור/.test(srtText), "transcript: the SRT download carries the cues");
+
+// The AI card sits under the transcript: server work, so signed out it only
+// explains, and nothing on it asks for a download.
+log(await page.locator(".transcript-ai").isVisible(), "transcript: the AI card (tidy, summary, translation) is offered");
+log((await page.locator(".transcript-ai-actions .chip-toggle").count()) === 3, "transcript: three AI actions");
+log(/להתחבר/.test((await page.locator(".transcript-ai .ai-status").textContent().catch(() => "")) ?? ""),
+  "transcript: signed out, the AI card says to sign in");
+
+// --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
+log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");
+await page.locator(".assistant-launcher").click();
+await page.waitForSelector(".assistant-panel", { timeout: 5_000 });
+log(true, "assistant: the panel opens");
+log((await page.locator(".assistant-suggestions .chip-toggle").count()) >= 3, "assistant: offers suggested questions");
+log(await page.locator(".assistant-signin").isVisible(), "assistant: signed out, it asks to sign in instead of sending");
+await page.keyboard.press("Escape");
+await page.waitForSelector(".assistant-panel", { state: "detached", timeout: 5_000 });
+log(true, "assistant: Escape closes it");
 
 // --- the personal area: every tool saves, and the drawer shows it all ---
 // Signed out, so everything below goes to this device; the drawer must still

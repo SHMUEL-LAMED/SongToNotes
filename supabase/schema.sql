@@ -277,3 +277,20 @@ as $$
 $$;
 revoke all on function public.stt_settings() from public, anon, authenticated;
 grant execute on function public.stt_settings() to service_role;
+
+-- ---------------------------------------------------------------------------
+-- The other server-side AI work — the language model (supabase/functions/ai)
+-- and vocal separation (supabase/functions/separate) — keeps its daily
+-- allowances here, one row per account, day and kind ('ai' counts tokens,
+-- 'separation' counts songs). Service role only.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.ai_usage (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  day date not null,
+  kind text not null,
+  amount integer not null default 0,
+  primary key (user_id, day, kind)
+);
+
+alter table public.ai_usage enable row level security;

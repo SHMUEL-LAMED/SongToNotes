@@ -1,5 +1,8 @@
 import { Cpu, Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AiError, separateOnServer } from "../lib/aiApi";
+import { decodeAudioFile } from "../lib/audio";
+import { useAuth } from "../lib/auth";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -52,9 +55,11 @@ function readInitial(work: SavedWork | null | undefined) {
  *
  * The fast path reads the stereo image bin by bin — see {@link ../lib/separate}
  * for why that is a different thing from subtracting one channel from the
- * other. The AI path runs a real separation network on the device for anyone
- * whose browser can, and is the only option that works on a mono recording or
- * on a mix where the singer is not centred.
+ * other. The AI path sends the song to the site's server, where a real
+ * separation network runs ({@link ../lib/aiApi}); nothing is fetched onto
+ * the device. It is the only option that works on a mono recording or on a
+ * mix where the singer is not centred. Until the server has a key, the same
+ * network can still run in the browser, at the cost of a large download.
  */
 export function VocalsTool({ initial = null }: Props) {
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
@@ -64,7 +69,11 @@ export function VocalsTool({ initial = null }: Props) {
   const [keepBass, setKeepBass] = useState(restored.keepBass);
   const [compare, setCompare] = useState(false);
   const [context] = useState(sharedContext);
+  const { user } = useAuth();
   const separation = useSeparation(context);
+  const aiAbortRef = useRef<AbortController | null>(null);
+  // Set when the server has no separation key yet, so the browser path is offered.
+  const [serverMissing, setServerMissing] = useState(false);
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
@@ -81,9 +90,11 @@ export function VocalsTool({ initial = null }: Props) {
   const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => () => void context?.close(), [context]);
-  // Fetched in the background from the moment the tool opens, so pressing
-  // the AI button later does not begin with a long first-time wait.
-  useEffect(() => prefetchSeparationModel(), []);
+  // The network is fetched only once the visitor has chosen the browser path:
+  // it is 180MB, and the server path needs none of it.
+  useEffect(() => {
+    if (serverMissing) prefetchSeparationModel();
+  }, [serverMissing]);
 
   const runFast = separation.run;
   const settingsKey = audio
@@ -131,7 +142,51 @@ export function VocalsTool({ initial = null }: Props) {
   const result = matches ? rendered.buffer : null;
   const wasMono = matches ? rendered.wasMono : false;
 
+  /** The server path: upload, wait, fetch the stem the visitor asked for. */
   const runAi = useCallback(async () => {
+    if (!audio || !context) return;
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setAiBusy(true);
+    setAiProgress(0);
+    setAiStatus("מכין את ההפרדה…");
+    try {
+      const stems = await separateOnServer(
+        audio.file,
+        decodeAudioFile,
+        (message, percent) => {
+          if (controller.signal.aborted) return;
+          setAiStatus(message);
+          if (percent !== null) setAiProgress(percent);
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      const picked = target === "instrumental" ? stems.instrumental : stems.vocals;
+      if (!picked) throw new AiError("provider_error", "השרת לא החזיר את הערוץ המבוקש.");
+      setRendered({ key: settingsKey, buffer: picked, wasMono: false });
+      setUsedAi(true);
+      setAiProgress(100);
+      setAiStatus(`ההפרדה הושלמה בשרת. נוצלו היום ${stems.used} מתוך ${stems.limit} שירים.`);
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      if (caught instanceof AiError && caught.code === "not_configured") {
+        setServerMissing(true);
+        setAiStatus("ההפרדה בשרת עדיין לא הופעלה. אפשר להפריד בדפדפן — זה מוריד רשת של 180MB בפעם הראשונה.");
+      } else {
+        setAiStatus(caught instanceof Error ? caught.message : "ההפרדה נכשלה.");
+      }
+    } finally {
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+        setAiBusy(false);
+      }
+    }
+  }, [audio, context, settingsKey, target]);
+
+  /** The browser path, offered only while the server has no key. */
+  const runAiInBrowser = useCallback(async () => {
     if (!audio || !context) return;
     setAiBusy(true);
     setAiProgress(0);
@@ -373,7 +428,10 @@ export function VocalsTool({ initial = null }: Props) {
                   <h3>
                     <Sparkles size={16} /> הפרדה מלאה עם AI
                   </h3>
-                  <p>ההפעלה הראשונה עשויה להימשך כמה דקות.</p>
+                  <p>
+                    נעשית בשרת של האתר — אין מה להוריד או להתקין, וזה עובד גם בטלפון. לוקח בדרך
+                    כלל כדקה.{!user ? " צריך להתחבר לחשבון." : ""}
+                  </p>
                 </div>
               </div>
               <>
@@ -388,6 +446,25 @@ export function VocalsTool({ initial = null }: Props) {
                     ? "הפק אינסטרומנטלי עם AI"
                     : "הפק שירה בלבד עם AI"}
                 </button>
+                {serverMissing && !aiBusy && (
+                  <button className="link-button" type="button" onClick={runAiInBrowser} disabled={busy}>
+                    <Cpu size={14} /> הפרד בדפדפן במקום (הורדה חד־פעמית של 180MB)
+                  </button>
+                )}
+                {aiBusy && (
+                  <button
+                    className="link-button"
+                    type="button"
+                    onClick={() => {
+                      aiAbortRef.current?.abort();
+                      aiAbortRef.current = null;
+                      setAiBusy(false);
+                      setAiStatus("ההפרדה בוטלה.");
+                    }}
+                  >
+                    בטל
+                  </button>
+                )}
                 {aiBusy && (
                   <div
                     className="progress-track"
