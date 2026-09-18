@@ -254,3 +254,26 @@ create table if not exists public.stt_usage (
 );
 
 alter table public.stt_usage enable row level security;
+
+-- The function's settings can live here instead of as function secrets;
+-- the private schema is not exposed through the API and only the service
+-- role reads the table. Keys: STT_API_KEY, STT_BASE_URL, STT_MODEL,
+-- STT_DAILY_SECONDS.
+create table if not exists private.stt_settings (
+  key text primary key,
+  value text not null
+);
+revoke all on private.stt_settings from anon, authenticated;
+
+-- The private schema is not served by the API, so the function reads the
+-- settings through this RPC, which only the service role may call.
+create or replace function public.stt_settings()
+returns table (key text, value text)
+language sql
+security definer
+set search_path = private
+as $$
+  select key, value from private.stt_settings;
+$$;
+revoke all on function public.stt_settings() from public, anon, authenticated;
+grant execute on function public.stt_settings() to service_role;

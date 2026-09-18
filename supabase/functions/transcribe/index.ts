@@ -7,14 +7,15 @@
  * the site; a visitor has to be signed in, and each account gets a daily
  * allowance of audio so one person cannot run up the bill.
  *
- * Secrets (Project Settings → Edge Functions → Secrets):
+ * Settings, as function secrets (Project Settings → Edge Functions → Secrets)
+ * or as rows of private.stt_settings, which only the service role reads:
  *   STT_API_KEY        the service's key — required
  *   STT_BASE_URL       an OpenAI-compatible base, default https://api.openai.com/v1
  *                      (Groq: https://api.groq.com/openai/v1)
  *   STT_MODEL          default whisper-1 (Groq: whisper-large-v3)
  *   STT_DAILY_SECONDS  audio allowed per account per day, default 4 hours
  */
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const DEFAULT_DAILY_SECONDS = 4 * 3600;
@@ -55,18 +56,33 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 type Segment = { start: number; end: number | null; text: string };
 
+/** A secret wins; the private table is the fallback for a project set up from the database. */
+async function settings(admin: SupabaseClient) {
+  const fromEnv = (name: string) => Deno.env.get(name)?.trim() || undefined;
+  const { data } = await admin.rpc("stt_settings");
+  const stored = new Map((data ?? []).map((row: { key: string; value: string }) => [row.key, row.value]));
+  const get = (name: string) => fromEnv(name) ?? stored.get(name)?.trim() ?? undefined;
+  return {
+    apiKey: get("STT_API_KEY"),
+    baseUrl: (get("STT_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/+$/, ""),
+    model: get("STT_MODEL") ?? "whisper-1",
+    dailySeconds: Number(get("STT_DAILY_SECONDS")) || DEFAULT_DAILY_SECONDS,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "method" });
 
-  const apiKey = Deno.env.get("STT_API_KEY");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { apiKey, baseUrl: base, model, dailySeconds: limit } = await settings(admin);
   if (!apiKey) return json(503, { error: "not_configured" });
 
   const authorization = req.headers.get("Authorization") ?? "";
   const token = authorization.replace(/^Bearer\s+/i, "").trim();
   if (!token) return json(401, { error: "signed_out" });
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const asVisitor = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: authorization } },
   });
@@ -87,8 +103,6 @@ Deno.serve(async (req) => {
   const seconds = Math.max(1, Math.round(wavSeconds(bytes)));
 
   // The daily allowance, kept with the service role so the site cannot edit it.
-  const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const limit = Number(Deno.env.get("STT_DAILY_SECONDS")) || DEFAULT_DAILY_SECONDS;
   const day = new Date().toISOString().slice(0, 10);
   const { data: usage } = await admin
     .from("stt_usage")
@@ -101,8 +115,6 @@ Deno.serve(async (req) => {
     return json(429, { error: "quota", used, limit });
   }
 
-  const base = (Deno.env.get("STT_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  const model = Deno.env.get("STT_MODEL") ?? "whisper-1";
   const upstream = new FormData();
   upstream.append("file", new Blob([bytes], { type: "audio/wav" }), "audio.wav");
   upstream.append("model", model);
