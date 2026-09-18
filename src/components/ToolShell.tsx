@@ -1,5 +1,5 @@
 import { ArrowRight, History, LockKeyhole, Music2, UserRound } from "lucide-react";
-import { useEffect, type PropsWithChildren } from "react";
+import { useEffect, useRef, type PropsWithChildren } from "react";
 import { useAuth } from "../lib/auth";
 import type { ThemePreference } from "../lib/theme";
 import type { ToolDefinition } from "../lib/tools";
@@ -29,6 +29,7 @@ export function ToolShell({
   children,
 }: Props) {
   const { user, profile, signInWithGoogle } = useAuth();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.title = tool
@@ -41,6 +42,15 @@ export function ToolShell({
       className={tool ? "page tool-page" : "page hub-page"}
       style={tool ? ({ "--accent-hue": tool.hue } as React.CSSProperties) : undefined}
     >
+      {/* A link would put its target in the hash and send the router to an
+          unknown route, so the skip control moves focus itself. */}
+      <button
+        type="button"
+        className="skip-link"
+        onClick={() => contentRef.current?.focus()}
+      >
+        דלג לתוכן
+      </button>
       <nav className="topbar">
         <div className="topbar-start">
           <button
@@ -105,7 +115,14 @@ export function ToolShell({
           )}
         </div>
       </nav>
-      {children}
+      {/* Moving between tools changes the hash, not the document, so a screen
+          reader is told nothing on its own. This says where we landed. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {tool ? `${tool.title} — ${tool.tagline}` : "כל הכלים"}
+      </p>
+      <div className="page-content" ref={contentRef} tabIndex={-1}>
+        {children}
+      </div>
     </main>
   );
 }

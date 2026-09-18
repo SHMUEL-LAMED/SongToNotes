@@ -50,6 +50,17 @@ const log = (ok, name, extra = "") => {
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
 
+// Counting the voices the synth starts is the only way from outside the page
+// to tell one playback from two overlapping ones.
+await page.addInitScript(() => {
+  window.__oscillators = 0;
+  const create = AudioContext.prototype.createOscillator;
+  AudioContext.prototype.createOscillator = function countingCreateOscillator() {
+    window.__oscillators += 1;
+    return create.call(this);
+  };
+});
+
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
@@ -60,16 +71,16 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 8, "hub renders all 8 tool cards", `found ${cards}`);
+log(cards === 9, "hub renders all 9 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
 const filtered = await page.locator(".tool-card").count();
-log(filtered >= 1 && filtered < 8, "hub search filters", `found ${filtered}`);
+log(filtered >= 1 && filtered < 9, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "analyze"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -229,6 +240,172 @@ const metroButton = page.locator(".tool-body button").first();
 await metroButton.click();
 await page.waitForTimeout(700);
 log(true, "metronome: start button responds");
+
+// --- ear trainer: a question really plays and the score really moves ---
+await page.goto(`${BASE}#/ear`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+// A fresh score, whatever an earlier run left in this profile's storage.
+await page.evaluate(() => localStorage.removeItem("musictools.eartraining.v1"));
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+const earChoices = await page.locator(".ear-choices button").count();
+log(earChoices >= 2, "ear: the beginner round offers its answers", `found ${earChoices}`);
+
+// Whichever button is pressed, exactly one answer must come back right.
+await page.locator(".ear-choices button").first().click();
+await page.waitForTimeout(200);
+const marked = await page.locator(".ear-choices button.is-right").count();
+log(marked === 1, "ear: the answer is revealed on exactly one button", `found ${marked}`);
+const askedAfterOne = await page.locator(".ear-score strong").first().textContent();
+log(askedAfterOne === "1", "ear: answering counts the question", `asked ${askedAfterOne}`);
+log(
+  await page.locator(".ear-choices button").first().isDisabled(),
+  "ear: the buttons lock once the answer is in",
+);
+
+// Enter moves on; the next question arrives unanswered.
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  (await page.locator(".ear-choices button.is-right").count()) === 0,
+  "ear: Enter starts a fresh question",
+);
+// Switching exercise must not leave the previous question's buttons up.
+await page.locator(".segmented-control button", { hasText: "אקורדים" }).first().click();
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-choices").count()) === 0 &&
+    (await page.locator(".ear-empty").isVisible()),
+  "ear: changing the exercise clears the old question",
+);
+const chordScore = await page.locator(".ear-score strong").first().textContent();
+log(chordScore === "0", "ear: each exercise keeps its own score", `asked ${chordScore}`);
+
+// Back to the two-note exercise, with a question sounding, for the checks
+// below: both the shortcuts and the replay need one on screen.
+await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().click();
+await page.waitForTimeout(200);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+
+// The browser's own shortcuts stay the browser's: Ctrl+R must still reload.
+const modifierVerdict = await page.evaluate(() => {
+  const press = (init) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  return {
+    reload: press({ key: "r", ctrlKey: true }),
+    command: press({ key: "r", metaKey: true }),
+    tab: press({ key: "1", ctrlKey: true }),
+    plain: press({ key: "r" }),
+  };
+});
+log(
+  !modifierVerdict.reload && !modifierVerdict.command && !modifierVerdict.tab,
+  "ear: Ctrl/Cmd shortcuts are left to the browser",
+  JSON.stringify(modifierVerdict),
+);
+log(modifierVerdict.plain, "ear: plain R still replays the question");
+
+// Replaying mid-phrase must schedule the notes once, not twice.
+const oscillators = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const button = document.querySelector(".ear-playback .primary-button");
+  button.click();
+  await wait(250); // the phrase is now under way
+  const before = window.__oscillators ?? 0;
+  button.click(); // replay on top of it
+  await wait(2500);
+  return (window.__oscillators ?? 0) - before;
+});
+// A beginner interval is two notes, and the piano voice gives each two
+// oscillators: four for one pass, twice that when a replay starts two.
+log(
+  oscillators > 0 && oscillators <= 5,
+  "ear: replaying mid-phrase starts the notes once",
+  `${oscillators} oscillators`,
+);
+
+// A keystroke from outside the trainer — the top bar, or the account dialog
+// that opens over it — must not answer the hidden question.
+const askedBeforeOutside = await page.locator(".ear-score strong").first().textContent();
+await page.locator("button.theme-toggle").focus();
+await page.keyboard.press("1");
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-score strong").first().textContent()) === askedBeforeOutside &&
+    (await page.locator(".ear-choices button.is-right").count()) === 0,
+  "ear: a digit pressed outside the trainer does not answer the question",
+);
+
+// Enter on a focused button must press that button, not fire the shortcut.
+await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().focus();
+await page.keyboard.press("Enter");
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-choices").count()) === 0 &&
+    (await page
+      .locator(".segmented-control button", { hasText: "מרווחים" })
+      .first()
+      .getAttribute("aria-pressed")) === "true",
+  "ear: Enter on a focused button presses it instead of starting a question",
+);
+// With focus off the controls the shortcut is back.
+await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  (await page.locator(".ear-choices button").count()) > 0,
+  "ear: Enter outside the controls still starts a question",
+);
+
+// The hard interval level has twelve answers but a keyboard has nine digits,
+// so only nine may carry a shortcut — and the hint must say nine.
+await page.locator(".segmented-control button", { hasText: "מתקדם" }).first().click();
+await page.waitForTimeout(200);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+const hardChoices = await page.locator(".ear-choices button").count();
+const keyed = await page.locator(".ear-choices button[aria-keyshortcuts]").count();
+const hint = (await page.locator(".ear-hint").textContent()) ?? "";
+log(hardChoices === 12, "ear: the advanced interval round offers all twelve", `found ${hardChoices}`);
+log(keyed === 9, "ear: only the answers a digit can reach carry a shortcut", `found ${keyed}`);
+log(/1–9/.test(hint), "ear: the hint promises nine keys, not twelve", hint.replace(/\s+/g, " ").trim());
+
+// --- the skip control reaches the content without hijacking the route ---
+await page.goto(`${BASE}#/metronome`, { waitUntil: "load" });
+// A hash-only navigation keeps the page — and with it whatever was clicked
+// last — so the tab order is measured from a reloaded, untouched page.
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.keyboard.press("Tab");
+const firstStop = await page.evaluate(
+  () => `${document.activeElement?.tagName}.${document.activeElement?.className}`,
+);
+log(
+  firstStop.includes("skip-link"),
+  "a11y: the skip control is the first stop for the keyboard",
+  firstStop,
+);
+await page.keyboard.press("Enter");
+await page.waitForTimeout(250);
+const skipLanded = await page.evaluate(() => ({
+  focused: document.activeElement?.classList.contains("page-content"),
+  hash: window.location.hash,
+}));
+log(
+  skipLanded.focused && skipLanded.hash === "#/metronome",
+  "a11y: skipping moves focus to the content and keeps the route",
+  `hash ${skipLanded.hash}`,
+);
+log(
+  Boolean(await page.locator("p.sr-only[aria-live=polite]").first().textContent()),
+  "a11y: the page announces which tool is open",
+);
 
 // --- dark/light toggle ---
 await page.goto(BASE, { waitUntil: "load" });
