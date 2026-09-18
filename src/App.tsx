@@ -1,14 +1,15 @@
 import { Music2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { AccountPanel } from "./components/AccountPanel";
+import { AccountDrawer } from "./components/AccountDrawer";
 import { AppNotices } from "./components/AppNotices";
 import { Hub } from "./components/Hub";
 import { ToolShell } from "./components/ToolShell";
 import { useAuth } from "./lib/auth";
-import type { SavedTranscription } from "./lib/history";
 import { useRoute } from "./lib/router";
 import { useTheme } from "./lib/theme";
 import { findTool } from "./lib/tools";
+import type { DetectedNote } from "./lib/types";
+import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
 import { EarTrainingTool } from "./tools/EarTrainingTool";
 import { MetronomeTool } from "./tools/MetronomeTool";
@@ -26,15 +27,43 @@ const TranscriberTool = lazy(() =>
   import("./tools/TranscriberTool").then((module) => ({ default: module.TranscriberTool })),
 );
 
+/**
+ * A saved transcription or piano recording, in the shape the transcriber
+ * starts from. Anything that is not a list of notes opens as an empty page
+ * rather than crashing the engraver.
+ */
+function toPendingTranscription(work: SavedWork): PendingTranscription {
+  const notes = Array.isArray(work.payload.notes)
+    ? (work.payload.notes as unknown[]).filter(
+        (note): note is DetectedNote =>
+          typeof note === "object" &&
+          note !== null &&
+          typeof (note as DetectedNote).midi === "number" &&
+          typeof (note as DetectedNote).start === "number" &&
+          typeof (note as DetectedNote).duration === "number",
+      )
+    : [];
+  return {
+    title: work.title,
+    notes,
+    analysisOffset: Number(work.payload.analysisOffset) || 0,
+    settings: normalizeSettings(work.payload.settings as Partial<Settings> | undefined),
+  };
+}
+
 function WorkspaceApp() {
   const { route, navigate } = useRoute();
+  const { user } = useAuth();
   const theme = useTheme();
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
-  // Bumped with every history entry opened, so the transcriber remounts and
-  // starts from that entry instead of merging it into whatever is on screen.
-  const [incoming, setIncoming] = useState<{ key: number; item: PendingTranscription } | null>(null);
+  // A saved work the personal area asked a tool to open. The key bumps with
+  // every opening so the tool remounts and starts from that work instead of
+  // merging it into whatever is on screen; the route it was opened for keeps
+  // an old choice from reappearing when the tool is visited on its own.
+  const [pending, setPending] = useState<{ key: number; work: SavedWork; route: string } | null>(
+    null,
+  );
   const [shellError, setShellError] = useState<string | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const tool = findTool(route);
 
@@ -48,37 +77,52 @@ function WorkspaceApp() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [route]);
 
-  const openSaved = useCallback(
-    (item: SavedTranscription) => {
-      setIncoming((current) => ({
-        key: (current?.key ?? 0) + 1,
-        item: {
-          title: item.title,
-          notes: Array.isArray(item.raw_notes) ? item.raw_notes : [],
-          analysisOffset: Number(item.analysis_offset) || 0,
-          settings: normalizeSettings(item.settings as Partial<Settings>),
-        },
-      }));
-      setAccountOpen(false);
-      navigate("notes");
+  // Signing in uploads whatever this device saved while signed out, so the
+  // personal area is complete on the first visit rather than after one.
+  useEffect(() => {
+    if (!user) return;
+    void syncLocalWorks(user.id).catch(() => undefined);
+  }, [user]);
+
+  const go = useCallback(
+    (next: string) => {
+      setPending(null);
+      navigate(next);
     },
     [navigate],
   );
 
+  const openWork = useCallback(
+    (work: SavedWork) => {
+      const target = KIND_TOOL[work.kind];
+      setPending((current) => ({ key: (current?.key ?? 0) + 1, work, route: target }));
+      setAccountOpen(false);
+      navigate(target);
+    },
+    [navigate],
+  );
+
+  const opened = pending && pending.route === route ? pending : null;
+  const initialFor = (kind: SavedWork["kind"]) =>
+    opened && opened.work.kind === kind ? opened.work : null;
+  // Each tool remounts when a new work is opened for it, and otherwise keeps
+  // its state across renders.
+  const keyFor = (kind: SavedWork["kind"]) => (opened && initialFor(kind) ? opened.key : 0);
+
   return (
     <ToolShell
       tool={tool}
+      account={accountOpen}
       themePreference={theme.preference}
       onCycleTheme={theme.cycle}
-      onHome={() => navigate("home")}
+      onHome={() => go("home")}
       onOpenAccount={() => setAccountOpen(true)}
-      onSignInError={setShellError}
     >
-      <AccountPanel
+      <AccountDrawer
         open={accountOpen}
-        refreshToken={historyRefreshToken}
         onClose={() => setAccountOpen(false)}
-        onOpenItem={openSaved}
+        onOpenWork={openWork}
+        onSignInError={setShellError}
       />
 
       <AppNotices />
@@ -92,7 +136,7 @@ function WorkspaceApp() {
         </div>
       )}
 
-      {!tool && <Hub onOpen={navigate} />}
+      {!tool && <Hub onOpen={go} />}
       {tool?.id === "notes" && (
         <Suspense
           fallback={
@@ -105,26 +149,33 @@ function WorkspaceApp() {
           }
         >
           <TranscriberTool
-            key={incoming?.key ?? 0}
-            initial={incoming?.item ?? null}
-            onSaved={() => setHistoryRefreshToken((value) => value + 1)}
+            key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
+            initial={
+              opened && (opened.work.kind === "notes" || opened.work.kind === "piano")
+                ? toPendingTranscription(opened.work)
+                : null
+            }
           />
         </Suspense>
       )}
-      {tool?.id === "ringtone" && (
-        <RingtoneTool onSaved={() => setHistoryRefreshToken((value) => value + 1)} />
+      {tool?.id === "ringtone" && <RingtoneTool />}
+      {tool?.id === "vocals" && (
+        <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />
       )}
-      {tool?.id === "vocals" && <VocalsTool />}
-      {tool?.id === "speed" && <SpeedTool />}
-      {tool?.id === "metronome" && <MetronomeTool />}
-      {tool?.id === "tuner" && <TunerTool />}
+      {tool?.id === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+      {tool?.id === "metronome" && (
+        <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />
+      )}
+      {tool?.id === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
       {tool?.id === "piano" && <PianoTool />}
-      {tool?.id === "ear" && <EarTrainingTool />}
-      {tool?.id === "analyze" && <AnalyzeTool />}
+      {tool?.id === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+      {tool?.id === "analyze" && (
+        <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
+      )}
 
       {tool && (
         <footer>
-          <button className="brand brand-button" type="button" onClick={() => navigate("home")}>
+          <button className="brand brand-button" type="button" onClick={() => go("home")}>
             <span className="brand-mark">
               <Music2 size={20} />
             </span>

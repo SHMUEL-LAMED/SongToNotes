@@ -1,6 +1,7 @@
 import { Activity, Disc3, Music4, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { SaveButton } from "../components/SaveButton";
 import { formatTime } from "../lib/audio";
 import {
   averageLoudness,
@@ -9,6 +10,8 @@ import {
   type AudioKey,
   type AudioTempo,
 } from "../lib/dsp";
+import { useSaveWork } from "../lib/useSaveWork";
+import type { SavedWork } from "../lib/works";
 
 const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 const HEBREW_NAMES = ["דו", "דו♯", "רה", "רה♯", "מי", "פה", "פה♯", "סול", "סול♯", "לה", "לה♯", "סי"];
@@ -24,6 +27,63 @@ type Analysis = {
   loudness: number;
   ms: number;
 };
+
+/** A saved analysis, shown again without the song it came from. */
+type Restored = {
+  title: string;
+  sourceName: string | null;
+  duration: number;
+  channels: number;
+  sampleRate: number;
+  analysis: Analysis;
+};
+
+type Props = {
+  initial?: SavedWork | null;
+};
+
+/**
+ * Reads a saved analysis back into the tool's own shape. Anything the record
+ * lacks — an older entry, a hand-edited one — makes the whole thing invalid
+ * rather than a card with holes in it.
+ */
+function readInitial(work: SavedWork | null | undefined): Restored | null {
+  if (!work || work.kind !== "analysis") return null;
+  const payload = work.payload;
+  const tempo = payload.tempo as Partial<AudioTempo> | undefined;
+  const key = payload.key as Partial<AudioKey> | undefined;
+  if (
+    !tempo ||
+    !key ||
+    typeof tempo.bpm !== "number" ||
+    typeof key.tonicPitchClass !== "number" ||
+    !Array.isArray(key.chroma) ||
+    key.chroma.length !== 12
+  ) {
+    return null;
+  }
+  return {
+    title: work.title,
+    sourceName: work.sourceName,
+    duration: typeof payload.duration === "number" ? payload.duration : 0,
+    channels: typeof payload.channels === "number" ? payload.channels : 2,
+    sampleRate: typeof payload.sampleRate === "number" ? payload.sampleRate : 44100,
+    analysis: {
+      tempo: {
+        bpm: tempo.bpm,
+        confidence: typeof tempo.confidence === "number" ? tempo.confidence : 0,
+      } as AudioTempo,
+      key: {
+        tonicPitchClass: key.tonicPitchClass,
+        mode: key.mode === "minor" ? "minor" : "major",
+        confidence: typeof key.confidence === "number" ? key.confidence : 0,
+        chroma: key.chroma.map((value) => (typeof value === "number" ? value : 0)),
+      } as AudioKey,
+      loudness: typeof payload.loudness === "number" ? payload.loudness : 0,
+      ms: 0,
+    },
+  };
+}
 
 function keyLabel(key: AudioKey) {
   return `${NOTE_NAMES[key.tonicPitchClass]} ${key.mode === "major" ? "מז׳ור" : "מינור"}`;
@@ -47,9 +107,12 @@ function confidenceLabel(value: number) {
   return "ביטחון נמוך";
 }
 
-export function AnalyzeTool() {
+export function AnalyzeTool({ initial = null }: Props) {
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
   const [result, setResult] = useState<{ key: string; analysis: Analysis } | null>(null);
+  const [restored] = useState(() => readInitial(initial));
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
 
   const analysisKey = audio?.url ?? "";
   useEffect(() => {
@@ -74,11 +137,43 @@ export function AnalyzeTool() {
     };
   }, [audio]);
 
-  const analysis = result && result.key === analysisKey ? result.analysis : null;
-  const busy = Boolean(audio) && !analysis;
+  useEffect(() => resetSave(), [analysisKey, resetSave]);
+
+  const fresh = result && result.key === analysisKey ? result.analysis : null;
+  const busy = Boolean(audio) && !fresh;
+  // Until a song is picked, a restored analysis stands in for a fresh one.
+  const showingSaved = !audio && restored !== null;
+  const analysis = fresh ?? (showingSaved ? restored.analysis : null);
+  const shownDuration = audio ? audio.buffer.duration : (restored?.duration ?? 0);
+  const shownChannels = audio ? audio.buffer.numberOfChannels : (restored?.channels ?? 2);
+  const shownRate = audio ? audio.buffer.sampleRate : (restored?.sampleRate ?? 44100);
 
   const relative = analysis ? relativeKey(analysis.key) : null;
   const chromaMax = analysis ? Math.max(...analysis.key.chroma, 0.0001) : 1;
+
+  const saveAnalysis = () => {
+    if (!audio || !fresh) return;
+    void saving.save({
+      kind: "analysis",
+      title: audio.file.name.replace(/\.[^/.]+$/, ""),
+      sourceName: audio.file.name,
+      summary: {
+        bpm: fresh.tempo.bpm,
+        keyName: keyLabel(fresh.key),
+        camelot: camelot(fresh.key),
+        loudness: fresh.loudness,
+        duration: audio.buffer.duration,
+      },
+      payload: {
+        tempo: fresh.tempo,
+        key: fresh.key,
+        loudness: fresh.loudness,
+        duration: audio.buffer.duration,
+        channels: audio.buffer.numberOfChannels,
+        sampleRate: audio.buffer.sampleRate,
+      },
+    });
+  };
 
   return (
     <section className="tool-body analyze-tool">
@@ -109,6 +204,12 @@ export function AnalyzeTool() {
           </div>
         )}
 
+        {showingSaved && (
+          <div className="notice-message" role="status">
+            ניתוח שמור של „{restored.title}”. בחר שיר כדי לנתח מחדש.
+          </div>
+        )}
+
         {audio && busy && (
           <div className="processing-box">
             <div className="processing-top">
@@ -122,7 +223,7 @@ export function AnalyzeTool() {
           </div>
         )}
 
-        {audio && analysis && !busy && (
+        {analysis && !busy && (
           <>
             <div className="stats-grid analyze-stats">
               <div className="stat-card is-hero">
@@ -148,7 +249,7 @@ export function AnalyzeTool() {
                 </span>
               </div>
               <div className="stat-card">
-                <strong>{formatTime(audio.buffer.duration)}</strong>
+                <strong>{formatTime(shownDuration)}</strong>
                 <span>משך</span>
               </div>
               <div className="stat-card">
@@ -184,9 +285,19 @@ export function AnalyzeTool() {
               </div>
             </div>
 
+            {audio && fresh && (
+              <SaveButton
+                state={saving.state}
+                onSave={saveAnalysis}
+                label="שמור את הניתוח"
+                message={saving.message}
+              />
+            )}
+
             <p className="engine-note">
-              הניתוח הסתיים ב־{(analysis.ms / 1000).toFixed(1)} שנ׳ · {audio.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"} ·{" "}
-              {Math.round(audio.buffer.sampleRate / 100) / 10} kHz. לתווים מלאים של המנגינה, פתח את „שיר לתווים”.
+              {fresh ? `הניתוח הסתיים ב־${(analysis.ms / 1000).toFixed(1)} שנ׳ · ` : ""}
+              {shownChannels === 1 ? "מונו" : "סטריאו"} ·{" "}
+              {Math.round(shownRate / 100) / 10} kHz. לתווים מלאים של המנגינה, פתח את „שיר לתווים”.
             </p>
           </>
         )}

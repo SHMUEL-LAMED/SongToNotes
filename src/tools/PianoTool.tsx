@@ -1,9 +1,11 @@
 import { Circle, Download, Piano, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SaveButton } from "../components/SaveButton";
 import { midiToFrequency } from "../lib/dsp";
 import { downloadFile, notesToMidi } from "../lib/export";
 import { plainNoteName, scientificName } from "../lib/key";
 import type { DetectedNote } from "../lib/types";
+import { useSaveWork } from "../lib/useSaveWork";
 
 type Timbre = "piano" | "organ" | "synth";
 
@@ -27,6 +29,11 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 
 type Voice = { osc: OscillatorNode[]; gain: GainNode; release: () => void };
 
+/** The span of a recording, from its first attack to its last release. */
+function recordingSeconds(notes: DetectedNote[]) {
+  return notes.reduce((end, note) => Math.max(end, note.start + note.duration), 0);
+}
+
 /**
  * A playable keyboard with its own small synth. Held keys are tracked by
  * MIDI number so the mouse, touch and the computer keyboard can all hold
@@ -46,6 +53,8 @@ export function PianoTool() {
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<DetectedNote[]>([]);
   const [volume, setVolume] = useState(0.7);
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
 
   const contextRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
@@ -262,6 +271,25 @@ export function PianoTool() {
     };
   }, [lowest, noteOff, noteOn]);
 
+  // A new take is a new recording, whatever the last one's button says.
+  useEffect(() => {
+    if (recording) resetSave();
+  }, [recording, resetSave]);
+
+  const saveRecording = () => {
+    if (!recorded.length) return;
+    void saving.save({
+      kind: "piano",
+      title: `הקלטת פסנתר · ${recorded.length} תווים`,
+      summary: {
+        noteCount: recorded.length,
+        duration: recordingSeconds(recorded),
+        timbre,
+      },
+      payload: { notes: recorded, timbre, analysisOffset: 0 },
+    });
+  };
+
   const toggleRecording = () => {
     if (recording) {
       const session = recordingRef.current;
@@ -414,6 +442,15 @@ export function PianoTool() {
           <button className="primary-button compact" type="button" onClick={downloadMidi}>
             <Download size={16} /> הורד MIDI ({recorded.length} תווים)
           </button>
+        )}
+        {!recording && recorded.length > 0 && (
+          <SaveButton
+            state={saving.state}
+            onSave={saveRecording}
+            label="שמור את ההקלטה"
+            message={saving.message}
+            compact
+          />
         )}
       </div>
 

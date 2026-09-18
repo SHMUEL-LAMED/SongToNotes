@@ -9,12 +9,13 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AudioPicker,
   useAudioFile,
   type LoadedAudio,
 } from "../components/AudioPicker";
+import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
@@ -28,7 +29,9 @@ import {
 } from "../lib/stemSeparation";
 import { applyGain, channelsToBuffer, normalise } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { putFile } from "../lib/fileStore";
 import { saveRingtone } from "../lib/ringtoneHistory";
+import type { SaveState } from "../lib/useSaveWork";
 import {
   analyseStructure,
   snapToPhrase,
@@ -64,7 +67,7 @@ function sharedContext() {
  * gain — is rendered into a fresh buffer so the preview and the download are
  * byte-for-byte the same thing.
  */
-export function RingtoneTool({ onSaved }: { onSaved: () => void }) {
+export function RingtoneTool() {
   const { user } = useAuth();
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
   const [context] = useState(sharedContext);
@@ -110,7 +113,6 @@ export function RingtoneTool({ onSaved }: { onSaved: () => void }) {
             audio={audio}
             context={context}
             userId={user?.id ?? null}
-            onSaved={onSaved}
           />
         )}
       </div>
@@ -122,10 +124,9 @@ type EditorProps = {
   audio: LoadedAudio;
   context: AudioContext;
   userId: string | null;
-  onSaved: () => void;
 };
 
-function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
+function RingtoneEditor({ audio, context, userId }: EditorProps) {
   const duration = audio.buffer.duration;
   const [trim, setTrim] = useState<TrimRange>(() => ({
     start: 0,
@@ -233,8 +234,9 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
 
   // ---- rendering ----
 
+  const renderKey = `${useInstrumental}-${range.start.toFixed(3)}-${range.end.toFixed(3)}-${fadeIn}-${fadeOut}-${gain}-${normalize}`;
   const { buffer: rendered } = useRenderedAudio(
-    `${useInstrumental}-${range.start.toFixed(3)}-${range.end.toFixed(3)}-${fadeIn}-${fadeOut}-${gain}-${normalize}`,
+    renderKey,
     () => {
       const buffer = sourceBuffer;
       const sampleRate = buffer.sampleRate;
@@ -314,21 +316,59 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
     });
   };
 
+  // The save button's state is kept with the cut it belongs to, so a
+  // different cut is offered for saving again without any resetting.
+  const [saved, setSaved] = useState<{ key: string; state: SaveState; message: string | null }>({
+    key: renderKey,
+    state: "idle",
+    message: null,
+  });
+  const saveState: SaveState = saved.key === renderKey ? saved.state : "idle";
+  const saveMessage = saved.key === renderKey ? saved.message : null;
+  const saveTimerRef = useRef(0);
+  useEffect(() => () => window.clearTimeout(saveTimerRef.current), []);
+
+  /**
+   * Records the ringtone in the personal area. The profile gets the record —
+   * title, where it was cut, how long — and this device keeps the audio, so
+   * the area can play and download it here without the file ever leaving.
+   */
+  const saveToProfile = async (file: File) => {
+    window.clearTimeout(saveTimerRef.current);
+    const key = renderKey;
+    setSaved({ key, state: "saving", message: null });
+    try {
+      const entry = await saveRingtone(
+        {
+          title,
+          sourceName: audio.file.name,
+          startSeconds: range.start,
+          durationSeconds: length,
+        },
+        userId,
+      );
+      await putFile(entry.id, file);
+      setSaved({
+        key,
+        state: "saved",
+        message: userId
+          ? "נשמר באזור האישי שלך. הקובץ עצמו נשאר במכשיר הזה."
+          : "נשמר במכשיר הזה. התחבר כדי לראות את זה בכל מכשיר.",
+      });
+      saveTimerRef.current = window.setTimeout(
+        () => setSaved((current) => (current.key === key ? { ...current, state: "idle" } : current)),
+        3200,
+      );
+    } catch {
+      setSaved({ key, state: "failed", message: "לא הצלחנו לשמור. נסה שוב." });
+    }
+  };
+
   const exportWav = () => {
     const file = buildFile();
     if (!file) return;
     downloadFile(file, file.name, "audio/wav");
-    // The profile history is a record of what was made, not a copy of the
-    // audio: the file itself never leaves the device.
-    void saveRingtone(
-      {
-        title,
-        sourceName: audio.file.name,
-        startSeconds: range.start,
-        durationSeconds: length,
-      },
-      userId,
-    ).then(onSaved);
+    void saveToProfile(file);
   };
 
   const tooLongForIphone = length > IPHONE_LIMIT;
@@ -636,6 +676,15 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
             hint="לוואטסאפ, ל־AirDrop או לקבצים"
           />
         </div>
+        <SaveButton
+          state={saveState}
+          onSave={() => {
+            const file = buildFile();
+            if (file) void saveToProfile(file);
+          }}
+          disabled={!rendered}
+          message={saveMessage}
+        />
       </div>
     </>
   );

@@ -407,6 +407,162 @@ log(
   "a11y: the page announces which tool is open",
 );
 
+// --- the personal area: every tool saves, and the drawer shows it all ---
+// Signed out, so everything below goes to this device; the drawer must still
+// list it, and each kind must open back into its tool.
+await page.goto(`${BASE}#/metronome`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.evaluate(() => {
+  localStorage.removeItem("music-tools.works.v1");
+  localStorage.removeItem("music-tools.ringtone-history.v1");
+});
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.locator(".bpm-slider").fill("137");
+await page.locator(".save-work-button").click();
+await page.waitForTimeout(400);
+const metroSaved = (await page.locator(".save-work-button").textContent()) ?? "";
+log(/נשמר/.test(metroSaved), "save: the metronome preset saves", metroSaved.trim());
+log(
+  /במכשיר/.test((await page.locator(".save-work-note").textContent()) ?? ""),
+  "save: without an account the note says it stayed on this device",
+);
+
+await page.goto(`${BASE}#/tuner`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".segmented-control button", { hasText: "גיטרה" }).first().click();
+await page.locator(".save-work-button").click();
+await page.waitForTimeout(400);
+log(/נשמר/.test((await page.locator(".save-work-button").textContent()) ?? ""), "save: the tuner setup saves");
+
+// The ear trainer only offers to save once a question has been answered.
+await page.goto(`${BASE}#/ear`, { waitUntil: "load" });
+await page.evaluate(() => localStorage.removeItem("musictools.eartraining.v1"));
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+log(await page.locator(".save-work-button").isDisabled(), "save: an unplayed ear session cannot be saved");
+await page.locator(".segmented-control button", { hasText: "מתחיל" }).first().click();
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+await page.locator(".ear-choices button").first().click();
+await page.waitForTimeout(200);
+await page.locator(".save-work-button").click();
+await page.waitForTimeout(400);
+log(/נשמר/.test((await page.locator(".save-work-button").textContent()) ?? ""), "save: the ear session saves");
+
+// A karaoke track: the record goes to the list, the audio to this device.
+await page.goto(`${BASE}#/vocals`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForFunction(
+  () => {
+    const button = document.querySelector(".save-work-button");
+    return button && !button.disabled;
+  },
+  null,
+  { timeout: 60_000 },
+);
+await page.locator(".save-work-button").click();
+await page.waitForFunction(
+  () => /נשמר/.test(document.querySelector(".save-work-button")?.textContent ?? ""),
+  null,
+  { timeout: 15_000 },
+);
+log(true, "save: the karaoke track saves with its file");
+
+// The drawer: opens from the account button, lists everything, filters, and
+// hands a work back to its tool.
+await page.locator(".account-button").click();
+await page.waitForSelector(".account-drawer", { timeout: 5_000 });
+log(await page.locator(".account-drawer").isVisible(), "area: the drawer slides in from the account button");
+await page.waitForFunction(
+  () => document.querySelectorAll(".me-item").length >= 4,
+  null,
+  { timeout: 10_000 },
+);
+const listed = await page.locator(".me-item").count();
+log(listed === 4, "area: all four saved works are listed", `found ${listed}`);
+const kinds = (await page.locator(".me-kinds").textContent()) ?? "";
+log(
+  /קצב שמור/.test(kinds) && /כיוון כלי/.test(kinds) && /אימון שמיעה/.test(kinds) && /הסרת שירה/.test(kinds),
+  "area: one filter chip per kind of work",
+  kinds.replace(/\s+/g, " ").trim(),
+);
+const fileBadges = await page.locator(".me-badge.is-file").count();
+log(fileBadges === 1, "area: the karaoke track shows its file is on this device", `found ${fileBadges}`);
+log(
+  (await page.locator(".me-item .icon-button[aria-label='נגן']").count()) === 1,
+  "area: only the work with a file offers to play",
+);
+log(
+  /137 BPM/.test((await page.locator(".me-item", { hasText: "קצב שמור" }).textContent()) ?? ""),
+  "area: the metronome card says which tempo it holds",
+);
+log(
+  /דיוק/.test((await page.locator(".me-side").textContent()) ?? ""),
+  "area: the side shows the ear-training progress",
+);
+
+// The stored file is real audio and comes back as a download.
+const [savedTrack] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".me-item .icon-button[aria-label='הורד את הקובץ']").click(),
+]);
+const savedStats = rmsOf(await savedTrack.path());
+log(savedStats.frames > 1000 && savedStats.rms > 0.001, "area: the stored karaoke track downloads as real audio",
+  `rms ${savedStats.rms.toFixed(3)}`);
+
+await page.locator(".me-search input").fill("גיטרה");
+await page.waitForTimeout(200);
+log((await page.locator(".me-item").count()) === 1, "area: search narrows the list");
+await page.locator(".me-search input").fill("");
+await page.locator(".me-kinds .chip-toggle", { hasText: "קצב שמור" }).click();
+await page.waitForTimeout(200);
+log((await page.locator(".me-item").count()) === 1, "area: a kind chip narrows the list");
+
+// Rename in place.
+await page.locator(".me-item .icon-button[aria-label='שנה שם']").click();
+await page.locator(".me-rename input").fill("הקצב של השיר שלי");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  /הקצב של השיר שלי/.test((await page.locator(".me-item-title").first().textContent()) ?? ""),
+  "area: a work can be renamed in place",
+);
+
+// Opening a preset lands in the metronome with that tempo.
+await page.locator(".me-item-title").first().click();
+await page.waitForTimeout(500);
+log(!(await page.locator(".account-drawer").count()), "area: opening a work closes the drawer");
+const reopenedBpm = await page.locator(".bpm-value strong").textContent();
+log(
+  page.url().endsWith("#/metronome") && reopenedBpm === "137",
+  "area: the preset reopens the metronome at its tempo",
+  `${page.url().split("#")[1]} at ${reopenedBpm}`,
+);
+
+// Escape closes; the focus returns to the button that opened it.
+await page.locator(".account-button").click();
+await page.waitForSelector(".account-drawer");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(300);
+log(!(await page.locator(".account-drawer").count()), "area: Escape closes the drawer");
+log(
+  await page.evaluate(() => document.activeElement?.classList.contains("account-button")),
+  "area: focus returns to the account button",
+);
+
+// Delete removes the entry and its file.
+await page.locator(".account-button").click();
+await page.waitForSelector(".me-item");
+page.once("dialog", (dialog) => dialog.accept());
+await page.locator(".me-item", { hasText: "הסרת שירה" }).locator(".icon-button.is-danger").click();
+await page.waitForTimeout(400);
+log((await page.locator(".me-badge.is-file").count()) === 0, "area: deleting a work removes it and its file");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
 // --- dark/light toggle ---
 await page.goto(BASE, { waitUntil: "load" });
 await page.waitForTimeout(300);
