@@ -78,11 +78,7 @@ export function RingtoneTool({ onSaved }: { onSaved: () => void }) {
         </span>
         <div>
           <h1>יצירת צלצול</h1>
-          <p>
-            מעלים שיר, והאתר מחפש בשבילכם את הפזמון. משם אפשר לכוונן בגל הקול
-            או בשניות בדיוק, להוסיף כניסה ויציאה רכות ולהוריד. הכול נשאר במכשיר
-            שלך.
-          </p>
+          <p>בחר שיר וחתוך ממנו צלצול.</p>
         </div>
       </div>
 
@@ -137,7 +133,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const [normalize, setNormalize] = useState(true);
   const [sections, setSections] = useState<SongSections | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKind | null>(null);
-  const [snapNote, setSnapNote] = useState<string | null>(null);
+  const [, setSnapNote] = useState<string | null>(null);
 
   // The backing track produced by the AI separator, when one has been made.
   const [instrumental, setInstrumental] = useState<AudioBuffer | null>(null);
@@ -275,12 +271,6 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   );
 
   // ---- AI backing track ----
-
-  // The separator falls back to WebAssembly where WebGPU is missing and
-  // resamples the song itself, so there is nothing left to gate on — only a
-  // warning worth giving before someone waits.
-  const hasGpu = typeof navigator !== "undefined" && "gpu" in navigator;
-
   const makeInstrumental = useCallback(async () => {
     setAiBusy(true);
     setAiProgress(0);
@@ -353,7 +343,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
           </div>
           <div className="processing-bottom">
             <small>
-              מזהים חזרות מוזיקליות, קצב וצבע צליל כדי למצוא את הקטע המתאים.
+              מאתר קטע מתאים…
             </small>
           </div>
         </div>
@@ -361,12 +351,12 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
         <div className="section-picker">
           <div className="section-picker-head">
             <h3>
-              <Music4 size={17} /> מה שיהיה בצלצול?
+              <Music4 size={17} /> איזה קטע ייכלל בצלצול?
             </h3>
             <small>
               {sections.confidence >= 0.62
-                ? "זוהתה חזרה מוזיקלית ברורה — אפשר גם לכוון ידנית על הגל."
-                : "מצאנו את הקטע החוזר הקרוב ביותר — אפשר לכוון ידנית על הגל."}
+                ? "נמצא קטע חוזר. אפשר לשנות את הבחירה."
+                : "נבחר קטע מוצע. אפשר לשנות את הבחירה."}
             </small>
           </div>
           <div className="section-choices" role="group" aria-label="בחירת קטע">
@@ -504,18 +494,15 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
           />
         </label>
         <button className="secondary-button" type="button" onClick={snapNow}>
-          <Scissors size={15} /> התאם להתחלה וסיום טבעיים
+          <Scissors size={15} /> התאם להתחלה ולסיום טבעיים
         </button>
-        <small className="fine-tune-note">
-          {snapNote ?? "מחפש הפסקות קצרות בקול כדי לא לחתוך באמצע משפט."}
-        </small>
       </div>
 
       <div className="settings-panel">
         <div className="settings-grid">
           <label className="setting-field range-field">
             <span>
-              כניסה רכה (Fade in) <b>{fadeIn.toFixed(1)} שנ׳</b>
+              כניסה רכה <b>{fadeIn.toFixed(1)} שנ׳</b>
             </span>
             <input
               type="range"
@@ -528,7 +515,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
           </label>
           <label className="setting-field range-field">
             <span>
-              יציאה רכה (Fade out) <b>{fadeOut.toFixed(1)} שנ׳</b>
+              יציאה רכה <b>{fadeOut.toFixed(1)} שנ׳</b>
             </span>
             <input
               type="range"
@@ -557,7 +544,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
               checked={normalize}
               onChange={(event) => setNormalize(event.target.checked)}
             />
-            <span>נרמל עוצמה — הצלצול יישמע חזק וברור</span>
+            <span>איזון עוצמה</span>
           </label>
         </div>
       </div>
@@ -573,12 +560,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
             <h3>
               <Sparkles size={16} /> צלצול אינסטרומנטלי
             </h3>
-            <p>
-              מסירים את השירה ומשאירים רק את הנגינה — צלצול בלי מילים. בפעם
-              הראשונה ההכנה נמשכת יותר, ובפעמים הבאות היא מהירה. השיר עצמו לא
-              יוצא מהמכשיר.
-              {!hasGpu && " במכשיר הזה ההפרדה עלולה לקחת זמן רב יותר."}
-            </p>
+            <p>ההפעלה הראשונה עשויה להימשך כמה דקות.</p>
           </div>
         </div>
         {instrumental ? (

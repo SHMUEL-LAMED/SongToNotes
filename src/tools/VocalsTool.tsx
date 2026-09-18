@@ -147,7 +147,6 @@ export function VocalsTool() {
   const isMono = audio ? audio.buffer.numberOfChannels < 2 : false;
   // The separator falls back to WebAssembly where WebGPU is missing and
   // resamples the song itself, so there is nothing left to gate on.
-  const hasGpu = typeof navigator !== "undefined" && "gpu" in navigator;
   const busy = separation.isRunning || aiBusy;
 
   return (
@@ -158,11 +157,7 @@ export function VocalsTool() {
         </span>
         <div>
           <h1>הסרת שירה</h1>
-          <p>
-            הופכים כל שיר לקריוקי, או משאירים רק את הקול. ההפרדה המהירה מוכנה
-            תוך שניות ושומרת על הכלים שמסביב; מי שרוצה הפרדה מלאה יכול להפעיל
-            את ההפרדה החכמה שלמטה.
-          </p>
+          <p>בחר שיר והפרד בין השירה לליווי.</p>
         </div>
       </div>
 
@@ -195,9 +190,7 @@ export function VocalsTool() {
         )}
         {isMono && !usedAi && (
           <div className="notice-message" role="status">
-            הקובץ הזה במונו, ולכן אין הפרש בין ערוצים לעבוד איתו. ההפרדה המהירה
-            תיתן תוצאה חלקית בלבד —{" "}
-            הפרדת ה־AI שלמטה כן מתמודדת עם מונו.
+            לקובץ מונו מומלץ לבחור בהפרדת AI.
           </div>
         )}
 
@@ -241,7 +234,7 @@ export function VocalsTool() {
                     value={strength}
                     onChange={(event) => setStrength(Number(event.target.value))}
                   />
-                  <small>פחות מ־100% משאיר שמץ של הצד השני כהדרכה.</small>
+                  <small>הפחת את העוצמה להשארת חלק מהצליל המקורי.</small>
                 </label>
                 {target === "instrumental" && (
                   <label className="checkbox-field">
@@ -250,7 +243,7 @@ export function VocalsTool() {
                       checked={keepBass}
                       onChange={(event) => setKeepBass(event.target.checked)}
                     />
-                    <span>שמור על הבס והתוף — הם יושבים במרכז יחד עם השירה</span>
+                    <span>שמור על הבס והתופים</span>
                   </label>
                 )}
                 <label className="checkbox-field">
@@ -298,13 +291,12 @@ export function VocalsTool() {
 
             {usedAi && (
               <p className="engine-note">
-                התוצאה שלמעלה הופקה על ידי מודל ההפרדה. שינוי אחת ההגדרות יחזיר
-                את ההפרדה המהירה.
+                תוצאת AI. שינוי ההגדרות יחזיר להפרדה מהירה.
               </p>
             )}
             {wasMono && !usedAi && (
               <p className="engine-note is-slow">
-                הופעל מסלול המונו — התוצאה חלקית מטבעה.
+                תוצאת ההפרדה חלקית.
               </p>
             )}
 
@@ -317,12 +309,7 @@ export function VocalsTool() {
                   <h3>
                     <Sparkles size={16} /> הפרדה מלאה עם AI
                   </h3>
-                  <p>
-                    הפרדה חכמה שמבודדת את השירה מהליווי באמת, ועובדת גם על מונו
-                    ועל שירים שבהם השירה אינה במרכז. בפעם הראשונה ההכנה נמשכת
-                    יותר, ובפעמים הבאות היא מהירה. השיר עצמו לא יוצא מהמכשיר.
-                    {!hasGpu && " במכשיר הזה ההפרדה עלולה לקחת זמן רב יותר."}
-                  </p>
+                  <p>ההפעלה הראשונה עשויה להימשך כמה דקות.</p>
                 </div>
               </div>
               <>
@@ -364,7 +351,7 @@ export function VocalsTool() {
                 </span>
                 <div>
                   <h3>הורדת התוצאה</h3>
-                  <p>קובץ WAV באיכות מלאה, מוכן לנגן, לשיר עליו או לערוך.</p>
+                  <p>קובץ WAV.</p>
                 </div>
               </div>
               <div className="download-buttons">

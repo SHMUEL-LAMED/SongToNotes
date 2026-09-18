@@ -1,12 +1,9 @@
 import {
   ArrowLeft,
   BadgeCheck,
-  Headphones,
-  LockKeyhole,
   Music2,
   Search,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
@@ -54,26 +51,8 @@ export function Hub({ onOpen }: Props) {
         <div className="eyebrow">
           <Sparkles size={16} /> {TOOLS.length} כלי מוזיקה · הכול בדפדפן
         </div>
-        <h1>
-          כל מה שהמוזיקה שלך
-          <br />
-          <span>יכולה להפוך להיות.</span>
-        </h1>
-        <p>
-          אולפן חכם אחד שמקשיב לשיר ומוציא ממנו תווים, צלצול, קריוקי או גרסה
-          מואטת לתרגול — במהירות, בפרטיות ובלי להתקין דבר.
-        </p>
-        <div className="hero-points">
-          <span>
-            <LockKeyhole size={16} /> פרטי לחלוטין
-          </span>
-          <span>
-            <Zap size={16} /> בלי התקנה ובלי הרשמה
-          </span>
-          <span>
-            <Headphones size={16} /> איכות אולפן
-          </span>
-        </div>
+        <h1>כלי מוזיקה</h1>
+        <p>בחר כלי והתחל ליצור.</p>
         <div className="hero-soundstage" aria-hidden="true">
           <span className="soundstage-orbit">
             <Music2 size={27} />
@@ -154,7 +133,6 @@ export function Hub({ onOpen }: Props) {
               </span>
               <strong>{tool.title}</strong>
               <em>{tool.tagline}</em>
-              <p>{tool.description}</p>
               <b>
                 פתח את הכלי <ArrowLeft size={16} />
               </b>
@@ -166,30 +144,12 @@ export function Hub({ onOpen }: Props) {
         )}
       </section>
 
-      <section className="hub-trust">
-        <div>
-          <strong>0</strong>
-          <span>קבצים שנשלחים לשרת</span>
-        </div>
-        <div>
-          <strong>{TOOLS.length}</strong>
-          <span>כלים במקום אחד</span>
-        </div>
-        <div>
-          <strong>100%</strong>
-          <span>חינם, בעברית, מכל מכשיר</span>
-        </div>
-      </section>
 
       <footer>
         <span className="brand">
           <span className="brand-mark">♪</span>
           <span>כלי מוזיקה</span>
         </span>
-        <p>
-          כל העיבוד מתבצע במכשיר שלך. הקבצים, ההקלטות וההשמעה אף פעם לא עוזבים
-          את הדפדפן.
-        </p>
       </footer>
     </>
   );

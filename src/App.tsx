@@ -128,10 +128,6 @@ function WorkspaceApp() {
             </span>
             <span>כלי מוזיקה</span>
           </button>
-          <p>
-            כל העיבוד מתבצע במכשיר שלך. הקבצים, ההקלטות וההשמעה אף פעם לא עוזבים
-            את הדפדפן.
-          </p>
         </footer>
       )}
     </ToolShell>
