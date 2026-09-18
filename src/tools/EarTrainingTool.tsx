@@ -20,6 +20,14 @@ import { NotePlayer } from "../lib/synth";
 
 const SETTINGS_KEY = "musictools.eartraining.v1";
 
+/**
+ * `KeyboardEvent.key` carries one character, so only the first nine answers
+ * can have a digit of their own — at the hard interval level there are twelve.
+ * The rest are answered by clicking, and the interface says so rather than
+ * promising a key that would land on answer 1.
+ */
+const KEYED_CHOICES = 9;
+
 const MODES: ExerciseMode[] = ["intervals", "chords", "degrees"];
 const LEVELS: Level[] = ["easy", "medium", "hard"];
 const STYLES: { id: IntervalStyle; label: string }[] = [
@@ -84,6 +92,7 @@ export function EarTrainingTool() {
 
   const playerRef = useRef<NotePlayer | null>(null);
   const idleTimerRef = useRef(0);
+  const rootRef = useRef<HTMLElement>(null);
   const stats = board[mode];
 
   useEffect(() => {
@@ -184,6 +193,13 @@ export function EarTrainingTool() {
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
       if (target?.isContentEditable) return;
+      // The account panel opens over a mounted tool, and its keystrokes bubble
+      // up here too. A shortcut only counts when it came from the trainer
+      // itself, or from a page with nothing focused at all — otherwise a digit
+      // typed in the dialog would answer a question nobody can see.
+      const insideTrainer =
+        !target || target === document.body || Boolean(rootRef.current?.contains(target));
+      if (!insideTrainer) return;
       // Enter belongs to whatever control has focus. Taking it here would stop
       // a keyboard user from pressing the very buttons on this page — the
       // exercise picker, "השמע שוב", "אפס ניקוד" — so the shortcut only
@@ -200,7 +216,8 @@ export function EarTrainingTool() {
         return;
       }
       const digit = Number(event.key);
-      if (question && !answered && digit >= 1 && digit <= question.choices.length) {
+      const keyed = Math.min(KEYED_CHOICES, question?.choices.length ?? 0);
+      if (question && !answered && digit >= 1 && digit <= keyed) {
         event.preventDefault();
         answer(question.choices[digit - 1].id);
       }
@@ -216,7 +233,7 @@ export function EarTrainingTool() {
   const isRight = answered !== null && answered === question?.answer;
 
   return (
-    <section className="tool-body ear-training">
+    <section className="tool-body ear-training" ref={rootRef}>
       <div className="tool-intro">
         <span className="tool-intro-icon">
           <Ear size={26} />
@@ -305,7 +322,11 @@ export function EarTrainingTool() {
               <button className="primary-button" type="button" onClick={() => play(question)}>
                 <Play size={20} /> {playing ? "מנגן…" : "השמע שוב"}
               </button>
-              <span className="ear-hint">מקשי 1–{question.choices.length} עונים · R משמיע שוב · Enter לשאלה הבאה</span>
+              <span className="ear-hint">
+                מקשי 1–{Math.min(KEYED_CHOICES, question.choices.length)} עונים
+                {question.choices.length > KEYED_CHOICES && " (השאר בלחיצה)"} · R משמיע שוב ·
+                Enter לשאלה הבאה
+              </span>
             </div>
 
             <div className="ear-choices" role="group" aria-label="מה נשמע">
@@ -317,10 +338,11 @@ export function EarTrainingTool() {
                     key={choice.id}
                     type="button"
                     className={`ear-choice ${right ? "is-right" : ""} ${chosen && !right ? "is-wrong" : ""}`}
+                    aria-keyshortcuts={index < KEYED_CHOICES ? String(index + 1) : undefined}
                     onClick={() => answer(choice.id)}
                     disabled={answered !== null}
                   >
-                    <b>{index + 1}</b>
+                    <b aria-hidden="true">{index < KEYED_CHOICES ? index + 1 : ""}</b>
                     <span>{choice.label}</span>
                     {right && <Check size={18} />}
                     {chosen && !right && <X size={18} />}

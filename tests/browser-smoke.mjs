@@ -330,6 +330,18 @@ log(
   `${oscillators} oscillators`,
 );
 
+// A keystroke from outside the trainer — the top bar, or the account dialog
+// that opens over it — must not answer the hidden question.
+const askedBeforeOutside = await page.locator(".ear-score strong").first().textContent();
+await page.locator("button.theme-toggle").focus();
+await page.keyboard.press("1");
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-score strong").first().textContent()) === askedBeforeOutside &&
+    (await page.locator(".ear-choices button.is-right").count()) === 0,
+  "ear: a digit pressed outside the trainer does not answer the question",
+);
+
 // Enter on a focused button must press that button, not fire the shortcut.
 await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().focus();
 await page.keyboard.press("Enter");
@@ -350,6 +362,19 @@ log(
   (await page.locator(".ear-choices button").count()) > 0,
   "ear: Enter outside the controls still starts a question",
 );
+
+// The hard interval level has twelve answers but a keyboard has nine digits,
+// so only nine may carry a shortcut — and the hint must say nine.
+await page.locator(".segmented-control button", { hasText: "מתקדם" }).first().click();
+await page.waitForTimeout(200);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+const hardChoices = await page.locator(".ear-choices button").count();
+const keyed = await page.locator(".ear-choices button[aria-keyshortcuts]").count();
+const hint = (await page.locator(".ear-hint").textContent()) ?? "";
+log(hardChoices === 12, "ear: the advanced interval round offers all twelve", `found ${hardChoices}`);
+log(keyed === 9, "ear: only the answers a digit can reach carry a shortcut", `found ${keyed}`);
+log(/1–9/.test(hint), "ear: the hint promises nine keys, not twelve", hint.replace(/\s+/g, " ").trim());
 
 // --- the skip control reaches the content without hijacking the route ---
 await page.goto(`${BASE}#/metronome`, { waitUntil: "load" });

@@ -2025,6 +2025,9 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-muted);
   font-size: 12.5px;
 }
+/* The answers past the ninth have no digit of their own; the box stays for
+   alignment but should not read as an empty key cap. */
+.ear-choice b:empty { background: none; }
 .ear-choice span { flex: 1; text-align: start; }
 .ear-choice:disabled { cursor: default; opacity: 0.55; }
 .ear-choice.is-right,
