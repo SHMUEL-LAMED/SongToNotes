@@ -16,6 +16,7 @@ import { MetronomeTool } from "./tools/MetronomeTool";
 import { PianoTool } from "./tools/PianoTool";
 import { RingtoneTool } from "./tools/RingtoneTool";
 import { SpeedTool } from "./tools/SpeedTool";
+import { TranscriptTool } from "./tools/TranscriptTool";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
 import { TunerTool } from "./tools/TunerTool";
 import { VocalsTool } from "./tools/VocalsTool";
@@ -171,6 +172,9 @@ function WorkspaceApp() {
       {tool?.id === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
       {tool?.id === "analyze" && (
         <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
+      )}
+      {tool?.id === "transcript" && (
+        <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />
       )}
 
       {tool && (

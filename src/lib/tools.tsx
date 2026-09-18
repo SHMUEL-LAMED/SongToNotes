@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Captions,
   Ear,
   FileMusic,
   Gauge,
@@ -127,6 +128,18 @@ export const TOOLS: ToolDefinition[] = [
     hue: 300,
     category: "practice",
     tags: ["שמיעה", "מרווחים", "אקורדים", "סולפז׳", "תרגול"],
+    badge: "חדש",
+  },
+  {
+    id: "transcript",
+    title: "תמלול לטקסט",
+    tagline: "דיבור נכנס, טקסט יוצא",
+    description:
+      "מעלים הקלטה או שיר והדפדפן מתמלל את הדיבור לטקסט עם חותמות זמן — עברית, אנגלית ועוד — להורדה כטקסט או ככתוביות.",
+    icon: Captions,
+    hue: 210,
+    category: "analyze",
+    tags: ["תמלול", "טקסט", "כתוביות", "srt", "דיבור", "whisper"],
     badge: "חדש",
   },
   {

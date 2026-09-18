@@ -71,16 +71,16 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 9, "hub renders all 9 tool cards", `found ${cards}`);
+log(cards === 10, "hub renders all 10 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
 const filtered = await page.locator(".tool-card").count();
-log(filtered >= 1 && filtered < 9, "hub search filters", `found ${filtered}`);
+log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -406,6 +406,69 @@ log(
   Boolean(await page.locator("p.sr-only[aria-live=polite]").first().textContent()),
   "a11y: the page announces which tool is open",
 );
+
+// --- transcript tool: prepares the audio and asks for the model ---
+// The model is fetched from the Hugging Face hub, which this test box may not
+// reach; what is checked here is everything up to that point and the honest
+// message when it is not reachable — or the text, where it is.
+await page.goto(`${BASE}#/transcript`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+log(
+  (await page.locator("select[aria-label='שפת הדיבור'] option").count()) >= 5,
+  "transcript: offers a choice of languages",
+);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".transcript-tool .primary-button", { timeout: 30_000 });
+log(true, "transcript: a loaded file offers the transcribe button");
+await page.locator(".transcript-tool .primary-button").click();
+await page.waitForSelector(".processing-box", { timeout: 10_000 });
+log(true, "transcript: pressing it starts the engine");
+const transcriptOutcome = await page
+  .waitForFunction(
+    () =>
+      document.querySelector(".transcript-result textarea") ? "text" :
+      document.querySelector(".transcript-tool .error-message") ? "error" : null,
+    null,
+    { timeout: 180_000 },
+  )
+  .then((handle) => handle.jsonValue())
+  .catch(() => "timeout");
+if (transcriptOutcome === "text") {
+  const transcriptText = await page.locator(".transcript-result textarea").inputValue();
+  log(transcriptText.trim().length > 0, "transcript: the model returned text", transcriptText.slice(0, 60));
+  log((await page.locator(".transcript-segments li").count()) > 0, "transcript: with timestamps");
+} else {
+  const transcriptError = (await page.locator(".transcript-tool .error-message").textContent().catch(() => "")) ?? "";
+  log(
+    transcriptOutcome === "error" && /להוריד את מודל/.test(transcriptError),
+    "transcript: without the hub, the download failure is explained (model not reachable here)",
+    transcriptError.trim().slice(0, 80),
+  );
+}
+
+// A saved transcript reopens with its text and timestamps, no model needed.
+await page.evaluate(() => {
+  const now = new Date().toISOString();
+  localStorage.setItem("music-tools.works.v1", JSON.stringify([{
+    id: "t1", kind: "transcript", title: "שיעור", sourceName: "lesson.m4a",
+    summary: { words: 5, duration: 9, languageLabel: "עברית" },
+    payload: { segments: [{ start: 0, end: 4, text: "שלום לכולם" }, { start: 4.5, end: 9, text: "ברוכים הבאים לשיעור" }], language: "he", model: "onnx-community/whisper-base" },
+    fileName: null, deviceId: null, filePath: null, createdAt: now, updatedAt: now, localOnly: true,
+  }]));
+});
+await page.locator(".account-button").click();
+await page.waitForSelector(".me-item");
+await page.locator(".me-item-title", { hasText: "שיעור" }).click();
+await page.waitForSelector(".transcript-result textarea", { timeout: 10_000 });
+const reopened = await page.locator(".transcript-result textarea").inputValue();
+log(/שלום לכולם\nברוכים הבאים לשיעור/.test(reopened), "transcript: a saved transcript reopens with its text");
+log((await page.locator(".transcript-segments li").count()) === 2, "transcript: and its timestamps");
+const [srt] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".transcript-downloads button", { hasText: "SRT" }).click(),
+]);
+const srtText = readFileSync(await srt.path(), "utf8");
+log(/00:00:04,500 --> 00:00:09,000\nברוכים הבאים לשיעור/.test(srtText), "transcript: the SRT download carries the cues");
 
 // --- the personal area: every tool saves, and the drawer shows it all ---
 // Signed out, so everything below goes to this device; the drawer must still
