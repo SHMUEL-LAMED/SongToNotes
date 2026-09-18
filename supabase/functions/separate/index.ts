@@ -58,6 +58,11 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   const setting = await settings(admin);
   const apiKey = setting("SEPARATION_API_KEY");
+  // "Is the server path set up?" — asked before a song is uploaded, so the
+  // tool can fall back to the browser without a wasted upload.
+  if (req.method === "GET" && new URL(req.url).searchParams.get("availability")) {
+    return json(200, { configured: Boolean(apiKey) });
+  }
   if (!apiKey) return json(503, { error: "not_configured" });
   const model = setting("SEPARATION_MODEL") ?? "ryan5453/demucs";
   let extra: Record<string, unknown> = { stem: "vocals", output_format: "wav" };

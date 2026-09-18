@@ -12,6 +12,8 @@ import { findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
+import { ChordsTool } from "./tools/ChordsTool";
+import { SongbookTool } from "./tools/SongbookTool";
 import { EarTrainingTool } from "./tools/EarTrainingTool";
 import { MetronomeTool } from "./tools/MetronomeTool";
 import { PianoTool } from "./tools/PianoTool";
@@ -132,6 +134,7 @@ function WorkspaceApp() {
         open={assistantOpen}
         onOpen={() => setAssistantOpen(true)}
         onClose={() => setAssistantOpen(false)}
+        toolId={tool?.id ?? null}
         toolTitle={tool?.title ?? null}
       />
 
@@ -182,6 +185,8 @@ function WorkspaceApp() {
       {tool?.id === "analyze" && (
         <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
       )}
+      {tool?.id === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+      {tool?.id === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
       {tool?.id === "transcript" && (
         <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />
       )}
