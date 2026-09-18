@@ -1,6 +1,7 @@
 import { Music2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
+import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
 import { Hub } from "./components/Hub";
 import { ToolShell } from "./components/ToolShell";
@@ -65,6 +66,7 @@ function WorkspaceApp() {
   );
   const [shellError, setShellError] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const tool = findTool(route);
 
@@ -124,6 +126,13 @@ function WorkspaceApp() {
         onClose={() => setAccountOpen(false)}
         onOpenWork={openWork}
         onSignInError={setShellError}
+      />
+
+      <AiAssistant
+        open={assistantOpen}
+        onOpen={() => setAssistantOpen(true)}
+        onClose={() => setAssistantOpen(false)}
+        toolTitle={tool?.title ?? null}
       />
 
       <AppNotices />
