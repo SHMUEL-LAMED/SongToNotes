@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   Languages,
+  Play,
   Wand2,
   X,
 } from "lucide-react";
@@ -13,7 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
-import { formatTime } from "../lib/audio";
+import { Waveform } from "../components/Waveform";
+import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
 import {
   LANGUAGES,
@@ -24,8 +26,10 @@ import {
   segmentsToSrt,
   segmentsToText,
   segmentsToVtt,
+  splitIntoWindows,
   textToSegments,
   type ModelChoice,
+  type SampleWindow,
   type TranscriptSegment,
 } from "../lib/transcript";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -34,6 +38,16 @@ import type { SavedWork } from "../lib/works";
 
 const SETTINGS_KEY = "musictools.transcript.v1";
 const SPEECH_RATE = 16_000;
+/**
+ * Decoded straight to mono at 16 kHz, a recording costs 3.8MB a minute in
+ * memory, so two hours fit where twenty minutes of full-rate stereo did.
+ * The file itself is allowed up to this size — about ten hours of MP3.
+ */
+const MAX_FILE_BYTES = 600 * 1024 * 1024;
+/** The recogniser hears this much at a time; the text lands window by window. */
+const WINDOW_SECONDS = 300;
+/** From this length there is more than one window, and the page says so. */
+const LONG_SECONDS = WINDOW_SECONDS * 1.5;
 
 type Saved = { language: string | null; model: ModelChoice };
 
@@ -51,8 +65,15 @@ function loadSaved(): Saved {
   }
 }
 
-/** Mono at the model's rate, rendered offline so it is not tied to playback. */
+/**
+ * The samples the recogniser reads. The picker already decoded the file to
+ * mono at 16 kHz, so this is a view of the buffer; the offline render is only
+ * for a buffer that arrived some other way.
+ */
 async function prepareForSpeech(buffer: AudioBuffer): Promise<Float32Array> {
+  if (buffer.sampleRate === SPEECH_RATE && buffer.numberOfChannels === 1) {
+    return buffer.getChannelData(0);
+  }
   const Offline =
     window.OfflineAudioContext ||
     (window as typeof window & { webkitOfflineAudioContext?: typeof OfflineAudioContext })
@@ -65,8 +86,30 @@ async function prepareForSpeech(buffer: AudioBuffer): Promise<Float32Array> {
   source.connect(offline.destination);
   source.start(0);
   const rendered = await offline.startRendering();
-  return rendered.getChannelData(0).slice();
+  return rendered.getChannelData(0);
 }
+
+/** "כ־3 דקות" / "פחות מדקה" — a remaining time, loosely. */
+function roughMinutes(seconds: number) {
+  if (seconds < 45) return "פחות מדקה";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `כ־${minutes} דקות`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `כ־${hours} שעות ו־${rest} דקות` : `כ־${hours} שעות`;
+}
+
+/** Where a run stands: which window of how many, and how fast it is going. */
+type Stage = {
+  index: number;
+  count: number;
+  /** Seconds of audio already transcribed in this run. */
+  doneSeconds: number;
+  /** Seconds of audio the run covers in all. */
+  totalSeconds: number;
+  /** Seconds of audio per second of work, once a window has finished. */
+  speed: number | null;
+};
 
 type Props = {
   /** A saved transcript to show again; the recording itself was never stored. */
@@ -101,7 +144,10 @@ function readInitial(work: SavedWork | null | undefined): Result | null {
  * misheard word is fixed without losing its timestamp.
  */
 export function TranscriptTool({ initial = null }: Props) {
-  const { audio, error, setError, isLoading, load, clear } = useAudioFile();
+  const { audio, error, setError, isLoading, progress, load, clear, maxBytes } = useAudioFile({
+    maxBytes: MAX_FILE_BYTES,
+    monoAt: SPEECH_RATE,
+  });
   const [saved] = useState(loadSaved);
   const [language, setLanguage] = useState<string | null>(saved.language);
   const [model, setModel] = useState<ModelChoice>(saved.model);
@@ -111,11 +157,16 @@ export function TranscriptTool({ initial = null }: Props) {
   const [notice, setNotice] = useState<string | null>(
     initial ? "פתחת תמלול שמור. ההקלטה עצמה לא נשמרה." : null,
   );
+  const [trim, setTrim] = useState<TrimRange>(null);
+  const [stage, setStage] = useState<Stage | null>(null);
+  // Where to pick up after a stop or a failure: the window that did not finish.
+  const [resume, setResume] = useState<{ windows: SampleWindow[]; index: number } | null>(null);
   const speech = useSpeech();
   const saving = useSaveWork();
   const resetSave = saving.reset;
   const resultsRef = useRef<HTMLDivElement>(null);
   const runTokenRef = useRef(0);
+  const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
 
   useEffect(() => {
     try {
@@ -128,42 +179,130 @@ export function TranscriptTool({ initial = null }: Props) {
   // Editing the text is a new transcript to save.
   useEffect(() => resetSave(), [resetSave, text]);
 
-  const busy = speech.phase === "loading" || speech.phase === "transcribing";
+  const busy = stage !== null;
 
-  const run = useCallback(async () => {
-    if (!audio || busy) return;
-    runTokenRef.current += 1;
-    const token = runTokenRef.current;
-    setError(null);
-    setNotice(null);
-    try {
-      const samples = await prepareForSpeech(audio.buffer);
-      if (runTokenRef.current !== token) return;
-      const segments = await speech.transcribe(samples, {
-        model: MODELS[model].id,
-        language,
-      });
-      if (runTokenRef.current !== token) return;
-      if (!segments.length) {
-        setError("לא זוהה דיבור בהקלטה. נסה שפה אחרת, או את המודל המדויק.");
+  /**
+   * Transcribes window by window. Each finished window's text is added to
+   * the result at once, so a long recording reads as it goes; a stop or a
+   * failure keeps what is done and remembers where to pick up.
+   */
+  const run = useCallback(
+    async (plan?: { windows: SampleWindow[]; index: number }) => {
+      if (!audio || stage) return;
+      runTokenRef.current += 1;
+      const token = runTokenRef.current;
+      setError(null);
+      setNotice(null);
+      setResume(null);
+      let samples: Float32Array;
+      try {
+        samples = await prepareForSpeech(audio.buffer);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "התמלול נכשל.");
         return;
       }
-      const next: Result = {
-        segments,
-        language,
-        model: MODELS[model].id,
-        duration: audio.buffer.duration,
-        sourceName: audio.file.name,
-      };
-      setResult(next);
-      setText(segmentsToText(segments));
-      window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 120);
-    } catch (caught) {
       if (runTokenRef.current !== token) return;
-      const message = caught instanceof Error ? caught.message : "התמלול נכשל.";
-      if (message !== "התמלול בוטל.") setError(message);
+
+      const from = trim ? Math.floor(trim.start * SPEECH_RATE) : 0;
+      const to = trim ? Math.ceil(trim.end * SPEECH_RATE) : samples.length;
+      const windows = plan?.windows ?? splitIntoWindows(samples, SPEECH_RATE, WINDOW_SECONDS, 8, from, to);
+      const startIndex = plan?.index ?? 0;
+      const totalSeconds = windows.reduce((sum, item) => sum + (item.end - item.start), 0) / SPEECH_RATE;
+      let doneSeconds = windows.slice(0, startIndex).reduce((sum, item) => sum + (item.end - item.start), 0) / SPEECH_RATE;
+      let collected: TranscriptSegment[] = plan ? (result?.segments ?? []) : [];
+      const modelId = MODELS[model].id;
+      let speed: number | null = null;
+
+      const publish = (segments: TranscriptSegment[]) => {
+        setResult({
+          segments,
+          language,
+          model: modelId,
+          duration: audio.buffer.duration,
+          sourceName: audio.file.name,
+        });
+        setText(segmentsToText(segments));
+      };
+
+      for (let index = startIndex; index < windows.length; index += 1) {
+        const window_ = windows[index];
+        setStage({ index, count: windows.length, doneSeconds, totalSeconds, speed });
+        const startedAt = Date.now();
+        try {
+          // The worker takes the buffer over, so it gets a copy of the window.
+          const slice = samples.slice(window_.start, window_.end);
+          const found = await speech.transcribe(slice, { model: modelId, language });
+          if (runTokenRef.current !== token) return;
+          const offset = window_.start / SPEECH_RATE;
+          collected = [
+            ...collected,
+            ...found.map((segment) => ({
+              start: segment.start + offset,
+              end: segment.end === null ? null : segment.end + offset,
+              text: segment.text,
+            })),
+          ];
+          const windowSeconds = (window_.end - window_.start) / SPEECH_RATE;
+          doneSeconds += windowSeconds;
+          const took = Math.max(0.001, (Date.now() - startedAt) / 1000);
+          // The first window pays for loading the model, so its pace is
+          // taken with a grain of salt until a second one has run.
+          speed = speed === null ? windowSeconds / took / 1.5 : windowSeconds / took;
+          publish(collected);
+          if (index === startIndex) {
+            window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 120);
+          }
+        } catch (caught) {
+          if (runTokenRef.current !== token) return;
+          const message = caught instanceof Error ? caught.message : "התמלול נכשל.";
+          setStage(null);
+          if (collected.length) publish(collected);
+          if (message !== "התמלול בוטל.") setError(message);
+          // Whatever stopped it, the next attempt starts at this window.
+          setResume({ windows, index });
+          return;
+        }
+      }
+      setStage(null);
+      if (!collected.length) {
+        setError("לא זוהה דיבור בהקלטה. נסה שפה אחרת, או את המודל המדויק.");
+      }
+    },
+    [audio, language, model, result, setError, speech, stage, trim],
+  );
+
+  const stop = () => {
+    runTokenRef.current += 1;
+    speech.cancel();
+    setStage(null);
+    if (stage) {
+      // The window under way is the one to come back to.
+      const windows = resume?.windows ?? null;
+      if (windows) setResume({ windows, index: stage.index });
     }
-  }, [audio, busy, language, model, setError, speech]);
+  };
+
+  const remaining =
+    stage && stage.speed
+      ? roughMinutes(
+          Math.max(
+            0,
+            (stage.totalSeconds - stage.doneSeconds - (speech.progress / 100) * (stage.totalSeconds / stage.count)) /
+              stage.speed,
+          ),
+        )
+      : null;
+  const overall = stage
+    ? Math.min(
+        99,
+        Math.round(
+          ((stage.doneSeconds + (speech.progress / 100) * (stage.totalSeconds / Math.max(1, stage.count))) /
+            Math.max(1, stage.totalSeconds)) *
+            100,
+        ),
+      )
+    : 0;
+  const isLong = Boolean(audio && audio.buffer.duration > LONG_SECONDS);
 
   // The text box is the source of truth once the visitor has typed in it;
   // the segments underneath keep their timestamps.
@@ -239,18 +378,25 @@ export function TranscriptTool({ initial = null }: Props) {
         <AudioPicker
           audio={audio}
           isLoading={isLoading}
+          progress={progress}
+          maxBytes={maxBytes}
           onPick={(file) => {
             setError(null);
             setNotice(null);
+            setTrim(null);
+            setResume(null);
             void load(file);
           }}
           onClear={() => {
             runTokenRef.current += 1;
             speech.cancel();
+            setStage(null);
+            setResume(null);
+            setTrim(null);
             clear();
           }}
           allowRecording
-          hint="הקלטה, הרצאה, שיעור או שיר · עברית, אנגלית ועוד"
+          hint="הקלטה, הרצאה, שיעור או שיר · גם של שעות · עברית, אנגלית ועוד"
         />
         {error && (
           <div className="error-message" role="alert">
@@ -300,20 +446,57 @@ export function TranscriptTool({ initial = null }: Props) {
                 ))}
               </div>
               <small>
-                {modelInfo.note}. הורדה חד־פעמית של {modelInfo.size}; אחר כך הכול רץ במכשיר.
+                {modelInfo.note}. ההפעלה הראשונה טוענת את המנוע ({modelInfo.size}) ועשויה להימשך
+                דקה; אחר כך הכול מיידי, גם בלי אינטרנט.
               </small>
             </div>
           </div>
         </div>
 
-        {audio && !busy && (
-          <button className="primary-button" type="button" onClick={run}>
-            <Wand2 size={20} /> תמלל את ההקלטה
-            <small>{formatTime(audio.buffer.duration)}</small>
-          </button>
+        {audio && peaks && (
+          <Waveform
+            peaks={peaks}
+            duration={audio.buffer.duration}
+            trim={trim}
+            onTrimChange={(next) => {
+              setTrim(next);
+              setResume(null);
+            }}
+            selectLabel="קטע לתמלול"
+            clearLabel="תמלל את כל ההקלטה"
+            emptyLabel="אפשר לסמן קטע בגל הקול כדי לתמלל רק אותו"
+          />
         )}
 
-        {busy && (
+        {audio && isLong && !busy && (
+          <p className="engine-note">
+            הקלטה ארוכה ({formatTime(audio.buffer.duration)}). התמלול נעשה בחלקים של
+            כ־{Math.round(WINDOW_SECONDS / 60)} דקות, הטקסט מצטבר תוך כדי, ואפשר לעצור באמצע
+            ולהמשיך אחר כך מאותה נקודה.
+          </p>
+        )}
+
+        {audio && !busy && !resume && (
+          <button className="primary-button" type="button" onClick={() => void run()}>
+            <Wand2 size={20} /> {trim ? "תמלל את הקטע המסומן" : "תמלל את ההקלטה"}
+            <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
+          </button>
+        )}
+        {audio && !busy && resume && (
+          <div className="transcript-resume">
+            <button className="primary-button" type="button" onClick={() => void run(resume)}>
+              <Play size={20} /> המשך מאיפה שנעצר
+              <small>
+                חלק {resume.index + 1} מתוך {resume.windows.length}
+              </small>
+            </button>
+            <button type="button" className="link-button" onClick={() => setResume(null)}>
+              התחל מהתחלה
+            </button>
+          </div>
+        )}
+
+        {busy && stage && (
           <div className="processing-box" aria-live="polite">
             <div className="processing-top">
               <span>
@@ -332,6 +515,12 @@ export function TranscriptTool({ initial = null }: Props) {
                     : ""}
               </strong>
             </div>
+            {stage.count > 1 && (
+              <p className="transcript-stage">
+                חלק {stage.index + 1} מתוך {stage.count} · {overall}% מההקלטה
+                {remaining ? ` · נותרו ${remaining}` : ""}
+              </p>
+            )}
             {speech.phase === "loading" && speech.loadingFile ? (
               <div
                 className="progress-track"
@@ -360,15 +549,8 @@ export function TranscriptTool({ initial = null }: Props) {
               </div>
             )}
             {speech.partial && <p className="transcript-partial">{speech.partial}</p>}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                runTokenRef.current += 1;
-                speech.cancel();
-              }}
-            >
-              <X size={14} /> בטל
+            <button type="button" className="link-button" onClick={stop}>
+              <X size={14} /> {stage.count > 1 ? "עצור — מה שתומלל יישמר" : "בטל"}
             </button>
           </div>
         )}
@@ -399,7 +581,11 @@ export function TranscriptTool({ initial = null }: Props) {
             aria-label="הטקסט המתומלל, ניתן לעריכה"
             dir="auto"
             spellCheck
+            readOnly={busy}
           />
+          {busy && (
+            <p className="table-footnote">הטקסט ממשיך להצטבר; אפשר לערוך כשהתמלול יסתיים.</p>
+          )}
           <p className="table-footnote">
             אפשר לתקן כאן ישירות. כל שורה היא משפט עם חותמת הזמן שלו — השורות נשמרות
             לכתוביות.

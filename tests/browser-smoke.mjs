@@ -41,6 +41,9 @@ const { chromium } = await loadPlaywright();
 
 const BASE = process.env.SMOKE_URL ?? "http://127.0.0.1:4173/SongToNotes/";
 const DEMO = fileURLToPath(new URL("../public/demo.wav", import.meta.url));
+// An eleven-minute WAV, when the runner provides one (see the transcript
+// section); the long-file checks are skipped without it.
+const LONG = process.env.SMOKE_LONG_WAV ?? null;
 const failures = [];
 const log = (ok, name, extra = "") => {
   if (!ok) failures.push(name + (extra ? ` — ${extra}` : ""));
@@ -444,6 +447,38 @@ if (transcriptOutcome === "text") {
     "transcript: without the hub, the download failure is explained (model not reachable here)",
     transcriptError.trim().slice(0, 80),
   );
+}
+
+// A long recording: decoded in pieces to 16 kHz mono, cut into windows.
+if (LONG) {
+  // The tool is already open with the demo file; a reload starts it clean.
+  await page.goto(`${BASE}#/transcript`, { waitUntil: "load" });
+  await page.reload({ waitUntil: "load" });
+  await page.waitForTimeout(300);
+  await page.locator(".drop-zone input[type=file]").setInputFiles(LONG);
+  await page.waitForSelector(".selected-file", { timeout: 120_000 });
+  const details = (await page.locator(".selected-file .file-details span").textContent()) ?? "";
+  log(/11:00/.test(details) && /מונו/.test(details) && /16 kHz/.test(details),
+    "transcript: an eleven-minute file decodes to 16 kHz mono", details.trim());
+  log(await page.locator(".waveform").isVisible(), "transcript: the long file gets a waveform to pick a range on");
+  log(/חלקים של כ־5 דקות/.test((await page.locator(".transcript-tool .engine-note").textContent()) ?? ""),
+    "transcript: a long file is announced as windowed work");
+  await page.locator(".transcript-tool .primary-button").click();
+  await page.waitForSelector(".transcript-stage", { timeout: 10_000 });
+  const stageText = (await page.locator(".transcript-stage").textContent()) ?? "";
+  // Eleven minutes: five, then five and the one-minute tail folded in.
+  log(/חלק 1 מתוך 2/.test(stageText), "transcript: the run reports its windows", stageText.trim());
+  await page.waitForFunction(
+    () => document.querySelector(".transcript-tool .error-message") || document.querySelector(".transcript-result textarea"),
+    null,
+    { timeout: 180_000 },
+  );
+  if (await page.locator(".transcript-resume").count()) {
+    log(true, "transcript: after a failure the run offers to resume from that window",
+      ((await page.locator(".transcript-resume small").textContent()) ?? "").trim());
+  } else {
+    log(true, "transcript: the long file transcribed (model reachable here)");
+  }
 }
 
 // A saved transcript reopens with its text and timestamps, no model needed.
