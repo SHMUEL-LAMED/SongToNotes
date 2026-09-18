@@ -5,6 +5,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import {
   describeSeparationError,
+  prefetchSeparationModel,
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
@@ -53,6 +54,9 @@ export function VocalsTool() {
   const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => () => void context?.close(), [context]);
+  // Fetched in the background from the moment the tool opens, so pressing
+  // the AI button later does not begin with a long first-time wait.
+  useEffect(() => prefetchSeparationModel(), []);
 
   const runFast = separation.run;
   const settingsKey = audio
