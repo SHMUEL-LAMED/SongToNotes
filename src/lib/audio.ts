@@ -61,6 +61,18 @@ export async function decodeAudioFile(data: ArrayBuffer): Promise<AudioBuffer> {
   if (!context) {
     throw new Error("הדפדפן הזה אינו תומך בעיבוד אודיו.");
   }
+  return decodeWithContext(context, data);
+}
+
+/**
+ * Decodes with whichever context is handed in. An offline context decodes
+ * straight to its own sample rate, which is how a long recording is brought
+ * in at 16 kHz mono for the speech recogniser instead of at 44.1 kHz stereo.
+ */
+export function decodeWithContext(
+  context: BaseAudioContext,
+  data: ArrayBuffer,
+): Promise<AudioBuffer> {
   return new Promise<AudioBuffer>((resolve, reject) => {
     // Whatever goes wrong here, the browser says so in English — "Unable to
     // decode audio data" and the like — and the picker puts that straight in
@@ -94,6 +106,8 @@ export async function decodeAudioFile(data: ArrayBuffer): Promise<AudioBuffer> {
  * Builds the peak envelope used by the waveform strip. Two values per bucket
  * (min, max) so quiet passages stay visible.
  */
+export { getOfflineAudioContextClass };
+
 export function buildPeaks(buffer: AudioBuffer, buckets = 900): Float32Array {
   const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) =>
     buffer.getChannelData(index),

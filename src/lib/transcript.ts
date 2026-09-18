@@ -143,3 +143,62 @@ export const MODELS: Record<ModelChoice, { id: string; label: string; note: stri
     size: "כ־250MB",
   },
 };
+
+// ---------------------------------------------------------------------------
+// Long recordings
+// ---------------------------------------------------------------------------
+
+export type SampleWindow = { start: number; end: number };
+
+/** Loudness of a short frame, for finding the quiet moments. */
+function frameRms(samples: Float32Array, from: number, to: number) {
+  let sum = 0;
+  for (let index = from; index < to; index += 1) sum += samples[index] * samples[index];
+  return Math.sqrt(sum / Math.max(1, to - from));
+}
+
+/**
+ * Cuts a long recording into windows of about `windowSeconds`, each ending at
+ * the quietest moment within `searchSeconds` of the mark, so a cut lands in
+ * a pause between sentences rather than through a word. The recogniser sees
+ * one window at a time: a two-hour lecture becomes two dozen short jobs whose
+ * text arrives as each finishes, and a failure loses one window, not all.
+ * A tail shorter than a third of a window is folded into the one before it.
+ */
+export function splitIntoWindows(
+  samples: Float32Array,
+  sampleRate: number,
+  windowSeconds = 300,
+  searchSeconds = 8,
+  from = 0,
+  to = samples.length,
+): SampleWindow[] {
+  const windowLength = Math.max(1, Math.round(windowSeconds * sampleRate));
+  const search = Math.round(searchSeconds * sampleRate);
+  const frame = Math.max(1, Math.round(sampleRate * 0.1));
+  const first = Math.max(0, Math.min(from, samples.length));
+  const last = Math.max(first, Math.min(to, samples.length));
+  const windows: SampleWindow[] = [];
+  let start = first;
+  while (start < last) {
+    const target = start + windowLength;
+    if (target + windowLength / 3 >= last) {
+      windows.push({ start, end: last });
+      break;
+    }
+    let cut = target;
+    let quietest = Infinity;
+    const lower = Math.max(start + frame, target - search);
+    const upper = Math.min(last - frame, target + search);
+    for (let at = lower; at + frame <= upper; at += frame) {
+      const level = frameRms(samples, at, at + frame);
+      if (level < quietest) {
+        quietest = level;
+        cut = at + Math.floor(frame / 2);
+      }
+    }
+    windows.push({ start, end: cut });
+    start = cut;
+  }
+  return windows;
+}

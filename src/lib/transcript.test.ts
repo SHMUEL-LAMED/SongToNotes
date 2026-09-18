@@ -6,6 +6,7 @@ import {
   segmentsToSrt,
   segmentsToText,
   segmentsToVtt,
+  splitIntoWindows,
   textToSegments,
 } from "./transcript";
 
@@ -83,5 +84,35 @@ describe("countWords", () => {
   it("counts Hebrew and English words, not punctuation", () => {
     expect(countWords("שלום, עולם! hello-world 123")).toBe(4);
     expect(countWords("")).toBe(0);
+  });
+});
+
+describe("splitIntoWindows", () => {
+  const rate = 100;
+
+  it("keeps a short recording whole", () => {
+    expect(splitIntoWindows(new Float32Array(rate * 40), rate, 300)).toEqual([{ start: 0, end: 4000 }]);
+  });
+
+  it("cuts at the quietest moment near the mark", () => {
+    // Twelve minutes of noise with a silent second at 5:03.
+    const samples = new Float32Array(rate * 720).map(() => 0.5);
+    samples.fill(0, rate * 303, rate * 304);
+    const windows = splitIntoWindows(samples, rate, 300, 8);
+    // 0–5:03, 5:03–10:03, and a two-minute tail long enough to stand alone.
+    expect(windows).toHaveLength(3);
+    expect(windows[0].end).toBeGreaterThanOrEqual(rate * 303);
+    expect(windows[0].end).toBeLessThanOrEqual(rate * 304);
+    expect(windows[1].start).toBe(windows[0].end);
+    expect(windows[2].end).toBe(rate * 720);
+  });
+
+  it("folds a short tail into the last window and honours a range", () => {
+    const samples = new Float32Array(rate * 650).map(() => 0.5);
+    const windows = splitIntoWindows(samples, rate, 300, 8);
+    expect(windows).toHaveLength(2);
+    expect(windows[1].end).toBe(rate * 650);
+    const ranged = splitIntoWindows(samples, rate, 300, 8, rate * 100, rate * 200);
+    expect(ranged).toEqual([{ start: rate * 100, end: rate * 200 }]);
   });
 });

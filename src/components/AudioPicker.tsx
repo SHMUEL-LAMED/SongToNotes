@@ -1,6 +1,7 @@
 import { FileAudio, Mic, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decodeAudioFile, formatTime } from "../lib/audio";
+import { decodeMonoAt } from "../lib/longAudio";
 import {
   isRecordingSupported,
   MicRecorder,
@@ -52,10 +53,10 @@ export function formatBytes(bytes: number) {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function validateAudioFile(candidate: File): string | null {
+export function validateAudioFile(candidate: File, maxBytes = MAX_BYTES): string | null {
   if (candidate.size === 0) return "קובץ האודיו ריק. יש לבחור קובץ שמכיל הקלטה.";
-  if (candidate.size > MAX_BYTES) {
-    return `הקובץ גדול מ־${formatBytes(MAX_BYTES)}. קצר אותו או המר ל־MP3.`;
+  if (candidate.size > maxBytes) {
+    return `הקובץ גדול מ־${formatBytes(maxBytes)}. קצר אותו או המר ל־MP3.`;
   }
 
   const parts = candidate.name.split(".");
@@ -82,16 +83,30 @@ export type LoadedAudio = {
   url: string;
 };
 
+export type AudioFileOptions = {
+  /** The largest file to accept; the default suits tools that keep the full-rate audio. */
+  maxBytes?: number;
+  /**
+   * Decode straight to mono at this rate, in pieces where the format allows
+   * — for a tool that only needs speech-grade audio and wants a two-hour
+   * recording to fit in memory.
+   */
+  monoAt?: number;
+};
+
 /**
  * File state shared by every tool that starts from a song: validation,
  * decoding, the object URL for the native player, and cleanup. Tools only
  * ever see a decoded buffer, so none of them repeats this plumbing.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export function useAudioFile() {
+export function useAudioFile(options: AudioFileOptions = {}) {
+  const { maxBytes = MAX_BYTES, monoAt } = options;
   const [audio, setAudio] = useState<LoadedAudio | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  /** 0..1 while a long file is decoded in pieces; null when there is nothing to report. */
+  const [progress, setProgress] = useState<number | null>(null);
   const urlRef = useRef<string | null>(null);
 
   useEffect(
@@ -108,7 +123,7 @@ export function useAudioFile() {
 
   const load = useCallback(async (candidate?: File | null) => {
     if (!candidate) return;
-    const problem = validateAudioFile(candidate);
+    const problem = validateAudioFile(candidate, maxBytes);
     if (problem) {
       setError(problem);
       return;
@@ -116,6 +131,7 @@ export function useAudioFile() {
     loadTokenRef.current += 1;
     const token = loadTokenRef.current;
     setIsLoading(true);
+    setProgress(null);
     setError(null);
     try {
       let data: ArrayBuffer;
@@ -129,7 +145,11 @@ export function useAudioFile() {
           "לא הצלחנו לקרוא את הקובץ מהמכשיר. אם הוא נמצא ב־Drive או ב־iCloud, כדאי להוריד אותו למכשיר ולנסות שוב.",
         );
       }
-      const buffer = await decodeAudioFile(data);
+      const buffer = monoAt
+        ? await decodeMonoAt(data, monoAt, (fraction) => {
+            if (loadTokenRef.current === token) setProgress(fraction);
+          })
+        : await decodeAudioFile(data);
       if (loadTokenRef.current !== token) return;
       if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) {
         throw new Error("הקובץ נפתח אבל אין בו שמע.");
@@ -147,9 +167,12 @@ export function useAudioFile() {
           : `לא הצלחנו לפתוח את „${candidate.name}”. ייתכן שהפורמט אינו נתמך בדפדפן הזה — המרה ל־MP3 או ל־WAV בדרך כלל פותרת את זה.`,
       );
     } finally {
-      if (loadTokenRef.current === token) setIsLoading(false);
+      if (loadTokenRef.current === token) {
+        setIsLoading(false);
+        setProgress(null);
+      }
     }
-  }, []);
+  }, [maxBytes, monoAt]);
 
   const clear = useCallback(() => {
     loadTokenRef.current += 1;
@@ -158,14 +181,19 @@ export function useAudioFile() {
     setAudio(null);
     setError(null);
     setIsLoading(false);
+    setProgress(null);
   }, []);
 
-  return { audio, error, setError, isLoading, load, clear };
+  return { audio, error, setError, isLoading, progress, load, clear, maxBytes };
 }
 
 type PickerProps = {
   audio: LoadedAudio | null;
   isLoading: boolean;
+  /** 0..1 while a long file is decoded in pieces. */
+  progress?: number | null;
+  /** The limit the hook was given, for the hint under the headline. */
+  maxBytes?: number;
   onPick: (file?: File | null) => void;
   onClear: () => void;
   /** Shown under the headline of the drop zone. */
@@ -178,6 +206,8 @@ type PickerProps = {
 export function AudioPicker({
   audio,
   isLoading,
+  progress = null,
+  maxBytes = MAX_BYTES,
   onPick,
   onClear,
   hint,
@@ -338,8 +368,14 @@ export function AudioPicker({
         <span className="upload-icon">
           <UploadCloud size={32} />
         </span>
-        <strong>{isLoading ? "טוען את הקובץ…" : "גרור לכאן שיר או לחץ לבחירה"}</strong>
-        <span>{hint ?? `MP3, WAV, OGG, FLAC, M4A, AAC · עד ${formatBytes(MAX_BYTES)}`}</span>
+        <strong>
+          {isLoading
+            ? progress !== null
+              ? `מפענח את הקובץ… ${Math.round(progress * 100)}%`
+              : "טוען את הקובץ…"
+            : "גרור לכאן שיר או לחץ לבחירה"}
+        </strong>
+        <span>{hint ?? `MP3, WAV, OGG, FLAC, M4A, AAC · עד ${formatBytes(maxBytes)}`}</span>
         {/* The input sits inside the label rather than being clicked from
             script: iOS Safari and several Android WebViews refuse a
             programmatic `.click()` on a file input, which is what made the
