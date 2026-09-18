@@ -1,4 +1,4 @@
-import { Bot, CircleHelp, LogIn, MousePointerClick, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, CircleHelp, LogIn, MousePointerClick, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AiError, chat, type AssistantMode, type ChatMessage } from "../lib/aiApi";
 import { findTool } from "../lib/tools";
@@ -12,7 +12,9 @@ type Props = {
   toolTitle: string | null;
 };
 
-const STORAGE_KEY = "musictools.assistant.v1";
+const STORAGE_KEY = "musictools.assistant.v2";
+const MAX_MESSAGE = 3000;
+const EXECUTION_SUGGESTIONS = ["פתח לי את הכלי להסרת שירה", "קח אותי ליצירת צלצול", "פתח את המטרונום"];
 
 const SUGGESTIONS = [
   "איך מוציאים תווים משיר?",
@@ -21,10 +23,13 @@ const SUGGESTIONS = [
   "תסביר לי מה זה סולם מז'ור",
 ];
 
-function loadHistory(): ChatMessage[] {
+function loadHistory(storageKey: string): ChatMessage[] {
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "null");
-    return Array.isArray(parsed) ? (parsed as ChatMessage[]).slice(-30) : [];
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
+    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMessage =>
+      item !== null && typeof item === "object" &&
+      (item.role === "user" || item.role === "assistant") && typeof item.content === "string"
+    ).slice(-30).map((item) => ({ role: item.role, content: item.content.slice(0, 8000) })) : [];
   } catch {
     return [];
   }
@@ -36,25 +41,40 @@ function loadHistory(): ChatMessage[] {
  * so the panel is only a conversation: nothing is installed. It needs an
  * account, like every use of the server.
  */
-export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
+export function AiAssistant(props: Props) {
+  const { user } = useAuth();
+  // Remount on account changes: never expose another account's conversation.
+  return <AssistantConversation key={user?.id ?? "guest"} {...props} storageKey={`${STORAGE_KEY}.${user?.id ?? "guest"}`} />;
+}
+
+function AssistantConversation({ open, onClose, onOpen, toolTitle, storageKey }: Props & { storageKey: string }) {
   const { user, signInWithGoogle } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>(loadHistory);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory(storageKey));
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<AssistantMode>("question");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState<{ content: string; mode: AssistantMode; detailed: boolean } | null>(null);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [detailed, setDetailed] = useState(false);
+  const destination = pendingRoute ? findTool(pendingRoute) : null;
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      sessionStorage.setItem(storageKey, JSON.stringify(messages.slice(-30)));
     } catch {
       // Private browsing; the conversation lasts as long as the page.
     }
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, busy, storageKey]);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -69,34 +89,61 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
     };
   }, [onClose, open]);
 
-  const send = async (content: string) => {
+  const stop = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+  };
+
+  const send = async (content: string, retrying = false) => {
     const clean = content.trim();
-    if (!clean || busy) return;
-    const next: ChatMessage[] = [...messages, { role: "user", content: clean }];
+    if (!clean || abortRef.current || !user) return;
+    if (clean.length > MAX_MESSAGE) {
+      setError(`אפשר לשלוח עד ${MAX_MESSAGE} תווים בכל הודעה.`);
+      return;
+    }
+    const requestMode = retrying && retry ? retry.mode : mode;
+    const requestDetailed = retrying && retry ? retry.detailed : detailed;
+    const next: ChatMessage[] = retrying ? messages : [...messages, { role: "user", content: clean }].slice(-30) as ChatMessage[];
     setMessages(next);
     setDraft("");
     setError(null);
+    setPendingRoute(null);
+    setRetry({ content: clean, mode: requestMode, detailed: requestDetailed });
     setBusy(true);
-    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const timer = window.setTimeout(() => {
+      if (abortRef.current !== controller) return;
+      controller.abort();
+      abortRef.current = null;
+      setBusy(false);
+      setError("התשובה מתעכבת. אפשר לנסות שוב או לקצר את השאלה.");
+    }, 60000);
     try {
       // The page the visitor is on travels with the question, quietly.
-      const context = toolTitle ? `(הגולש נמצא כרגע בכלי "${toolTitle}".) ` : "";
-      const history = next.slice(0, -1).concat({ role: "user", content: `${context}${clean}` });
-      const reply = await chat(history, { mode, signal: controller.signal });
+      const context = [
+        toolTitle ? `הכלי הנוכחי: ${toolTitle}.` : "הגולש בדף הבית.",
+        requestDetailed ? "העדפה: הסבר מפורט עם צעדים ודוגמה שימושית." : "העדפה: תשובה קצרה וברורה, עם צעדים כשצריך.",
+        "אם חסר פרט חיוני, שאל שאלה ממוקדת. אין לך גישה לקובץ האודיו או לתוצאות שלו מתוך השיחה.",
+        requestMode === "execute" ? "פתיחת כלי דורשת אישור נוסף בכפתור. הצע את הפעולה ואל תטען שכבר בוצעה. אין לך יכולת להעלות קבצים או להתחיל עיבוד בעצמך." : "במצב שאלה מסבירים בלבד, ללא ביצוע פעולות.",
+      ].join(" ");
+      const history = next.slice(-16, -1).concat({ role: "user", content: `(${context})\n${clean}` });
+      const reply = await chat(history, { mode: requestMode, signal: controller.signal });
       if (controller.signal.aborted) return;
-      setMessages([...next, { role: "assistant", content: reply.text }]);
-      if (mode === "execute" && reply.action?.type === "navigate") {
-        const destination = findTool(reply.action.route);
-        if (destination) {
-          window.location.assign(`#/${destination.id}`);
-        }
+      if (!reply || typeof reply.text !== "string" || !reply.text.trim()) {
+        throw new Error("התקבלה תשובה ריקה. אפשר לנסות שוב.");
+      }
+      setMessages([...next, { role: "assistant", content: reply.text }].slice(-30) as ChatMessage[]);
+      setRetry(null);
+      if (requestMode === "execute" && reply.action?.type === "navigate" && findTool(reply.action.route)) {
+        setPendingRoute(reply.action.route);
       }
     } catch (caught) {
       if (controller.signal.aborted) return;
       setError(caught instanceof AiError || caught instanceof Error ? caught.message : "לא הצלחנו לענות.");
     } finally {
+      window.clearTimeout(timer);
       if (abortRef.current === controller) {
         abortRef.current = null;
         setBusy(false);
@@ -138,10 +185,11 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
                 type="button"
                 className="icon-button"
                 onClick={() => {
-                  abortRef.current?.abort();
+                  stop();
                   setMessages([]);
                   setError(null);
-                  setBusy(false);
+                  setRetry(null);
+                  setPendingRoute(null);
                 }}
                 aria-label="נקה את השיחה"
                 title="נקה את השיחה"
@@ -159,7 +207,7 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
               type="button"
               className={mode === "question" ? "active" : ""}
               aria-pressed={mode === "question"}
-              onClick={() => setMode("question")}
+              onClick={() => { setMode("question"); setPendingRoute(null); }}
               disabled={busy}
             >
               <CircleHelp size={15} /> מצב שאלה
@@ -175,12 +223,17 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
             </button>
           </div>
 
+          <div className="assistant-signin">
+            <small>{mode === "execute" ? "מציע כלי מתאים ופותח אותו רק באישור שלך. עיבוד קבצים מתבצע בתוך הכלי." : "מסביר ועונה, בלי לשנות דבר באתר."}</small>
+            <label><input type="checkbox" checked={detailed} onChange={(event) => setDetailed(event.target.checked)} disabled={busy} /> הסבר מפורט</label>
+          </div>
+
           <div className="assistant-messages" ref={listRef} aria-live="polite">
             {messages.length === 0 && (
               <div className="assistant-empty">
                 <p>שלום! אפשר לשאול אותי איך להשתמש בכל כלי באתר, או כל שאלה על מוזיקה.</p>
                 <div className="assistant-suggestions">
-                  {SUGGESTIONS.map((item) => (
+                  {(mode === "execute" ? EXECUTION_SUGGESTIONS : toolTitle ? [`איך משתמשים בכלי ${toolTitle}?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS).map((item) => (
                     <button key={item} type="button" className="chip-toggle" onClick={() => void send(item)} disabled={busy || !user}>
                       {item}
                     </button>
@@ -205,6 +258,26 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
                 {error}
               </div>
             )}
+            {!busy && retry && (
+              <button type="button" className="chip-toggle" onClick={() => void send(retry.content, true)}>נסה שוב את הבקשה האחרונה</button>
+            )}
+            {!busy && destination && mode === "execute" && (
+              <div className="assistant-bubble is-assistant">
+                <strong>לאישור: פתיחת {destination.title}</strong>
+                <p>הפעולה תעביר אותך לכלי. כדאי לשמור עבודה פתוחה לפני המעבר. היא לא מעלה קובץ ולא מתחילה עיבוד.</p>
+                <button type="button" className="primary-button compact" onClick={() => {
+                  window.location.assign(`#/${destination.id}`);
+                  setPendingRoute(null);
+                  setMessages((previous) => [...previous, { role: "assistant", content: `בוצע מעבר לכלי ${destination.title}.` }].slice(-30) as ChatMessage[]);
+                }}>אישור ופתיחת הכלי</button>
+                <button type="button" className="chip-toggle" onClick={() => setPendingRoute(null)}>ביטול</button>
+              </div>
+            )}
+            {!busy && !retry && !destination && messages.at(-1)?.role === "assistant" && (
+              <div className="assistant-suggestions">
+                {["תסביר בשלבים", "תן דוגמה", "תקצר את התשובה"].map((item) => <button key={item} type="button" className="chip-toggle" onClick={() => void send(item)}>{item}</button>)}
+              </div>
+            )}
           </div>
 
           {user ? (
@@ -214,20 +287,21 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     void send(draft);
                   }
                 }}
                 rows={1}
+                maxLength={MAX_MESSAGE}
                 placeholder={mode === "execute" ? "כתוב מה לבצע…" : "כתוב שאלה…"}
                 aria-label="השאלה שלך"
                 disabled={busy}
                 dir="auto"
               />
-              <button type="submit" className="primary-button compact" disabled={busy || !draft.trim()} aria-label="שלח">
+              {busy ? <button type="button" className="primary-button compact" onClick={stop} aria-label="עצור תשובה" title="עצור תשובה"><Square size={18} /></button> : <button type="submit" className="primary-button compact" disabled={!draft.trim()} aria-label="שלח">
                 <SendHorizontal size={18} />
-              </button>
+              </button>}
             </form>
           ) : (
             <div className="assistant-signin">
