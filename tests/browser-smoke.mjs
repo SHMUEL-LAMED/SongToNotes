@@ -50,6 +50,17 @@ const log = (ok, name, extra = "") => {
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
 
+// Counting the voices the synth starts is the only way from outside the page
+// to tell one playback from two overlapping ones.
+await page.addInitScript(() => {
+  window.__oscillators = 0;
+  const create = AudioContext.prototype.createOscillator;
+  AudioContext.prototype.createOscillator = function countingCreateOscillator() {
+    window.__oscillators += 1;
+    return create.call(this);
+  };
+});
+
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
@@ -271,6 +282,53 @@ log(
 );
 const chordScore = await page.locator(".ear-score strong").first().textContent();
 log(chordScore === "0", "ear: each exercise keeps its own score", `asked ${chordScore}`);
+
+// Back to the two-note exercise, with a question sounding, for the checks
+// below: both the shortcuts and the replay need one on screen.
+await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().click();
+await page.waitForTimeout(200);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+
+// The browser's own shortcuts stay the browser's: Ctrl+R must still reload.
+const modifierVerdict = await page.evaluate(() => {
+  const press = (init) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  return {
+    reload: press({ key: "r", ctrlKey: true }),
+    command: press({ key: "r", metaKey: true }),
+    tab: press({ key: "1", ctrlKey: true }),
+    plain: press({ key: "r" }),
+  };
+});
+log(
+  !modifierVerdict.reload && !modifierVerdict.command && !modifierVerdict.tab,
+  "ear: Ctrl/Cmd shortcuts are left to the browser",
+  JSON.stringify(modifierVerdict),
+);
+log(modifierVerdict.plain, "ear: plain R still replays the question");
+
+// Replaying mid-phrase must schedule the notes once, not twice.
+const oscillators = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const button = document.querySelector(".ear-playback .primary-button");
+  button.click();
+  await wait(250); // the phrase is now under way
+  const before = window.__oscillators ?? 0;
+  button.click(); // replay on top of it
+  await wait(2500);
+  return (window.__oscillators ?? 0) - before;
+});
+// A beginner interval is two notes, and the piano voice gives each two
+// oscillators: four for one pass, twice that when a replay starts two.
+log(
+  oscillators > 0 && oscillators <= 5,
+  "ear: replaying mid-phrase starts the notes once",
+  `${oscillators} oscillators`,
+);
 
 // Enter on a focused button must press that button, not fire the shortcut.
 await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().focus();

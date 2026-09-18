@@ -119,6 +119,12 @@ export function EarTrainingTool() {
     (item: Question) => {
       const engine = player();
       engine.setHandlers({ onEnd: () => setPlaying(false) });
+      // `load` restarts a player that was already running, at the position it
+      // had reached. Replaying mid-phrase would then schedule the notes twice
+      // — once from there and once from the top — and the two attacks overlap
+      // into a click on the very interval the ear is meant to judge. Stopping
+      // first leaves exactly one start.
+      engine.stop(true);
       engine.load(
         item.notes.map((note) => ({ ...note, confidence: 0.9 })),
         0,
@@ -173,6 +179,8 @@ export function EarTrainingTool() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Ctrl+R, Cmd+R and Ctrl+1 belong to the browser, not to the trainer.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
       if (target?.isContentEditable) return;
