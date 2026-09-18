@@ -10,13 +10,46 @@
  * Settings (secrets or private.stt_settings):
  *   AI_API_KEY       falls back to STT_API_KEY
  *   AI_BASE_URL      falls back to STT_BASE_URL, then https://api.openai.com/v1
- *   AI_MODEL         default llama-3.3-70b-versatile
+ *   AI_MODEL         default llama-3.3-70b-versatile; when the service no longer
+ *                    serves it, the best model it does list is picked and kept
  *   AI_DAILY_TOKENS  default 300000
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
 
 const DEFAULT_DAILY_TOKENS = 300_000;
 const MAX_INPUT_CHARS = 60_000;
+const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+
+/**
+ * Model names come and go on the hosted services. In order of preference,
+ * the families known to handle Hebrew well; the first one the service
+ * lists wins, and anything that is plainly not a chat model is skipped.
+ */
+const PREFERRED = [
+  /gpt-oss-120b/i,
+  /llama-4.*maverick/i,
+  /llama-4.*scout/i,
+  /llama-3\.3-70b/i,
+  /qwen3-(32|235)b/i,
+  /kimi-k2/i,
+  /gpt-oss-20b/i,
+  /llama-3\.1-8b/i,
+];
+const NOT_CHAT = /whisper|tts|guard|embed|orpheus|playai|moderation|rerank|vision-preview/i;
+
+/** Asks the service what it serves and picks the best of it, or null. */
+async function discoverModel(base: string, apiKey: string) {
+  const response = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${apiKey}` } }).catch(() => null);
+  if (!response?.ok) return null;
+  const parsed = (await response.json().catch(() => null)) as { data?: { id?: string }[] } | null;
+  const ids = (parsed?.data ?? []).map((item) => String(item.id ?? "")).filter(Boolean);
+  console.log("models served:", ids.join(", "));
+  for (const pattern of PREFERRED) {
+    const hit = ids.find((id) => pattern.test(id));
+    if (hit) return hit;
+  }
+  return ids.find((id) => !NOT_CHAT.test(id)) ?? null;
+}
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
@@ -64,7 +97,7 @@ Deno.serve(async (req) => {
   const apiKey = setting("AI_API_KEY", "STT_API_KEY");
   if (!apiKey) return json(503, { error: "not_configured" });
   const base = (setting("AI_BASE_URL", "STT_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  const model = setting("AI_MODEL") ?? "llama-3.3-70b-versatile";
+  let model = setting("AI_MODEL") ?? DEFAULT_MODEL;
   const limit = Number(setting("AI_DAILY_TOKENS")) || DEFAULT_DAILY_TOKENS;
 
   const user = await visitor(req);
@@ -98,13 +131,31 @@ Deno.serve(async (req) => {
   const { used } = await usedToday(admin, user.id, "ai");
   if (used >= limit) return json(429, { error: "quota", used, limit });
 
-  let response: Response;
-  try {
-    response = await fetch(`${base}/chat/completions`, {
+  const ask = (chosen: string) =>
+    fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, temperature: action === "chat" ? 0.5 : 0.2 }),
+      body: JSON.stringify({ model: chosen, messages, temperature: action === "chat" ? 0.5 : 0.2 }),
     });
+  let response: Response;
+  try {
+    response = await ask(model);
+    // The configured model is gone: find what the service serves now, and
+    // remember it so the next call does not pay for the lookup.
+    if (response.status === 404 || response.status === 400) {
+      const detail = await response.clone().text().catch(() => "");
+      if (/model|not exist|decommission/i.test(detail)) {
+        const found = await discoverModel(base, apiKey);
+        if (found && found !== model) {
+          console.log("model", model, "unavailable; switching to", found);
+          model = found;
+          response = await ask(model);
+          if (response.ok) {
+            await admin.rpc("stt_set_setting", { setting_key: "AI_MODEL", setting_value: model });
+          }
+        }
+      }
+    }
   } catch (caught) {
     console.error("language model unreachable", caught);
     return json(502, { error: "provider_unreachable" });
