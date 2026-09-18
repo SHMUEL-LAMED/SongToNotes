@@ -22,6 +22,7 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import {
   describeSeparationError,
+  prefetchSeparationModel,
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
@@ -69,6 +70,9 @@ export function RingtoneTool({ onSaved }: { onSaved: () => void }) {
   const [context] = useState(sharedContext);
 
   useEffect(() => () => void context?.close(), [context]);
+  // Fetched in the background from the moment the tool opens, so the
+  // instrumental button later does not begin with a long first-time wait.
+  useEffect(() => prefetchSeparationModel(), []);
 
   return (
     <section className="tool-body ringtone-tool">
