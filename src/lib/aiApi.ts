@@ -76,7 +76,16 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 
 export type AiAction = "polish" | "summarize" | "translate" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
-export type AiReply = { text: string; model: string; tokens: number; used: number; limit: number };
+export type AssistantMode = "question" | "execute";
+export type AssistantAction = { type: "navigate"; route: string };
+export type AiReply = {
+  text: string;
+  model: string;
+  tokens: number;
+  used: number;
+  limit: number;
+  action?: AssistantAction | null;
+};
 
 /** Tidies, summarises or translates a text. */
 export function transformText(
@@ -93,12 +102,15 @@ export function transformText(
 }
 
 /** The assistant's next reply to a conversation. */
-export function chat(messages: ChatMessage[], signal?: AbortSignal) {
+export function chat(
+  messages: ChatMessage[],
+  options: { mode?: AssistantMode; signal?: AbortSignal } = {},
+) {
   return call<AiReply>("ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "chat", messages }),
-    signal,
+    body: JSON.stringify({ action: "chat", messages, mode: options.mode ?? "question" }),
+    signal: options.signal,
   });
 }
 
