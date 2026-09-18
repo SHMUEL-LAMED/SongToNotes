@@ -238,3 +238,19 @@ with check (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth
 create policy "Users can delete their own work files"
 on storage.objects for delete to authenticated
 using (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- ---------------------------------------------------------------------------
+-- Speech to text runs on the server (supabase/functions/transcribe), against
+-- a paid service whose key is a function secret. Each account gets a daily
+-- allowance of audio; the function keeps the tally here with the service
+-- role, and no policy lets the site read or change it.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.stt_usage (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  day date not null,
+  seconds integer not null default 0,
+  primary key (user_id, day)
+);
+
+alter table public.stt_usage enable row level security;

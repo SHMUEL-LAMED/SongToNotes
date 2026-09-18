@@ -83,13 +83,6 @@ export default defineConfig({
           src: "models/htdemucs_embedded.onnx",
           dest: "model",
         },
-        // The speech recogniser's runtime, served from the site rather than
-        // from a CDN. transformers.js pins its own onnxruntime-web, which npm
-        // nests under it when the version differs from the site's.
-        {
-          src: "node_modules/@huggingface/transformers/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.{wasm,mjs}",
-          dest: "ort",
-        },
       ],
     }),
   ],
