@@ -21,6 +21,7 @@ import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import {
+  describeSeparationError,
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
@@ -273,7 +274,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
   const makeInstrumental = useCallback(async () => {
     setAiBusy(true);
     setAiProgress(0);
-    setAiStatus("מכין את מודל ההפרדה…");
+    setAiStatus("מכין את ההפרדה…");
     try {
       const stems = await separateStems(audio.buffer, (progress: SeparationProgress) => {
         setAiProgress(Math.round(progress.progress * 100));
@@ -286,12 +287,7 @@ function RingtoneEditor({ audio, context, userId, onSaved }: EditorProps) {
       setAiProgress(100);
       setAiStatus("הגרסה האינסטרומנטלית מוכנה — הצלצול נחתך ממנה עכשיו.");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "ההפרדה נכשלה.";
-      setAiStatus(
-        message === "Failed to fetch"
-          ? "לא הצלחנו להוריד את מודל ההפרדה. בדוק את החיבור לאינטרנט ונסה שוב."
-          : `ההפרדה לא הושלמה: ${message}. כדאי לנסות שוב ולהשאיר את הכרטיסייה פתוחה בזמן העיבוד.`,
-      );
+      setAiStatus(describeSeparationError(caught));
     } finally {
       setAiBusy(false);
     }

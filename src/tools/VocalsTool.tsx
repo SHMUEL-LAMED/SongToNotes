@@ -4,6 +4,7 @@ import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import {
+  describeSeparationError,
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
@@ -99,7 +100,7 @@ export function VocalsTool() {
     if (!audio || !context) return;
     setAiBusy(true);
     setAiProgress(0);
-    setAiStatus("מכין את מודל ההפרדה…");
+    setAiStatus("מכין את ההפרדה…");
     try {
       const report = (progress: SeparationProgress) => {
         setAiProgress(Math.round(progress.progress * 100));
@@ -116,12 +117,7 @@ export function VocalsTool() {
       setAiProgress(100);
       setAiStatus("ההפרדה הושלמה.");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "ההפרדה נכשלה.";
-      setAiStatus(
-        message === "Failed to fetch"
-          ? "לא הצלחנו להוריד את מודל ההפרדה. בדוק את החיבור לאינטרנט ונסה שוב."
-          : `ההפרדה לא הושלמה: ${message}. כדאי לנסות שוב ולהשאיר את הכרטיסייה פתוחה בזמן העיבוד.`,
-      );
+      setAiStatus(describeSeparationError(caught));
     } finally {
       setAiBusy(false);
     }
@@ -311,7 +307,7 @@ export function VocalsTool() {
                 </span>
                 <div>
                   <h3>
-                    <Sparkles size={16} /> הפרדה אמיתית עם AI
+                    <Sparkles size={16} /> הפרדה מלאה עם AI
                   </h3>
                   <p>ההפעלה הראשונה עשויה להימשך כמה דקות.</p>
                 </div>
