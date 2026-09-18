@@ -112,6 +112,15 @@ export type SeparationStatus =
   | { status: "done"; vocals: string | null; instrumental: string | null }
   | { status: "failed"; message: string };
 
+/** Checks whether server-side separation is configured without uploading the song. */
+export function separationAvailability(signal?: AbortSignal) {
+  return call<{ configured: boolean }>("separate", {
+    method: "GET",
+    query: { availability: "1" },
+    signal,
+  });
+}
+
 /** Sends the song up and starts the job. */
 export function startSeparation(file: File, signal?: AbortSignal) {
   const form = new FormData();
