@@ -272,6 +272,27 @@ log(
 const chordScore = await page.locator(".ear-score strong").first().textContent();
 log(chordScore === "0", "ear: each exercise keeps its own score", `asked ${chordScore}`);
 
+// Enter on a focused button must press that button, not fire the shortcut.
+await page.locator(".segmented-control button", { hasText: "מרווחים" }).first().focus();
+await page.keyboard.press("Enter");
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-choices").count()) === 0 &&
+    (await page
+      .locator(".segmented-control button", { hasText: "מרווחים" })
+      .first()
+      .getAttribute("aria-pressed")) === "true",
+  "ear: Enter on a focused button presses it instead of starting a question",
+);
+// With focus off the controls the shortcut is back.
+await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  (await page.locator(".ear-choices button").count()) > 0,
+  "ear: Enter outside the controls still starts a question",
+);
+
 // --- the skip control reaches the content without hijacking the route ---
 await page.goto(`${BASE}#/metronome`, { waitUntil: "load" });
 // A hash-only navigation keeps the page — and with it whatever was clicked

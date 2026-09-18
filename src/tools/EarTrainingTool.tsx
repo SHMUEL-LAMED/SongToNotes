@@ -175,7 +175,13 @@ export function EarTrainingTool() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      if (event.key === "Enter" && (answered || !question)) {
+      if (target?.isContentEditable) return;
+      // Enter belongs to whatever control has focus. Taking it here would stop
+      // a keyboard user from pressing the very buttons on this page — the
+      // exercise picker, "השמע שוב", "אפס ניקוד" — so the shortcut only
+      // applies when focus is not sitting on something Enter already works on.
+      const onControl = Boolean(target?.closest("button, a[href], summary"));
+      if (event.key === "Enter" && !onControl && (answered || !question)) {
         event.preventDefault();
         nextQuestion();
         return;
