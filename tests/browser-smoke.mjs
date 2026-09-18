@@ -423,31 +423,19 @@ log(
 await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
 await page.waitForSelector(".transcript-tool .primary-button", { timeout: 30_000 });
 log(true, "transcript: a loaded file offers the transcribe button");
-await page.locator(".transcript-tool .primary-button").click();
-await page.waitForSelector(".processing-box", { timeout: 10_000 });
-log(true, "transcript: pressing it starts the engine");
-const transcriptOutcome = await page
-  .waitForFunction(
-    () =>
-      document.querySelector(".transcript-result textarea") ? "text" :
-      document.querySelector(".transcript-tool .error-message") ? "error" : null,
-    null,
-    { timeout: 180_000 },
-  )
-  .then((handle) => handle.jsonValue())
-  .catch(() => "timeout");
-if (transcriptOutcome === "text") {
-  const transcriptText = await page.locator(".transcript-result textarea").inputValue();
-  log(transcriptText.trim().length > 0, "transcript: the model returned text", transcriptText.slice(0, 60));
-  log((await page.locator(".transcript-segments li").count()) > 0, "transcript: with timestamps");
-} else {
-  const transcriptError = (await page.locator(".transcript-tool .error-message").textContent().catch(() => "")) ?? "";
-  log(
-    transcriptOutcome === "error" && /להוריד את מודל/.test(transcriptError),
-    "transcript: without the hub, the download failure is explained (model not reachable here)",
-    transcriptError.trim().slice(0, 80),
-  );
-}
+// Signed out, the recogniser on the server would refuse; the page says so
+// before a byte goes up, and offers to sign in instead of the transcribe button.
+await page.waitForSelector(".transcript-signin", { timeout: 10_000 });
+log(
+  /להתחבר/.test((await page.locator(".transcript-signin p").textContent()) ?? ""),
+  "transcript: signed out, the run is replaced by a sign-in prompt (the key stays on the server)",
+);
+log((await page.locator(".transcript-tool .primary-button").count()) === 1,
+  "transcript: the only primary button is the sign-in one");
+log(!/מוריד|הורד/.test((await page.locator(".transcript-tool").textContent()) ?? ""),
+  "transcript: nothing on the page asks the visitor to download anything");
+log(/בשרת/.test((await page.locator(".transcript-tool .setting-field small").last().textContent()) ?? ""),
+  "transcript: the page explains the work is done on the server");
 
 // A long recording: decoded in pieces to 16 kHz mono, cut into windows.
 if (LONG) {
@@ -461,24 +449,11 @@ if (LONG) {
   log(/11:00/.test(details) && /מונו/.test(details) && /16 kHz/.test(details),
     "transcript: an eleven-minute file decodes to 16 kHz mono", details.trim());
   log(await page.locator(".waveform").isVisible(), "transcript: the long file gets a waveform to pick a range on");
-  log(/חלקים של כ־5 דקות/.test((await page.locator(".transcript-tool .engine-note").textContent()) ?? ""),
+  log(/חלקים של כ־4 דקות/.test((await page.locator(".transcript-tool .engine-note").textContent()) ?? ""),
     "transcript: a long file is announced as windowed work");
-  await page.locator(".transcript-tool .primary-button").click();
-  await page.waitForSelector(".transcript-stage", { timeout: 10_000 });
-  const stageText = (await page.locator(".transcript-stage").textContent()) ?? "";
-  // Eleven minutes: five, then five and the one-minute tail folded in.
-  log(/חלק 1 מתוך 2/.test(stageText), "transcript: the run reports its windows", stageText.trim());
-  await page.waitForFunction(
-    () => document.querySelector(".transcript-tool .error-message") || document.querySelector(".transcript-result textarea"),
-    null,
-    { timeout: 180_000 },
-  );
-  if (await page.locator(".transcript-resume").count()) {
-    log(true, "transcript: after a failure the run offers to resume from that window",
-      ((await page.locator(".transcript-resume small").textContent()) ?? "").trim());
-  } else {
-    log(true, "transcript: the long file transcribed (model reachable here)");
-  }
+  // The run itself needs an account and the server; signed out it stays a prompt.
+  log(await page.locator(".transcript-signin").isVisible(),
+    "transcript: the long file too waits for a sign-in before anything is sent");
 }
 
 // A saved transcript reopens with its text and timestamps, no model needed.
@@ -487,7 +462,7 @@ await page.evaluate(() => {
   localStorage.setItem("music-tools.works.v1", JSON.stringify([{
     id: "t1", kind: "transcript", title: "שיעור", sourceName: "lesson.m4a",
     summary: { words: 5, duration: 9, languageLabel: "עברית" },
-    payload: { segments: [{ start: 0, end: 4, text: "שלום לכולם" }, { start: 4.5, end: 9, text: "ברוכים הבאים לשיעור" }], language: "he", model: "onnx-community/whisper-base" },
+    payload: { segments: [{ start: 0, end: 4, text: "שלום לכולם" }, { start: 4.5, end: 9, text: "ברוכים הבאים לשיעור" }], language: "he", model: "whisper-1" },
     fileName: null, deviceId: null, filePath: null, createdAt: now, updatedAt: now, localOnly: true,
   }]));
 });

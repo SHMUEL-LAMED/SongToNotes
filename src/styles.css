@@ -2918,3 +2918,15 @@ footer .brand-mark { font-size: 19px; }
 }
 .transcript-stage { margin: 0; font-size: 13.5px; color: var(--text-soft); font-weight: 600; }
 .transcript-resume { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.transcript-signin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft, rgba(127, 127, 127, 0.06));
+  text-align: center;
+}
+.transcript-signin p { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 14.5px; color: var(--text-soft); }

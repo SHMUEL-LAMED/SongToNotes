@@ -139,7 +139,7 @@ export const TOOLS: ToolDefinition[] = [
     icon: Captions,
     hue: 210,
     category: "analyze",
-    tags: ["תמלול", "טקסט", "כתוביות", "srt", "דיבור", "whisper"],
+    tags: ["תמלול", "טקסט", "כתוביות", "srt", "דיבור", "כתוביות לסרטון"],
     badge: "חדש",
   },
   {

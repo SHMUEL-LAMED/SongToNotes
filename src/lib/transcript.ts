@@ -127,23 +127,6 @@ export function languageLabel(id: string | null) {
   return LANGUAGES.find((item) => item.id === id)?.label ?? id ?? "זיהוי אוטומטי";
 }
 
-export type ModelChoice = "fast" | "accurate";
-
-export const MODELS: Record<ModelChoice, { id: string; label: string; note: string; size: string }> = {
-  fast: {
-    id: "onnx-community/whisper-base",
-    label: "מהיר",
-    note: "טוב לדיבור ברור באנגלית; בעברית מסתדר אבל טועה במילים",
-    size: "כ־80MB",
-  },
-  accurate: {
-    id: "onnx-community/whisper-small",
-    label: "מדויק",
-    note: "הרבה יותר טוב בעברית ובהקלטות רועשות; ההורדה הראשונה ארוכה יותר",
-    size: "כ־250MB",
-  },
-};
-
 // ---------------------------------------------------------------------------
 // Long recordings
 // ---------------------------------------------------------------------------
