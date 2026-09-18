@@ -60,16 +60,16 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 8, "hub renders all 8 tool cards", `found ${cards}`);
+log(cards === 9, "hub renders all 9 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
 const filtered = await page.locator(".tool-card").count();
-log(filtered >= 1 && filtered < 8, "hub search filters", `found ${filtered}`);
+log(filtered >= 1 && filtered < 9, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "analyze"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -229,6 +229,79 @@ const metroButton = page.locator(".tool-body button").first();
 await metroButton.click();
 await page.waitForTimeout(700);
 log(true, "metronome: start button responds");
+
+// --- ear trainer: a question really plays and the score really moves ---
+await page.goto(`${BASE}#/ear`, { waitUntil: "load" });
+await page.waitForTimeout(300);
+// A fresh score, whatever an earlier run left in this profile's storage.
+await page.evaluate(() => localStorage.removeItem("musictools.eartraining.v1"));
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.locator(".ear-empty button").click();
+await page.waitForSelector(".ear-choices button", { timeout: 10_000 });
+const earChoices = await page.locator(".ear-choices button").count();
+log(earChoices >= 2, "ear: the beginner round offers its answers", `found ${earChoices}`);
+
+// Whichever button is pressed, exactly one answer must come back right.
+await page.locator(".ear-choices button").first().click();
+await page.waitForTimeout(200);
+const marked = await page.locator(".ear-choices button.is-right").count();
+log(marked === 1, "ear: the answer is revealed on exactly one button", `found ${marked}`);
+const askedAfterOne = await page.locator(".ear-score strong").first().textContent();
+log(askedAfterOne === "1", "ear: answering counts the question", `asked ${askedAfterOne}`);
+log(
+  await page.locator(".ear-choices button").first().isDisabled(),
+  "ear: the buttons lock once the answer is in",
+);
+
+// Enter moves on; the next question arrives unanswered.
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  (await page.locator(".ear-choices button.is-right").count()) === 0,
+  "ear: Enter starts a fresh question",
+);
+// Switching exercise must not leave the previous question's buttons up.
+await page.locator(".segmented-control button", { hasText: "אקורדים" }).first().click();
+await page.waitForTimeout(250);
+log(
+  (await page.locator(".ear-choices").count()) === 0 &&
+    (await page.locator(".ear-empty").isVisible()),
+  "ear: changing the exercise clears the old question",
+);
+const chordScore = await page.locator(".ear-score strong").first().textContent();
+log(chordScore === "0", "ear: each exercise keeps its own score", `asked ${chordScore}`);
+
+// --- the skip control reaches the content without hijacking the route ---
+await page.goto(`${BASE}#/metronome`, { waitUntil: "load" });
+// A hash-only navigation keeps the page — and with it whatever was clicked
+// last — so the tab order is measured from a reloaded, untouched page.
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.keyboard.press("Tab");
+const firstStop = await page.evaluate(
+  () => `${document.activeElement?.tagName}.${document.activeElement?.className}`,
+);
+log(
+  firstStop.includes("skip-link"),
+  "a11y: the skip control is the first stop for the keyboard",
+  firstStop,
+);
+await page.keyboard.press("Enter");
+await page.waitForTimeout(250);
+const skipLanded = await page.evaluate(() => ({
+  focused: document.activeElement?.classList.contains("page-content"),
+  hash: window.location.hash,
+}));
+log(
+  skipLanded.focused && skipLanded.hash === "#/metronome",
+  "a11y: skipping moves focus to the content and keeps the route",
+  `hash ${skipLanded.hash}`,
+);
+log(
+  Boolean(await page.locator("p.sr-only[aria-live=polite]").first().textContent()),
+  "a11y: the page announces which tool is open",
+);
 
 // --- dark/light toggle ---
 await page.goto(BASE, { waitUntil: "load" });

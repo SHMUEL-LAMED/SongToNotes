@@ -10,6 +10,7 @@ import { useRoute } from "./lib/router";
 import { useTheme } from "./lib/theme";
 import { findTool } from "./lib/tools";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
+import { EarTrainingTool } from "./tools/EarTrainingTool";
 import { MetronomeTool } from "./tools/MetronomeTool";
 import { PianoTool } from "./tools/PianoTool";
 import { RingtoneTool } from "./tools/RingtoneTool";
@@ -118,6 +119,7 @@ function WorkspaceApp() {
       {tool?.id === "metronome" && <MetronomeTool />}
       {tool?.id === "tuner" && <TunerTool />}
       {tool?.id === "piano" && <PianoTool />}
+      {tool?.id === "ear" && <EarTrainingTool />}
       {tool?.id === "analyze" && <AnalyzeTool />}
 
       {tool && (

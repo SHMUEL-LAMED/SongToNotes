@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Ear,
   FileMusic,
   Gauge,
   MicVocal,
@@ -115,6 +116,18 @@ export const TOOLS: ToolDefinition[] = [
     hue: 280,
     category: "practice",
     tags: ["פסנתר", "מקלדת", "סולמות", "midi"],
+  },
+  {
+    id: "ear",
+    title: "מאמן שמיעה",
+    tagline: "לזהות מה שומעים",
+    description:
+      "תרגול שמיעה במשחק קצר: מרווחים, סוגי אקורדים ודרגות בסולם, עם רמות קושי, ניקוד ורצף הצלחות.",
+    icon: Ear,
+    hue: 300,
+    category: "practice",
+    tags: ["שמיעה", "מרווחים", "אקורדים", "סולפז׳", "תרגול"],
+    badge: "חדש",
   },
   {
     id: "analyze",
