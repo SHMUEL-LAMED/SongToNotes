@@ -12,14 +12,22 @@
  * is written to this device before anything is sent, so a visitor without an
  * account keeps a history, an offline save still succeeds, and signing in
  * later uploads whatever this device made in the meantime. The audio a tool
- * produced never leaves the device — see {@link ./fileStore}.
+ * produced goes up with the work, into the visitor's private folder in the
+ * cloud ({@link ./cloudFiles}), and a copy stays on the device that made it
+ * ({@link ./fileStore}) for the fast, offline path.
  */
+import {
+  UploadTooLargeError,
+  deleteWorkFile,
+  uploadWorkFile,
+} from "./cloudFiles";
 import { deleteFile, getFile, listFiles, putFile } from "./fileStore";
 import { deleteTranscription, listTranscriptions, type SavedTranscription } from "./history";
 import {
   deleteRingtone,
   listLocalRingtones,
   listRingtones,
+  setRingtoneFilePath,
   type SavedRingtone,
 } from "./ringtoneHistory";
 import { supabase } from "./supabase";
@@ -52,8 +60,10 @@ export type SavedWork = {
   payload: Record<string, unknown>;
   /** The result file's name, when the tool produced one. */
   fileName: string | null;
-  /** The device holding that file. */
+  /** The device holding a copy of that file. */
   deviceId: string | null;
+  /** Where the file sits in the cloud, once it has gone up. */
+  filePath: string | null;
   createdAt: string;
   updatedAt: string;
   origin: WorkOrigin;
@@ -149,6 +159,7 @@ export function normalizeWork(value: unknown): SavedWork | null {
     payload: asRecord(item.payload),
     fileName: typeof item.fileName === "string" ? item.fileName : null,
     deviceId: typeof item.deviceId === "string" ? item.deviceId : null,
+    filePath: typeof item.filePath === "string" ? item.filePath : null,
     createdAt,
     updatedAt: asString(item.updatedAt, createdAt),
     origin: "works",
@@ -193,12 +204,13 @@ type WorkRow = {
   payload: unknown;
   file_name: string | null;
   device_id: string | null;
+  file_path: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const WORK_COLUMNS =
-  "id, client_id, kind, title, source_name, summary, payload, file_name, device_id, created_at, updated_at";
+  "id, client_id, kind, title, source_name, summary, payload, file_name, device_id, file_path, created_at, updated_at";
 
 function fromRow(row: WorkRow): SavedWork | null {
   if (!isWorkKind(row.kind)) return null;
@@ -211,6 +223,7 @@ function fromRow(row: WorkRow): SavedWork | null {
     payload: asRecord(row.payload),
     fileName: row.file_name,
     deviceId: row.device_id,
+    filePath: row.file_path,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     origin: "works",
@@ -230,6 +243,7 @@ function toRow(item: SavedWork, userId: string) {
     payload: item.payload,
     file_name: item.fileName,
     device_id: item.deviceId,
+    file_path: item.filePath,
     created_at: item.createdAt,
   };
 }
@@ -258,6 +272,7 @@ export function fromTranscription(row: SavedTranscription): SavedWork {
     },
     fileName: null,
     deviceId: null,
+    filePath: null,
     createdAt: row.created_at,
     updatedAt: row.created_at,
     origin: "transcriptions",
@@ -275,9 +290,10 @@ export function fromRingtone(item: SavedRingtone, localOnly: boolean): SavedWork
     summary: { start: item.startSeconds, duration: item.durationSeconds },
     payload: { start: item.startSeconds, duration: item.durationSeconds },
     // The ringtone tool keeps its file under the ringtone's own id; whether
-    // it is on this device is read from the file store, not from here.
-    fileName: null,
+    // a copy is on this device is read from the file store, not from here.
+    fileName: `${item.title}-ringtone.wav`,
     deviceId: null,
+    filePath: item.filePath ?? null,
     createdAt: item.createdAt,
     updatedAt: item.createdAt,
     origin: "ringtones",
@@ -303,20 +319,78 @@ export function sortNewestFirst(items: SavedWork[]) {
 export async function syncLocalWorks(userId: string): Promise<SavedWork[]> {
   const local = listLocalWorks();
   const pending = local.filter((item) => item.localOnly);
-  if (pending.length === 0) return [];
-  const { error } = await supabase
-    .from("works")
-    .upsert(
-      pending.map((item) => toRow(item, userId)),
-      { onConflict: "user_id,client_id" },
-    );
-  if (error) {
-    console.warn("Local works could not be uploaded", error);
-    return [];
+  let synced: SavedWork[] = [];
+  if (pending.length > 0) {
+    const { error } = await supabase
+      .from("works")
+      .upsert(
+        pending.map((item) => toRow(item, userId)),
+        { onConflict: "user_id,client_id" },
+      );
+    if (error) {
+      console.warn("Local works could not be uploaded", error);
+    } else {
+      const uploaded = new Set(pending.map((item) => item.id));
+      writeLocalWorks(
+        local.map((item) => (uploaded.has(item.id) ? { ...item, localOnly: false } : item)),
+      );
+      synced = pending.map((item) => ({ ...item, localOnly: false }));
+    }
   }
-  const uploaded = new Set(pending.map((item) => item.id));
-  writeLocalWorks(local.map((item) => (uploaded.has(item.id) ? { ...item, localOnly: false } : item)));
-  return pending.map((item) => ({ ...item, localOnly: false }));
+  await syncLocalFiles(userId);
+  return synced;
+}
+
+/**
+ * Sends up the files that are still only on this device — made while
+ * signed out, or whose upload failed — and records where they went. Files
+ * marked too large stay here for good.
+ */
+export async function syncLocalFiles(userId: string) {
+  const waiting = listLocalWorks().filter(
+    (item) => !item.localOnly && !item.filePath && item.fileName && !item.summary.fileTooLarge,
+  );
+  for (const item of waiting) {
+    const file = await getFile(item.id);
+    if (!file) continue;
+    try {
+      const filePath = await uploadWorkFile(userId, item.id, file);
+      const { error } = await supabase
+        .from("works")
+        .update({ file_path: filePath })
+        .eq("user_id", userId)
+        .eq("client_id", item.id);
+      if (error) throw error;
+      writeLocalWorks(
+        listLocalWorks().map((entry) => (entry.id === item.id ? { ...entry, filePath } : entry)),
+      );
+    } catch (error) {
+      if (error instanceof UploadTooLargeError) {
+        writeLocalWorks(
+          listLocalWorks().map((entry) =>
+            entry.id === item.id
+              ? { ...entry, summary: { ...entry.summary, fileTooLarge: true } }
+              : entry,
+          ),
+        );
+      } else {
+        console.warn("Work file could not be uploaded", error);
+      }
+    }
+  }
+  // Ringtones made before signing in: their rows go up in listRingtones;
+  // their audio goes up here.
+  const ringtones = listLocalRingtones().filter((item) => !item.filePath);
+  for (const item of ringtones) {
+    const file = await getFile(item.id);
+    if (!file || file.size > 60 * 1024 * 1024) continue;
+    try {
+      const filePath = await uploadWorkFile(userId, item.id, file);
+      await setRingtoneFilePath(item.id, filePath, userId);
+    } catch (error) {
+      console.warn("Ringtone file could not be uploaded", error);
+    }
+  }
 }
 
 /**
@@ -332,7 +406,12 @@ export async function listWorks(userId?: string | null): Promise<SavedWork[]> {
     return sortNewestFirst([...local, ...ringtones]);
   }
 
-  const [uploaded, remote, transcriptions, ringtones] = await Promise.all([
+  // Ringtone rows made while signed out go up inside listRingtones, and the
+  // file sync that follows needs those rows to exist.
+  const ringtones = await listRingtones(userId)
+    .then((rows) => rows.map((item) => fromRingtone(item, false)))
+    .catch(() => listLocalRingtones().map((item) => fromRingtone(item, true)));
+  const [uploaded, remote, transcriptions] = await Promise.all([
     syncLocalWorks(userId).catch(() => [] as SavedWork[]),
     supabase
       .from("works")
@@ -347,11 +426,12 @@ export async function listWorks(userId?: string | null): Promise<SavedWork[]> {
           .filter((item): item is SavedWork => item !== null);
       }),
     listTranscriptions(userId).then((rows) => rows.map(fromTranscription)),
-    // A profile that cannot be reached still shows what this device made.
-    listRingtones(userId)
-      .then((rows) => rows.map((item) => fromRingtone(item, false)))
-      .catch(() => listLocalRingtones().map((item) => fromRingtone(item, true))),
   ]);
+  // The file sync may have recorded cloud paths for ringtones since.
+  const ringtonePaths = new Map(listLocalRingtones().map((item) => [item.id, item.filePath ?? null]));
+  for (const item of ringtones) {
+    if (!item.filePath && ringtonePaths.get(item.id)) item.filePath = ringtonePaths.get(item.id) ?? null;
+  }
 
   // Whatever the server holds wins over the local copy of the same work,
   // except that the local index knows which entries are still unsynced.
@@ -374,7 +454,8 @@ export async function listWorks(userId?: string | null): Promise<SavedWork[]> {
 
 /**
  * Records a piece of work. It is written to this device first, then mirrored
- * to the profile when there is one; the result file, if any, stays here.
+ * to the profile when there is one — the result file included, into the
+ * visitor's private folder in the cloud, with a copy kept here.
  */
 export async function saveWork(
   input: NewWork,
@@ -392,6 +473,7 @@ export async function saveWork(
     payload: input.payload ?? {},
     fileName,
     deviceId: fileName ? deviceId() : null,
+    filePath: null,
     createdAt: now,
     updatedAt: now,
     origin: "works",
@@ -400,21 +482,32 @@ export async function saveWork(
   };
 
   if (file) {
+    entry.summary = { ...entry.summary, fileBytes: file.size };
     const stored = await putFile(entry.id, file, fileName ?? undefined);
-    if (!stored) {
-      entry.fileName = null;
-      entry.deviceId = null;
-    }
+    if (!stored) entry.deviceId = null;
   }
   writeLocalWorks([entry, ...listLocalWorks()]);
   if (!userId) return entry;
 
+  if (file) {
+    try {
+      entry.filePath = await uploadWorkFile(userId, entry.id, file);
+    } catch (error) {
+      if (error instanceof UploadTooLargeError) {
+        entry.summary = { ...entry.summary, fileTooLarge: true };
+      } else {
+        // The device copy holds it; the next sign-in or profile read retries.
+        console.warn("Work file could not be uploaded", error);
+      }
+    }
+  }
   const { error } = await supabase
     .from("works")
     .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
   if (error) {
     // The local copy already holds it; the next profile read uploads it again.
     console.warn("Work could not be saved to the profile", error);
+    writeLocalWorks(listLocalWorks().map((item) => (item.id === entry.id ? entry : item)));
     return entry;
   }
   const synced = { ...entry, localOnly: false };
@@ -449,6 +542,13 @@ export async function renameWork(
 
 export async function deleteWork(work: SavedWork, userId?: string | null): Promise<void> {
   await deleteFile(work.id);
+  if (userId && work.filePath) {
+    // A file that will not go is left for the next delete; the row is what
+    // the visitor asked to remove.
+    await deleteWorkFile(work.filePath).catch((error) =>
+      console.warn("Work file could not be deleted", error),
+    );
+  }
   if (work.origin === "ringtones") {
     await deleteRingtone(work.id, userId);
     return;
@@ -473,6 +573,7 @@ export async function localFileIds(): Promise<Set<string>> {
 }
 
 export { getFile as getWorkFile, listFiles as listWorkFiles };
+export { downloadWorkFile, workFileUrl } from "./cloudFiles";
 
 /**
  * One line for the card under the title — what the work is, in the terms of
