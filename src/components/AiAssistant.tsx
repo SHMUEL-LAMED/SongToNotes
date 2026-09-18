@@ -90,7 +90,7 @@ export function AiAssistant({ open, onClose, onOpen, toolTitle }: Props) {
       if (mode === "execute" && reply.action?.type === "navigate") {
         const destination = findTool(reply.action.route);
         if (destination) {
-          window.location.hash = `#/${destination.id}`;
+          window.location.assign(`#/${destination.id}`);
         }
       }
     } catch (caught) {
