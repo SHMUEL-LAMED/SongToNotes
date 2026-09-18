@@ -33,6 +33,7 @@ function work(overrides: Partial<SavedWork>): SavedWork {
     payload: {},
     fileName: null,
     deviceId: null,
+    filePath: null,
     createdAt: "2026-09-18T10:00:00.000Z",
     updatedAt: "2026-09-18T10:00:00.000Z",
     origin: "works",
@@ -141,6 +142,7 @@ describe("the older tables", () => {
     expect(item.kind).toBe("ringtone");
     expect(item.origin).toBe("ringtones");
     expect(item.localOnly).toBe(true);
+    expect(item.filePath).toBeNull();
     expect(describeWork(item)).toBe("30 שניות · מ־1:01");
   });
 });

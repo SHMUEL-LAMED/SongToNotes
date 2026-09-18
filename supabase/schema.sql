@@ -208,3 +208,33 @@ using ((select auth.uid()) = user_id);
 create trigger works_set_updated_at
 before update on public.works
 for each row execute function private.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- The files the works produce go up with them, into a private bucket where
+-- each visitor's folder is their own user id and the policies let nobody else
+-- in. The row remembers the path; the device keeps its own copy as well.
+-- ---------------------------------------------------------------------------
+
+alter table public.works add column if not exists file_path text;
+alter table public.ringtones add column if not exists file_path text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('works', 'works', false, 62914560, array['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/flac'])
+on conflict (id) do nothing;
+
+create policy "Users can read their own work files"
+on storage.objects for select to authenticated
+using (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+create policy "Users can upload their own work files"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+create policy "Users can replace their own work files"
+on storage.objects for update to authenticated
+using (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text)
+with check (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+create policy "Users can delete their own work files"
+on storage.objects for delete to authenticated
+using (bucket_id = 'works' and (storage.foldername(name))[1] = (select auth.uid())::text);

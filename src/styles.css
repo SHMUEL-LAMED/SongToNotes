@@ -2459,6 +2459,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 11.5px;
 }
 .me-badge.is-file { border-color: rgba(13, 148, 136, 0.35); color: var(--mint); }
+.me-badge.is-cloud { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
 .me-badge.is-local { border-color: rgba(180, 83, 9, 0.35); color: #b45309; }
 :root[data-theme="dark"] .me-badge.is-local { color: #fbbf24; }
 .me-player { width: 100%; margin-top: 6px; }

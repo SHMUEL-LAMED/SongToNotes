@@ -10,6 +10,8 @@ export type SavedRingtone = {
   startSeconds: number;
   durationSeconds: number;
   createdAt: string;
+  /** Where the ringtone's audio sits in the cloud, once it has gone up. */
+  filePath?: string | null;
 };
 
 type RingtoneRow = {
@@ -19,6 +21,7 @@ type RingtoneRow = {
   start_seconds: number;
   duration_seconds: number;
   created_at: string;
+  file_path: string | null;
 };
 
 function fromRow(row: RingtoneRow): SavedRingtone {
@@ -29,6 +32,7 @@ function fromRow(row: RingtoneRow): SavedRingtone {
     startSeconds: row.start_seconds,
     durationSeconds: row.duration_seconds,
     createdAt: row.created_at,
+    filePath: row.file_path,
   };
 }
 
@@ -41,6 +45,7 @@ function toRow(item: SavedRingtone, userId: string) {
     start_seconds: item.startSeconds,
     duration_seconds: item.durationSeconds,
     created_at: item.createdAt,
+    file_path: item.filePath ?? null,
   };
 }
 
@@ -59,7 +64,7 @@ export function listLocalRingtones(): SavedRingtone[] {
   }
 }
 
-function writeLocalRingtones(items: SavedRingtone[]) {
+export function writeLocalRingtones(items: SavedRingtone[]) {
   try {
     localStorage.setItem(RINGTONE_HISTORY_KEY, JSON.stringify(items.slice(0, 50)));
   } catch {
@@ -79,7 +84,7 @@ export async function listRingtones(userId?: string | null): Promise<SavedRingto
 
   const { data, error } = await supabase
     .from("ringtones")
-    .select("client_id, title, source_name, start_seconds, duration_seconds, created_at")
+    .select("client_id, title, source_name, start_seconds, duration_seconds, created_at, file_path")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -129,6 +134,19 @@ export async function saveRingtone(
   // The local copy already holds it; the next profile read uploads it again.
   if (error) console.warn("Ringtone could not be saved to the profile", error);
   return entry;
+}
+
+/** Records where a ringtone's audio went in the cloud, here and in the profile. */
+export async function setRingtoneFilePath(id: string, filePath: string, userId: string) {
+  writeLocalRingtones(
+    listLocalRingtones().map((item) => (item.id === id ? { ...item, filePath } : item)),
+  );
+  const { error } = await supabase
+    .from("ringtones")
+    .update({ file_path: filePath })
+    .eq("user_id", userId)
+    .eq("client_id", id);
+  if (error) throw error;
 }
 
 export async function deleteRingtone(id: string, userId?: string | null) {

@@ -1,6 +1,8 @@
 import {
   ArrowUpFromLine,
   Clock3,
+  Cloud,
+  CloudOff,
   Download,
   Ear,
   FolderOpen,
@@ -31,11 +33,12 @@ import {
   WORK_KINDS,
   deleteWork,
   describeWork,
-  deviceId,
+  downloadWorkFile,
   getWorkFile,
   listWorkFiles,
   listWorks,
   renameWork,
+  workFileUrl,
   type SavedWork,
   type WorkKind,
 } from "../lib/works";
@@ -215,16 +218,23 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
   }, [load, open]);
 
 
-  // An object URL is revoked when the player closes or the page unmounts.
+  // An object URL is revoked when the player closes or the page unmounts;
+  // a signed cloud URL simply expires.
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || !playing.url.startsWith("blob:")) return;
     const { url } = playing;
     return () => URL.revokeObjectURL(url);
   }, [playing]);
 
   const fileIds = useMemo(() => new Set(files.map((item) => item.id)), [files]);
   const fileBytes = useMemo(() => files.reduce((sum, item) => sum + item.size, 0), [files]);
-  const thisDevice = useMemo(() => deviceId(), []);
+  const cloud = useMemo(() => {
+    const inCloud = (works ?? []).filter((item) => item.filePath);
+    return {
+      count: inCloud.length,
+      bytes: inCloud.reduce((sum, item) => sum + Number(item.summary.fileBytes ?? 0), 0),
+    };
+  }, [works]);
 
   const counts = useMemo(() => {
     const table = Object.fromEntries(WORK_KINDS.map((item) => [item, 0])) as Record<WorkKind, number>;
@@ -268,14 +278,30 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
 
   // ---- actions ----
 
+  /**
+   * The work's file: the device copy when there is one, otherwise the copy
+   * in the cloud. Either way the caller gets a File it can play, save or
+   * hand to another app.
+   */
   const withFile = async (work: SavedWork, action: (file: File) => void | Promise<void>) => {
-    const file = await getWorkFile(work.id);
-    if (!file) {
-      setMessage("הקובץ לא נמצא במכשיר הזה.");
-      setFiles((current) => current.filter((item) => item.id !== work.id));
+    const local = await getWorkFile(work.id);
+    if (local) {
+      await action(local);
       return;
     }
-    await action(file);
+    setFiles((current) => current.filter((item) => item.id !== work.id));
+    if (!work.filePath) {
+      setMessage("הקובץ לא נמצא במכשיר הזה ולא בענן.");
+      return;
+    }
+    try {
+      setMessage("מוריד מהענן…");
+      const file = await downloadWorkFile(work.filePath, work.fileName ?? `${work.title}.wav`);
+      setMessage(null);
+      await action(file);
+    } catch {
+      setMessage("לא הצלחנו להביא את הקובץ מהענן. נסה שוב.");
+    }
   };
 
   const togglePlay = (work: SavedWork) => {
@@ -283,9 +309,24 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
       setPlaying(null);
       return;
     }
-    void withFile(work, (file) => {
-      setPlaying({ id: work.id, url: URL.createObjectURL(file) });
-    });
+    void (async () => {
+      const local = await getWorkFile(work.id);
+      if (local) {
+        setPlaying({ id: work.id, url: URL.createObjectURL(local) });
+        return;
+      }
+      if (!work.filePath) {
+        setMessage("הקובץ לא נמצא במכשיר הזה ולא בענן.");
+        return;
+      }
+      // Streamed straight from the cloud: no wait for a full download before
+      // the first note.
+      try {
+        setPlaying({ id: work.id, url: await workFileUrl(work.filePath) });
+      } catch {
+        setMessage("לא הצלחנו לנגן מהענן. נסה שוב.");
+      }
+    })();
   };
 
   const download = (work: SavedWork) =>
@@ -343,7 +384,7 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
   const clearDevice = () => {
     if (
       !window.confirm(
-        `למחוק ${files.length} קבצי שמע (${formatBytes(fileBytes)}) מהמכשיר הזה? הרשומות יישארו; רק הקבצים יוסרו.`,
+        `למחוק ${files.length} עותקים מקומיים (${formatBytes(fileBytes)}) מהמכשיר הזה? הרשומות והקבצים שבענן יישארו.`,
       )
     ) {
       return;
@@ -427,11 +468,11 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
           <span>קבצי שמע שנוצרו</span>
         </div>
         <div className="stat-card">
-          <strong>{files.length}</strong>
+          <strong>{works ? cloud.count : "…"}</strong>
           <span>
-            <HardDrive size={13} /> קבצים במכשיר הזה
+            <Cloud size={13} /> קבצים בענן
           </span>
-          {files.length > 0 && <small>{formatBytes(fileBytes)}</small>}
+          {cloud.count > 0 && <small>{formatBytes(cloud.bytes)}</small>}
         </div>
         <div className="stat-card">
           <strong>{earSummary ? `${earSummary.accuracy}%` : "—"}</strong>
@@ -538,9 +579,13 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
                   {group.items.map((work) => {
                     const tool = findTool(KIND_TOOL[work.kind]);
                     const Icon = tool?.icon ?? Smartphone;
-                    const hasFile = fileIds.has(work.id);
-                    const fileElsewhere =
-                      !hasFile && Boolean(work.deviceId) && work.deviceId !== thisDevice;
+                    const onDevice = fileIds.has(work.id);
+                    const inCloud = Boolean(work.filePath);
+                    const hasFile = onDevice || inCloud;
+                    const tooLarge = Boolean(work.summary.fileTooLarge);
+                    // A file made here that has not gone up yet, and can.
+                    const waitingForCloud =
+                      onDevice && !inCloud && !tooLarge && Boolean(user);
                     const isEditing = editing?.id === work.id;
                     const isPlaying = playing?.id === work.id;
                     return (
@@ -610,14 +655,29 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
                             <span>{timeLabel(work.createdAt)}</span>
                           </p>
                           <p className="me-item-badges">
-                            {hasFile && (
-                              <span className="me-badge is-file">
-                                <HardDrive size={12} /> הקובץ במכשיר הזה
+                            {inCloud && (
+                              <span className="me-badge is-cloud">
+                                <Cloud size={12} /> הקובץ בענן
                               </span>
                             )}
-                            {fileElsewhere && (
+                            {onDevice && (
+                              <span className="me-badge is-file">
+                                <HardDrive size={12} /> עותק במכשיר הזה
+                              </span>
+                            )}
+                            {waitingForCloud && (
+                              <span className="me-badge is-local">
+                                <ArrowUpFromLine size={12} /> הקובץ טרם עלה לענן
+                              </span>
+                            )}
+                            {tooLarge && (
+                              <span className="me-badge is-local">
+                                <CloudOff size={12} /> גדול מדי לענן — במכשיר הזה בלבד
+                              </span>
+                            )}
+                            {!hasFile && work.fileName && !tooLarge && (
                               <span className="me-badge">
-                                <Smartphone size={12} /> הקובץ נשאר במכשיר אחר
+                                <Smartphone size={12} /> הקובץ נשאר במכשיר שיצר אותו
                               </span>
                             )}
                             {work.localOnly && (
@@ -779,11 +839,13 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
 
           <section className="me-card">
             <h3>
-              <HardDrive size={17} /> במכשיר הזה
+              <Cloud size={17} /> הקבצים שלך
             </h3>
             <p className="me-card-note">
-              הקבצים שהכלים מפיקים — קריוקי, גרסאות לתרגול, צלצולים — נשמרים במכשיר שבו
-              נוצרו ולא עולים לשרת. כאן יש {files.length} קבצים ({formatBytes(fileBytes)}).
+              {user
+                ? `הקבצים שהכלים מפיקים — קריוקי, גרסאות לתרגול, צלצולים — עולים לתיקייה פרטית שלך בענן (עד 60MB לקובץ) וזמינים מכל מכשיר. בענן: ${cloud.count} קבצים (${formatBytes(cloud.bytes)}). `
+                : "הקבצים שהכלים מפיקים נשמרים במכשיר הזה; אחרי התחברות הם עולים לתיקייה פרטית שלך בענן וזמינים מכל מכשיר. "}
+              עותק מקומי במכשיר הזה: {files.length} קבצים ({formatBytes(fileBytes)}).
             </p>
             <div className="me-card-actions">
               <button
@@ -792,7 +854,7 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
                 disabled={files.length === 0}
                 onClick={clearDevice}
               >
-                <Trash2 size={15} /> נקה קבצים מהמכשיר
+                <Trash2 size={15} /> נקה עותקים מקומיים
               </button>
               <button
                 type="button"

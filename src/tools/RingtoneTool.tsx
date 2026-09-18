@@ -29,8 +29,9 @@ import {
 } from "../lib/stemSeparation";
 import { applyGain, channelsToBuffer, normalise } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { MAX_UPLOAD_BYTES, uploadWorkFile } from "../lib/cloudFiles";
 import { putFile } from "../lib/fileStore";
-import { saveRingtone } from "../lib/ringtoneHistory";
+import { saveRingtone, setRingtoneFilePath } from "../lib/ringtoneHistory";
 import type { SaveState } from "../lib/useSaveWork";
 import {
   analyseStructure,
@@ -329,9 +330,9 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
   useEffect(() => () => window.clearTimeout(saveTimerRef.current), []);
 
   /**
-   * Records the ringtone in the personal area. The profile gets the record —
-   * title, where it was cut, how long — and this device keeps the audio, so
-   * the area can play and download it here without the file ever leaving.
+   * Records the ringtone in the personal area: the record and, with an
+   * account, the audio itself go up to the profile, so the area can play and
+   * download it from any device. This device keeps a copy either way.
    */
   const saveToProfile = async (file: File) => {
     window.clearTimeout(saveTimerRef.current);
@@ -348,13 +349,22 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
         userId,
       );
       await putFile(entry.id, file);
-      setSaved({
-        key,
-        state: "saved",
-        message: userId
-          ? "נשמר באזור האישי שלך. הקובץ עצמו נשאר במכשיר הזה."
-          : "נשמר במכשיר הזה. התחבר כדי לראות את זה בכל מכשיר.",
-      });
+      let message = "נשמר במכשיר הזה. התחבר כדי שהצלצול יעלה לענן ויהיה בכל מכשיר.";
+      if (userId) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          message = "נשמר באזור האישי, אבל הקובץ גדול מ־60MB ונשאר במכשיר הזה בלבד.";
+        } else {
+          try {
+            const filePath = await uploadWorkFile(userId, entry.id, file);
+            await setRingtoneFilePath(entry.id, filePath, userId);
+            message = "נשמר באזור האישי והצלצול עלה לענן — זמין מכל מכשיר.";
+          } catch {
+            // The device copy holds it; the next sign-in retries the upload.
+            message = "נשמר באזור האישי; הצלצול יעלה לענן כשיהיה חיבור.";
+          }
+        }
+      }
+      setSaved({ key, state: "saved", message });
       saveTimerRef.current = window.setTimeout(
         () => setSaved((current) => (current.key === key ? { ...current, state: "idle" } : current)),
         3200,
