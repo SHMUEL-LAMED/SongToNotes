@@ -294,3 +294,17 @@ create table if not exists public.ai_usage (
 );
 
 alter table public.ai_usage enable row level security;
+
+-- The functions may also write a setting — the language model they found
+-- when the configured one went away — through this, service role only.
+create or replace function public.stt_set_setting(setting_key text, setting_value text)
+returns void
+language sql
+security definer
+set search_path = private
+as $$
+  insert into private.stt_settings (key, value) values (setting_key, setting_value)
+  on conflict (key) do update set value = excluded.value;
+$$;
+revoke all on function public.stt_set_setting(text, text) from public, anon, authenticated;
+grant execute on function public.stt_set_setting(text, text) to service_role;
