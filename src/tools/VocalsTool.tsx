@@ -1,6 +1,6 @@
 import { Cpu, Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AiError, separateOnServer } from "../lib/aiApi";
+import { AiError, separateOnServer, separationAvailability } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
@@ -152,6 +152,28 @@ export function VocalsTool({ initial = null }: Props) {
     setAiProgress(0);
     setAiStatus("מכין את ההפרדה…");
     try {
+      const availability = await separationAvailability(controller.signal);
+      if (!availability.configured) {
+        setServerMissing(true);
+        setAiStatus("ההפרדה מתבצעת בדפדפן. בפעם הראשונה נטען מודל ההפרדה…");
+        const localStems = await separateStems(audio.buffer, (progress: SeparationProgress) => {
+          if (controller.signal.aborted) return;
+          setAiProgress(Math.round(progress.progress * 100));
+          setAiStatus(progress.message);
+        });
+        if (controller.signal.aborted) return;
+        const localPicked = target === "instrumental" ? localStems.instrumental : localStems.vocals;
+        setRendered({
+          key: settingsKey,
+          buffer: channelsToBuffer(context, localPicked, localStems.sampleRate),
+          wasMono: false,
+        });
+        setUsedAi(true);
+        setAiProgress(100);
+        setAiStatus("הפרדת ה־AI הושלמה.");
+        return;
+      }
+
       const stems = await separateOnServer(
         audio.file,
         decodeAudioFile,
