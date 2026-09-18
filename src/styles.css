@@ -2843,3 +2843,76 @@ footer .brand-mark { font-size: 19px; }
 @media (prefers-reduced-motion: reduce) {
   .account-overlay, .account-drawer { animation: none; }
 }
+
+/* ==========================================================================
+   Transcript tool
+   ========================================================================== */
+
+.transcript-tool .primary-button small { font-size: 12.5px; font-weight: 500; opacity: 0.85; }
+.transcript-partial {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-soft);
+  max-height: 140px;
+  overflow-y: auto;
+  unicode-bidi: plaintext;
+}
+.transcript-result { display: flex; flex-direction: column; gap: 16px; }
+.transcript-stats { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
+.transcript-text {
+  width: 100%;
+  min-height: 160px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.85;
+  resize: vertical;
+  unicode-bidi: plaintext;
+}
+.transcript-text:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.transcript-segments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+.transcript-segments li {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  border-bottom: 1px solid var(--line);
+}
+.transcript-segments li:last-child { border-bottom: 0; }
+.transcript-segments time {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+  font-weight: 700;
+  direction: ltr;
+  font-size: 12.5px;
+}
+.transcript-segments span { unicode-bidi: plaintext; }
+.eyebrow-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent-text);
+}

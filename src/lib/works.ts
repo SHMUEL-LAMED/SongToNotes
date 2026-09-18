@@ -42,6 +42,7 @@ export const WORK_KINDS = [
   "ear",
   "metronome",
   "tuner",
+  "transcript",
 ] as const;
 
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -96,6 +97,7 @@ export const KIND_LABELS: Record<WorkKind, string> = {
   ear: "אימון שמיעה",
   metronome: "קצב שמור",
   tuner: "כיוון כלי",
+  transcript: "תמלול לטקסט",
 };
 
 /** Which tool opens each kind. */
@@ -109,6 +111,7 @@ export const KIND_TOOL: Record<WorkKind, string> = {
   ear: "ear",
   metronome: "metronome",
   tuner: "tuner",
+  transcript: "transcript",
 };
 
 export function isWorkKind(value: unknown): value is WorkKind {
@@ -639,6 +642,11 @@ export function describeWork(work: SavedWork): string {
     case "tuner":
       parts.push(str("presetLabel"));
       parts.push(num("referenceA4") !== null ? `לה = ${num("referenceA4")} Hz` : null);
+      break;
+    case "transcript":
+      parts.push(num("words") !== null ? `${num("words")} מילים` : null);
+      parts.push(str("languageLabel"));
+      parts.push(seconds(num("duration")));
       break;
   }
   return parts.filter((part): part is string => Boolean(part)).join(" · ");

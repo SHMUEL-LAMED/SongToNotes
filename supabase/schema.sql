@@ -166,7 +166,7 @@ create table if not exists public.works (
   -- uploaded after signing in never duplicates what is already here.
   client_id text not null,
   kind text not null check (
-    kind in ('notes', 'ringtone', 'vocals', 'speed', 'piano', 'analysis', 'ear', 'metronome', 'tuner')
+    kind in ('notes', 'ringtone', 'vocals', 'speed', 'piano', 'analysis', 'ear', 'metronome', 'tuner', 'transcript')
   ),
   title text not null,
   source_name text,
