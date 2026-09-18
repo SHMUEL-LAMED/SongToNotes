@@ -1,5 +1,8 @@
 import { Minus, Pause, Play, Plus, Timer, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SaveButton } from "../components/SaveButton";
+import { useSaveWork } from "../lib/useSaveWork";
+import type { SavedWork } from "../lib/works";
 
 type SoundKind = "click" | "wood" | "beep";
 
@@ -31,7 +34,18 @@ type Saved = {
   volume: number;
 };
 
-function loadSaved(): Saved {
+function normalizeSaved(parsed: Partial<Saved> | null | undefined, fallback: Saved): Saved {
+  if (!parsed) return fallback;
+  return {
+    bpm: Math.max(30, Math.min(260, Number(parsed.bpm) || fallback.bpm)),
+    meter: METERS.some((meter) => meter.id === parsed.meter) ? (parsed.meter as string) : fallback.meter,
+    subdivision: [1, 2, 3, 4].includes(Number(parsed.subdivision)) ? Number(parsed.subdivision) : fallback.subdivision,
+    sound: parsed.sound === "wood" || parsed.sound === "beep" ? parsed.sound : parsed.sound === "click" ? "click" : fallback.sound,
+    volume: Math.max(0, Math.min(1, Number(parsed.volume) || fallback.volume)),
+  };
+}
+
+function loadSaved(initial: SavedWork | null): Saved {
   const fallback: Saved = {
     bpm: 100,
     meter: "4/4",
@@ -39,20 +53,24 @@ function loadSaved(): Saved {
     sound: "click",
     volume: 0.8,
   };
+  let saved = fallback;
   try {
-    const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Saved> | null;
-    if (!parsed) return fallback;
-    return {
-      bpm: Math.max(30, Math.min(260, Number(parsed.bpm) || fallback.bpm)),
-      meter: METERS.some((meter) => meter.id === parsed.meter) ? (parsed.meter as string) : fallback.meter,
-      subdivision: [1, 2, 3, 4].includes(Number(parsed.subdivision)) ? Number(parsed.subdivision) : 1,
-      sound: parsed.sound === "wood" || parsed.sound === "beep" ? parsed.sound : "click",
-      volume: Math.max(0, Math.min(1, Number(parsed.volume) || fallback.volume)),
-    };
+    saved = normalizeSaved(
+      JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Saved> | null,
+      fallback,
+    );
   } catch {
-    return fallback;
+    // Private browsing; the defaults will do.
   }
+  // A preset opened from the personal area sets the tempo, meter and sound;
+  // the volume stays whatever this device is used to.
+  if (initial?.kind !== "metronome") return saved;
+  return normalizeSaved({ ...(initial.payload as Partial<Saved>), volume: saved.volume }, saved);
 }
+
+type Props = {
+  initial?: SavedWork | null;
+};
 
 function tempoMarking(bpm: number) {
   if (bpm < 60) return "Largo · רחב";
@@ -71,8 +89,8 @@ type Tick = { time: number; beat: number; sub: number };
  * pattern for a metronome that stays exact when the tab is busy. The UI only
  * observes which beat the clock has reached; it never drives it.
  */
-export function MetronomeTool() {
-  const [saved] = useState(loadSaved);
+export function MetronomeTool({ initial = null }: Props) {
+  const [saved] = useState(() => loadSaved(initial));
   const [bpm, setBpm] = useState(saved.bpm);
   const [meterId, setMeterId] = useState(saved.meter);
   const [subdivision, setSubdivision] = useState(saved.subdivision);
@@ -98,6 +116,22 @@ export function MetronomeTool() {
   const meterRef = useRef(meter);
   const tapsRef = useRef<number[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
+
+  // A different tempo, meter or sound is a different preset.
+  useEffect(() => resetSave(), [bpm, meterId, resetSave, sound, subdivision]);
+
+  const savePreset = () => {
+    const subdivisionLabel =
+      SUBDIVISIONS.find((item) => item.value === subdivision)?.label ?? "";
+    void saving.save({
+      kind: "metronome",
+      title: `${bpm} BPM · ${meter.label}`,
+      summary: { bpm, meter: meter.label, subdivision, subdivisionLabel, sound },
+      payload: { bpm, meter: meterId, subdivision, sound },
+    });
+  };
 
   useEffect(() => {
     settingsRef.current = { bpm, subdivision, sound, volume };
@@ -364,6 +398,13 @@ export function MetronomeTool() {
           <button className="secondary-button" onClick={tap} type="button">
             טאפ־טמפו{tapHint ? ` · ${tapHint}` : ""}
           </button>
+          <SaveButton
+            state={saving.state}
+            onSave={savePreset}
+            label="שמור את הקצב"
+            message={saving.message}
+            compact
+          />
         </div>
       </div>
 

@@ -1,7 +1,10 @@
 import { Gauge, Mic, MicOff, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SaveButton } from "../components/SaveButton";
 import { centsOff, detectPitch, frequencyToMidi, midiToFrequency } from "../lib/dsp";
 import { hebrewNoteName, scientificName } from "../lib/key";
+import { useSaveWork } from "../lib/useSaveWork";
+import type { SavedWork } from "../lib/works";
 
 type Preset = { id: string; label: string; strings: number[] | null };
 
@@ -24,14 +27,33 @@ type Reading = {
 
 const HISTORY = 6;
 
+type Props = {
+  initial?: SavedWork | null;
+};
+
+/** The instrument and reference pitch a saved setup asks for. */
+function readInitial(work: SavedWork | null | undefined) {
+  const payload = work?.kind === "tuner" ? work.payload : {};
+  return {
+    presetId: PRESETS.some((item) => item.id === payload.presetId)
+      ? (payload.presetId as string)
+      : "chromatic",
+    referenceA4:
+      typeof payload.referenceA4 === "number"
+        ? Math.max(430, Math.min(450, Math.round(payload.referenceA4)))
+        : 440,
+  };
+}
+
 /**
  * The microphone feeds an analyser; every frame the latest window goes
  * through the autocorrelation detector and the median of the last few
  * readings drives the needle, which keeps it steady on a wobbly note.
  */
-export function TunerTool() {
-  const [presetId, setPresetId] = useState("chromatic");
-  const [referenceA4, setReferenceA4] = useState(440);
+export function TunerTool({ initial = null }: Props) {
+  const [restored] = useState(() => readInitial(initial));
+  const [presetId, setPresetId] = useState(restored.presetId);
+  const [referenceA4, setReferenceA4] = useState(restored.referenceA4);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState<Reading | null>(null);
@@ -50,6 +72,19 @@ export function TunerTool() {
     () => PRESETS.find((item) => item.id === presetId) ?? PRESETS[0],
     [presetId],
   );
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
+
+  useEffect(() => resetSave(), [presetId, referenceA4, resetSave]);
+
+  const saveSetup = () => {
+    void saving.save({
+      kind: "tuner",
+      title: `${preset.label} · לה ${referenceA4} Hz`,
+      summary: { presetId, presetLabel: preset.label, referenceA4 },
+      payload: { presetId, referenceA4 },
+    });
+  };
 
   useEffect(() => {
     referenceRef.current = referenceA4;
@@ -336,6 +371,14 @@ export function TunerTool() {
             <small>440 הוא התקן. תזמורות מסוימות מכוונות ל־442.</small>
           </label>
         </div>
+
+        <SaveButton
+          state={saving.state}
+          onSave={saveSetup}
+          label="שמור את הכיוון"
+          message={saving.message}
+          compact
+        />
 
         {preset.strings && (
           <div className="string-row" aria-label="מיתרי הכלי">

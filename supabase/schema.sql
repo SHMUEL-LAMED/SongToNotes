@@ -149,3 +149,62 @@ for each row execute function private.set_updated_at();
 create trigger ringtones_set_updated_at
 before update on public.ringtones
 for each row execute function private.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Everything the tools save that is not a transcription or a ringtone: a
+-- karaoke track, a practice version, a piano recording, an analysis, an
+-- ear-training session, a metronome preset, a tuner setup. One shape for all
+-- of them, with the tool-specific part in jsonb, so a tenth tool adds a kind
+-- rather than a table. The audio a tool produced stays on the device that made
+-- it (device_id says which); only the record of the work crosses devices.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.works (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- The id the work got on the device that created it, so a local history
+  -- uploaded after signing in never duplicates what is already here.
+  client_id text not null,
+  kind text not null check (
+    kind in ('notes', 'ringtone', 'vocals', 'speed', 'piano', 'analysis', 'ear', 'metronome', 'tuner')
+  ),
+  title text not null,
+  source_name text,
+  -- What the personal area shows on the card: counts, tempo, key, duration.
+  summary jsonb not null default '{}'::jsonb,
+  -- What the tool needs to open the work again: settings, notes, presets.
+  payload jsonb not null default '{}'::jsonb,
+  file_name text,
+  device_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, client_id)
+);
+
+create index if not exists works_user_created_idx
+  on public.works (user_id, created_at desc);
+
+alter table public.works enable row level security;
+
+grant select, insert, update, delete on public.works to authenticated;
+
+create policy "Users can view their own works"
+on public.works for select to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can insert their own works"
+on public.works for insert to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update their own works"
+on public.works for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can delete their own works"
+on public.works for delete to authenticated
+using ((select auth.uid()) = user_id);
+
+create trigger works_set_updated_at
+before update on public.works
+for each row execute function private.set_updated_at();

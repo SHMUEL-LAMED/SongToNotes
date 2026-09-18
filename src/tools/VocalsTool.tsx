@@ -1,6 +1,7 @@
 import { Cpu, Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import {
@@ -12,8 +13,10 @@ import {
 import { channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import type { SeparateTarget } from "../lib/separate";
+import { useSaveWork } from "../lib/useSaveWork";
 import { useSeparation } from "../lib/useSeparation";
 import { encodeWav } from "../lib/wav";
+import type { SavedWork } from "../lib/works";
 
 function sharedContext() {
   const Context =
@@ -21,6 +24,27 @@ function sharedContext() {
     (window as typeof window & { webkitAudioContext?: typeof AudioContext })
       .webkitAudioContext;
   return Context ? new Context() : null;
+}
+
+type Props = {
+  /**
+   * A saved separation the personal area asked this tool to open. The song
+   * itself was never stored, so the settings are restored and the visitor is
+   * asked for the file again.
+   */
+  initial?: SavedWork | null;
+};
+
+function readInitial(work: SavedWork | null | undefined) {
+  const payload = work?.payload ?? {};
+  return {
+    target: payload.target === "vocals" ? ("vocals" as const) : ("instrumental" as const),
+    strength:
+      typeof payload.strength === "number"
+        ? Math.max(0, Math.min(100, Math.round(payload.strength)))
+        : 100,
+    keepBass: typeof payload.keepBass === "boolean" ? payload.keepBass : true,
+  };
 }
 
 /**
@@ -32,14 +56,17 @@ function sharedContext() {
  * whose browser can, and is the only option that works on a mono recording or
  * on a mix where the singer is not centred.
  */
-export function VocalsTool() {
+export function VocalsTool({ initial = null }: Props) {
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
-  const [target, setTarget] = useState<SeparateTarget>("instrumental");
-  const [strength, setStrength] = useState(100);
-  const [keepBass, setKeepBass] = useState(true);
+  const [restored] = useState(() => readInitial(initial));
+  const [target, setTarget] = useState<SeparateTarget>(restored.target);
+  const [strength, setStrength] = useState(restored.strength);
+  const [keepBass, setKeepBass] = useState(restored.keepBass);
   const [compare, setCompare] = useState(false);
   const [context] = useState(sharedContext);
   const separation = useSeparation(context);
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
 
   // The result is stored with the settings that produced it, so a stale
   // rendering is never shown next to controls that have already moved on.
@@ -93,6 +120,10 @@ export function VocalsTool() {
     }, 120);
     return () => window.clearTimeout(timer);
   }, [audio, keepBass, runFast, settingsKey, strength, target]);
+
+  // A change of settings is a different result, so the save button offers
+  // to save again rather than still saying "נשמר" over a new rendering.
+  useEffect(() => resetSave(), [resetSave, settingsKey, usedAi]);
 
   // An AI result is keyed to the settings that asked for it too, so the two
   // paths can hand their output to the same player and download button.
@@ -148,6 +179,29 @@ export function VocalsTool() {
     downloadFile(file, file.name, "audio/wav");
   };
 
+  const saveToProfile = () => {
+    const file = buildFile();
+    if (!file || !audio || !result) return;
+    const base = audio.file.name.replace(/\.[^/.]+$/, "");
+    void saving.save(
+      {
+        kind: "vocals",
+        title: `${base} — ${target === "instrumental" ? "קריוקי" : "שירה בלבד"}`,
+        sourceName: audio.file.name,
+        summary: {
+          target,
+          strength,
+          keepBass,
+          usedAi,
+          duration: result.duration,
+          mono: wasMono,
+        },
+        payload: { target, strength, keepBass, usedAi },
+      },
+      file,
+    );
+  };
+
   const isMono = audio ? audio.buffer.numberOfChannels < 2 : false;
   // The separator falls back to WebAssembly where WebGPU is missing and
   // resamples the song itself, so there is nothing left to gate on.
@@ -185,6 +239,12 @@ export function VocalsTool() {
         {error && (
           <div className="error-message" role="alert">
             {error}
+          </div>
+        )}
+        {initial && !audio && (
+          <div className="notice-message" role="status">
+            פתחת „{initial.title}”. ההגדרות שוחזרו; בחר את השיר שוב כדי להפיק את
+            התוצאה מחדש.
           </div>
         )}
         {separation.error && !error && (
@@ -373,6 +433,12 @@ export function VocalsTool() {
                   title={target === "instrumental" ? "גרסת קריוקי" : "השירה בלבד"}
                 />
               </div>
+              <SaveButton
+                state={saving.state}
+                onSave={saveToProfile}
+                disabled={!result || busy}
+                message={saving.message}
+              />
             </div>
           </>
         )}

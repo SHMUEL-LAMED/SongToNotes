@@ -7,11 +7,12 @@ import { ThemeToggle } from "./ThemeToggle";
 
 type Props = PropsWithChildren<{
   tool: ToolDefinition | null;
+  /** True while the personal area is open over the page. */
+  account?: boolean;
   themePreference: ThemePreference;
   onCycleTheme: () => void;
   onHome: () => void;
   onOpenAccount: () => void;
-  onSignInError: (message: string) => void;
 }>;
 
 /**
@@ -21,14 +22,14 @@ type Props = PropsWithChildren<{
  */
 export function ToolShell({
   tool,
+  account = false,
   themePreference,
   onCycleTheme,
   onHome,
   onOpenAccount,
-  onSignInError,
   children,
 }: Props) {
-  const { user, profile, signInWithGoogle } = useAuth();
+  const { user, profile } = useAuth();
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,27 +78,31 @@ export function ToolShell({
           </div>
           <ThemeToggle preference={themePreference} onCycle={onCycleTheme} />
           {!user ? (
+            // Without an account the area still holds what this device saved,
+            // and the sign-in button sits at the top of it.
             <button
-              className="account-button"
+              className={`account-button ${account ? "is-current" : ""}`}
               type="button"
-              onClick={() =>
-                void signInWithGoogle().catch(() =>
-                  onSignInError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."),
-                )
-              }
+              onClick={onOpenAccount}
+              aria-expanded={account}
             >
               <span className="account-avatar">
                 <UserRound size={18} />
               </span>
               <span className="account-button-copy">
-                <strong>התחברות</strong>
+                <strong>האזור האישי</strong>
                 <small>
-                  <History size={12} /> לשמירת היסטוריה
+                  <History size={12} /> התחברות ושמירה
                 </small>
               </span>
             </button>
           ) : (
-            <button className="account-button" type="button" onClick={onOpenAccount}>
+            <button
+              className={`account-button ${account ? "is-current" : ""}`}
+              type="button"
+              onClick={onOpenAccount}
+              aria-expanded={account}
+            >
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
               ) : (
@@ -108,7 +113,7 @@ export function ToolShell({
               <span className="account-button-copy">
                 <strong>{profile?.full_name?.split(" ")[0] || "הפרופיל שלי"}</strong>
                 <small>
-                  <History size={12} /> היסטוריה
+                  <History size={12} /> האזור האישי
                 </small>
               </span>
             </button>

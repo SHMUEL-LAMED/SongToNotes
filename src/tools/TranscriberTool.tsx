@@ -36,6 +36,7 @@ import { useAuth } from "../lib/auth";
 import { downloadFile, notesToCsv, notesToMidi, safeFilename } from "../lib/export";
 import { detectKey, keyName, scientificName } from "../lib/key";
 import { saveTranscription } from "../lib/history";
+import { saveWork } from "../lib/works";
 import { scoreToMusicXml } from "../lib/musicxml";
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "../lib/refine";
 import { buildScore } from "../lib/score";
@@ -60,7 +61,6 @@ type Props = {
    * rather than synchronised on every render.
    */
   initial: PendingTranscription | null;
-  onSaved: () => void;
 };
 
 /** "3.4 שניות" / "2:05 דקות" — the run time, in words a person reads. */
@@ -70,7 +70,7 @@ function formatDuration(milliseconds: number) {
   return `${formatTime(seconds)} דקות`;
 }
 
-export function TranscriberTool({ initial, onSaved }: Props) {
+export function TranscriberTool({ initial }: Props) {
   const { user } = useAuth();
   const audioFile = useAudioFile();
   const { audio } = audioFile;
@@ -358,28 +358,46 @@ export function TranscriberTool({ initial, onSaved }: Props) {
         return;
       }
       setRawNotes(detected);
-      if (user) {
-        const refined = refineNotes(detected, refineOptions);
-        const savedTempo = estimateTempo(refined);
-        const savedKey = detectKey(refined);
-        void saveTranscription({
-          user_id: user.id,
-          title,
-          source_name: audio.file.name,
-          note_count: refined.length,
-          duration_seconds: noteSpan(refined),
-          bpm: savedTempo.bpm,
-          key_name: keyName(savedKey),
-          analysis_offset: info.startOffset,
-          raw_notes: detected,
-          settings,
+      // The result is kept either way: in the profile's own table with an
+      // account, and on this device without one — where it waits in the
+      // personal area and is uploaded on the first sign-in.
+      const refined = refineNotes(detected, refineOptions);
+      const savedTempo = estimateTempo(refined);
+      const savedKey = detectKey(refined);
+      const keep = user
+        ? saveTranscription({
+            user_id: user.id,
+            title,
+            source_name: audio.file.name,
+            note_count: refined.length,
+            duration_seconds: noteSpan(refined),
+            bpm: savedTempo.bpm,
+            key_name: keyName(savedKey),
+            analysis_offset: info.startOffset,
+            raw_notes: detected,
+            settings,
+          }).then(() => "התוצאה נשמרה אוטומטית באזור האישי שלך.")
+        : saveWork({
+            kind: "notes",
+            title,
+            sourceName: audio.file.name,
+            summary: {
+              noteCount: refined.length,
+              duration: noteSpan(refined),
+              bpm: savedTempo.bpm,
+              keyName: keyName(savedKey),
+            },
+            payload: { notes: detected, analysisOffset: info.startOffset, settings },
+          }).then(() => "התוצאה נשמרה במכשיר הזה. התחבר כדי לראות אותה בכל מכשיר.");
+      void keep
+        .then((message) => {
+          if (runTokenRef.current === token) setNotice(message);
         })
-          .then(() => {
-            onSaved();
-            setNotice("התוצאה נשמרה אוטומטית בפרופיל שלך.");
-          })
-          .catch(() => setNotice("התווים מוכנים, אבל לא הצלחנו לשמור אותם בהיסטוריה."));
-      }
+        .catch(() => {
+          if (runTokenRef.current === token) {
+            setNotice("התווים מוכנים, אבל לא הצלחנו לשמור אותם בהיסטוריה.");
+          }
+        });
       window.setTimeout(
         () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
         120,
@@ -392,7 +410,7 @@ export function TranscriberTool({ initial, onSaved }: Props) {
       startingRef.current = false;
       setIsStarting(false);
     }
-  }, [audio, onSaved, refineOptions, settings, stopPlayback, title, transcriber, trim, user]);
+  }, [audio, refineOptions, settings, stopPlayback, title, transcriber, trim, user]);
 
   // Melody and chords are two different readings of the audio rather than two
   // filters over one result, and so is the choice of engine. Now that a pass

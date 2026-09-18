@@ -1,5 +1,6 @@
 import { Check, Ear, Play, RotateCcw, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SaveButton } from "../components/SaveButton";
 import {
   EMPTY_STATS,
   LEVEL_LABELS,
@@ -17,6 +18,8 @@ import {
   type Stats,
 } from "../lib/earTraining";
 import { NotePlayer } from "../lib/synth";
+import { useSaveWork } from "../lib/useSaveWork";
+import type { SavedWork } from "../lib/works";
 
 const SETTINGS_KEY = "musictools.eartraining.v1";
 
@@ -48,31 +51,47 @@ const EMPTY_BOARD: Record<ExerciseMode, Stats> = {
   degrees: EMPTY_STATS,
 };
 
-function loadSaved(): Saved {
+function loadSaved(initial: SavedWork | null): Saved {
   const fallback: Saved = {
     mode: "intervals",
     level: "easy",
     intervalStyle: "melodic",
     stats: EMPTY_BOARD,
   };
+  let saved = fallback;
   try {
     const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Saved> | null;
-    if (!parsed) return fallback;
-    const stats = (parsed.stats ?? {}) as Partial<Record<ExerciseMode, unknown>>;
-    return {
-      mode: MODES.includes(parsed.mode as ExerciseMode) ? (parsed.mode as ExerciseMode) : fallback.mode,
-      level: LEVELS.includes(parsed.level as Level) ? (parsed.level as Level) : fallback.level,
-      intervalStyle: parsed.intervalStyle === "harmonic" ? "harmonic" : "melodic",
-      stats: {
-        intervals: normalizeStats(stats.intervals),
-        chords: normalizeStats(stats.chords),
-        degrees: normalizeStats(stats.degrees),
-      },
-    };
+    if (parsed) {
+      const stats = (parsed.stats ?? {}) as Partial<Record<ExerciseMode, unknown>>;
+      saved = {
+        mode: MODES.includes(parsed.mode as ExerciseMode) ? (parsed.mode as ExerciseMode) : fallback.mode,
+        level: LEVELS.includes(parsed.level as Level) ? (parsed.level as Level) : fallback.level,
+        intervalStyle: parsed.intervalStyle === "harmonic" ? "harmonic" : "melodic",
+        stats: {
+          intervals: normalizeStats(stats.intervals),
+          chords: normalizeStats(stats.chords),
+          degrees: normalizeStats(stats.degrees),
+        },
+      };
+    }
   } catch {
-    return fallback;
+    // Private browsing; the defaults will do.
   }
+  // A session opened from the personal area sets the exercise it was, and
+  // keeps this browser's running score.
+  const payload = initial?.kind === "ear" ? initial.payload : null;
+  if (!payload) return saved;
+  return {
+    ...saved,
+    mode: MODES.includes(payload.mode as ExerciseMode) ? (payload.mode as ExerciseMode) : saved.mode,
+    level: LEVELS.includes(payload.level as Level) ? (payload.level as Level) : saved.level,
+    intervalStyle: payload.intervalStyle === "harmonic" ? "harmonic" : payload.intervalStyle === "melodic" ? "melodic" : saved.intervalStyle,
+  };
 }
+
+type Props = {
+  initial?: SavedWork | null;
+};
 
 /**
  * A quiz for the ear: the site already knows how to make notes, so the
@@ -80,8 +99,8 @@ function loadSaved(): Saved {
  * Nothing is fetched and nothing is recorded — the score lives in this
  * browser only.
  */
-export function EarTrainingTool() {
-  const [saved] = useState(loadSaved);
+export function EarTrainingTool({ initial = null }: Props) {
+  const [saved] = useState(() => loadSaved(initial));
   const [mode, setMode] = useState<ExerciseMode>(saved.mode);
   const [level, setLevel] = useState<Level>(saved.level);
   const [intervalStyle, setIntervalStyle] = useState<IntervalStyle>(saved.intervalStyle);
@@ -94,6 +113,30 @@ export function EarTrainingTool() {
   const idleTimerRef = useRef(0);
   const rootRef = useRef<HTMLElement>(null);
   const stats = board[mode];
+  const saving = useSaveWork();
+  const resetSave = saving.reset;
+
+  // Every answer changes the score, so the session on offer is a new one.
+  useEffect(() => resetSave(), [resetSave, stats.asked, mode]);
+
+  const saveSession = () => {
+    if (stats.asked === 0) return;
+    void saving.save({
+      kind: "ear",
+      title: `${MODE_LABELS[mode]} · ${LEVEL_LABELS[level]}`,
+      summary: {
+        mode,
+        modeLabel: MODE_LABELS[mode],
+        level,
+        levelLabel: LEVEL_LABELS[level],
+        asked: stats.asked,
+        correct: stats.correct,
+        accuracy: accuracy(stats),
+        best: stats.best,
+      },
+      payload: { mode, level, intervalStyle },
+    });
+  };
 
   useEffect(() => {
     try {
@@ -396,6 +439,15 @@ export function EarTrainingTool() {
           <RotateCcw size={15} /> אפס ניקוד
         </button>
       </div>
+
+      <SaveButton
+        state={saving.state}
+        onSave={saveSession}
+        disabled={stats.asked === 0}
+        label="שמור את האימון"
+        message={saving.message}
+        compact
+      />
     </section>
   );
 }
