@@ -669,6 +669,13 @@ await page.locator(".transcript-search input").fill("פגישה");
 log((await page.locator(".transcript-segments li").count()) === 1 && (await page.locator(".transcript-segments mark").count()) === 1, "transcript: search narrows the sentences and highlights the match");
 log((await page.locator(".transcript-jump").count()) === 1, "transcript: each sentence can be jumped to");
 
+// --- share page: a token route renders the share page, and a bad token explains itself ---
+await page.goto(`${BASE}#/s/0123456789abcdef`, { waitUntil: "load" });
+await page.waitForSelector(".share-page", { timeout: 10_000 });
+log(true, "share: a token route opens the share page instead of the hub");
+await page.waitForFunction(() => document.querySelector(".share-page .error-message") || document.querySelector(".share-page .tool-intro"), null, { timeout: 20_000 });
+log((await page.locator(".share-page .error-message, .share-page .tool-intro").count()) > 0, "share: the page resolves the token (here: not reachable, explained)");
+
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");
 await page.locator(".assistant-launcher").click();

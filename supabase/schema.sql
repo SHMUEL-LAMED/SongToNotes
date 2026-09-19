@@ -315,3 +315,37 @@ alter table public.works add constraint works_kind_check check (
   kind in ('notes', 'ringtone', 'vocals', 'speed', 'piano', 'analysis', 'ear', 'metronome', 'tuner', 'transcript',
            'chords', 'song', 'convert', 'rhythm', 'mix', 'lyrics', 'tts')
 );
+
+-- ---------------------------------------------------------------------------
+-- Public share links. A row is a snapshot of one work at the moment it was
+-- shared — title, summary, payload and the cloud file's path — under a
+-- random token. Only the share function reads it (service role); the owner
+-- lists and revokes their own links through RLS.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.shares (
+  token text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  origin text not null default 'works',
+  work_id text not null,
+  kind text not null,
+  title text not null,
+  summary jsonb not null default '{}'::jsonb,
+  payload jsonb not null default '{}'::jsonb,
+  file_path text,
+  file_name text,
+  views integer not null default 0,
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  unique (user_id, origin, work_id)
+);
+
+alter table public.shares enable row level security;
+
+create policy "Users can see their own share links"
+on public.shares for select to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can revoke their own share links"
+on public.shares for delete to authenticated
+using ((select auth.uid()) = user_id);
