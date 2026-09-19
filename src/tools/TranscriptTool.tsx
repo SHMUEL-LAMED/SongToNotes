@@ -6,6 +6,8 @@ import {
   FileText,
   Languages,
   ListChecks,
+  Search,
+  Users,
   LogIn,
   Play,
   Sparkles,
@@ -15,6 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
+import { Transport } from "../components/Transport";
 import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
@@ -71,7 +74,7 @@ const TRANSLATE_TO = [
   { id: "es", label: "ספרדית" },
 ];
 
-type AiJob = Exclude<AiAction, "chat">;
+type AiJob = Exclude<AiAction, "chat" | "speakers">;
 const AI_LABELS: Record<AiJob, string> = {
   polish: "נוסח ערוך",
   summarize: "סיכום",
@@ -199,6 +202,11 @@ export function TranscriptTool({ initial = null }: Props) {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiCopied, setAiCopied] = useState(false);
   const [translateTo, setTranslateTo] = useState("en");
+  // Finding a phrase, and jumping the player to where it was said.
+  const [query, setQuery] = useState("");
+  const [seek, setSeek] = useState<{ time: number; key: number; play?: boolean } | null>(null);
+  const [playTime, setPlayTime] = useState(0);
+  const [speakersBusy, setSpeakersBusy] = useState(false);
   const aiAbortRef = useRef<AbortController | null>(null);
   const [finished, setFinished] = useState<{ seconds: number; model: string } | null>(null);
   const saving = useSaveWork();
@@ -377,6 +385,41 @@ export function TranscriptTool({ initial = null }: Props) {
     [result, text],
   );
   const words = useMemo(() => countWords(text), [text]);
+  const speakers = useMemo(() => {
+    const names = new Set<string>();
+    for (const segment of segments) {
+      const match = segment.text.match(/^([^:：]{1,30}):\s/);
+      if (match) names.add(match[1].trim());
+    }
+    return names.size;
+  }, [segments]);
+  const wordsPerMinute = result && result.duration > 30 ? Math.round(words / (result.duration / 60)) : null;
+  const matching = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return null;
+    return segments.map((segment, index) => (segment.text.toLowerCase().includes(needle) ? index : -1)).filter((index) => index >= 0);
+  }, [query, segments]);
+  const currentSegment = segments.findIndex((segment, index) => playTime >= segment.start && (index === segments.length - 1 || playTime < segments[index + 1].start));
+
+  /** Asks the model who said what; the lines come back prefixed and go into the text. */
+  const labelSpeakers = async () => {
+    if (!segments.length || speakersBusy) return;
+    setSpeakersBusy(true);
+    setAiError(null);
+    try {
+      const reply = await transformText("speakers", segments.map((segment) => segment.text).join("\n"));
+      const lines = reply.text.split("\n").map((line) => line.trim()).filter(Boolean);
+      if (lines.length !== segments.length) {
+        // The model changed the line count; keep what lines up, in order.
+        setNotice("זיהוי הדוברים החזיר מספר שורות שונה; הוחלו רק השורות שהתאימו.");
+      }
+      setText(segments.map((segment, index) => (lines[index] && lines[index].includes(segment.text.slice(0, 12)) ? lines[index] : segment.text)).join("\n"));
+    } catch (caught) {
+      setAiError(caught instanceof AiError || caught instanceof Error ? caught.message : "זיהוי הדוברים נכשל.");
+    } finally {
+      setSpeakersBusy(false);
+    }
+  };
   const title = result?.sourceName
     ? result.sourceName.replace(/\.[^/.]+$/, "")
     : audio
@@ -673,9 +716,24 @@ export function TranscriptTool({ initial = null }: Props) {
             <div className="transcript-stats">
               <span>{words} מילים</span>
               <span>{segments.length} משפטים</span>
+              {speakers > 1 && <span>{speakers} דוברים</span>}
               {result.duration > 0 && <span>{formatTime(result.duration)}</span>}
+              {wordsPerMinute !== null && <span>{wordsPerMinute} מילים לדקה</span>}
               <span>{languageLabel(result.language)}</span>
             </div>
+          </div>
+
+          {audio && <Transport buffer={audio.buffer} label="נגן עם התמלול" onTime={setPlayTime} seek={seek} />}
+
+          <div className="transcript-tools">
+            <label className="transcript-search">
+              <Search size={15} />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="חיפוש בתמלול…" aria-label="חיפוש בתמלול" dir="auto" />
+              {matching && <small>{matching.length ? `${matching.length} משפטים` : "לא נמצא"}</small>}
+            </label>
+            <button type="button" className="chip-toggle" onClick={() => void labelSpeakers()} disabled={busy || speakersBusy || !segments.length || !user}>
+              <Users size={14} /> {speakersBusy ? "מזהה דוברים…" : speakers > 1 ? "זהה דוברים מחדש" : "זהה דוברים"}
+            </button>
           </div>
 
           <textarea
@@ -697,12 +755,29 @@ export function TranscriptTool({ initial = null }: Props) {
           </p>
 
           <ol className="transcript-segments" aria-label="משפטים עם חותמות זמן">
-            {segments.map((segment, index) => (
-              <li key={`${segment.start}-${index}`}>
-                <time>{formatTime(segment.start)}</time>
-                <span dir="auto">{segment.text}</span>
-              </li>
-            ))}
+            {segments.map((segment, index) => {
+              if (matching && !matching.includes(index)) return null;
+              const needle = query.trim();
+              const at = needle ? segment.text.toLowerCase().indexOf(needle.toLowerCase()) : -1;
+              return (
+                <li key={`${segment.start}-${index}`} className={index === currentSegment && audio ? "is-current" : ""}>
+                  <button type="button" className="transcript-jump" onClick={() => setSeek({ time: segment.start, key: Date.now(), play: true })} aria-label={`נגן מ־${formatTime(segment.start)}`}>
+                    <time>{formatTime(segment.start)}</time>
+                  </button>
+                  <span dir="auto">
+                    {at >= 0 ? (
+                      <>
+                        {segment.text.slice(0, at)}
+                        <mark>{segment.text.slice(at, at + needle.length)}</mark>
+                        {segment.text.slice(at + needle.length)}
+                      </>
+                    ) : (
+                      segment.text
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ol>
 
           <div className="ai-separator transcript-ai">

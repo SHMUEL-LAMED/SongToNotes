@@ -29,6 +29,8 @@ const MESSAGES: Record<string, string> = {
   storage: "לא הצלחנו להעלות את הקובץ לשרת. נסה שוב.",
   network: "החיבור לשרת נכשל. בדוק את האינטרנט ונסה שוב.",
   cancelled: "בוטל.",
+  unsupported_language: "הקול שמוגדר בשרת לא מדבר בשפה הזאת. אפשר להקשיב בדפדפן, או שמנהל האתר יגדיר ספק עם עברית (TTS_*).",
+  not_found: "לא זוהה שיר בקטע הזה. נסה קטע ארוך יותר או ברור יותר.",
 };
 
 export function describeAiError(code: string, status?: number) {
@@ -74,7 +76,7 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 // The language model
 // ---------------------------------------------------------------------------
 
-export type AiAction = "polish" | "summarize" | "translate" | "chat";
+export type AiAction = "polish" | "summarize" | "translate" | "speakers" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type AssistantMode = "question" | "execute";
 export type AssistantAction = { type: "navigate"; route: string };
@@ -288,4 +290,67 @@ export async function separateOnServer(
       state.percent !== null ? 10 + Math.round(state.percent * 0.75) : guessed,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Text to speech
+// ---------------------------------------------------------------------------
+
+/** A spoken recording of the text, as a file, from the server's voice. */
+export async function speakToFile(
+  text: string,
+  options: { voice?: string; speed?: number; format?: "mp3" | "wav"; signal?: AbortSignal } = {},
+): Promise<File> {
+  const access = await token();
+  let response: Response;
+  try {
+    response = await fetch(`${FUNCTIONS}/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${access}`, apikey: SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ text, voice: options.voice, speed: options.speed, format: options.format ?? "mp3" }),
+      signal: options.signal,
+    });
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
+    throw new AiError("network", MESSAGES.network);
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
+    throw new AiError(code, describeAiError(code, response.status));
+  }
+  const bytes = await response.arrayBuffer();
+  const format = options.format ?? "mp3";
+  return new File([bytes], `speech.${format}`, { type: format === "wav" ? "audio/wav" : "audio/mpeg" });
+}
+
+// ---------------------------------------------------------------------------
+// Song identification
+// ---------------------------------------------------------------------------
+
+export type Identification =
+  | { found: false; used: number; limit: number }
+  | {
+      found: true;
+      artist: string | null;
+      title: string | null;
+      album: string | null;
+      releaseDate: string | null;
+      label: string | null;
+      timecode: string | null;
+      links: { song: string | null; appleMusic: string | null; spotify: string | null; deezer: string | null };
+      artwork: string | null;
+      used: number;
+      limit: number;
+    };
+
+export function identifyAvailability(signal?: AbortSignal) {
+  return call<{ configured: boolean }>("identify", { method: "GET", query: { availability: "1" }, signal });
+}
+
+/** Asks the recognition service about a clip of a few seconds. */
+export function identifySong(clip: Blob, signal?: AbortSignal) {
+  const form = new FormData();
+  form.append("file", clip, "clip.wav");
+  return call<Identification>("identify", { method: "POST", body: form, signal });
 }
