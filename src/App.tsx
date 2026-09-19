@@ -4,10 +4,12 @@ import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
 import { Hub } from "./components/Hub";
+import { SharePage } from "./components/SharePage";
 import { ToolShell } from "./components/ToolShell";
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
 import { useTheme } from "./lib/theme";
+import { shareTokenFromRoute } from "./lib/share";
 import { findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
@@ -78,12 +80,13 @@ function WorkspaceApp() {
   const [assistantOpen, setAssistantOpen] = useState(false);
 
   const tool = findTool(route);
+  const shareToken = shareTokenFromRoute(route);
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
   // than an empty page.
   useEffect(() => {
-    if (route !== "home" && !tool) navigate("home");
-  }, [navigate, route, tool]);
+    if (route !== "home" && !tool && !shareToken) navigate("home");
+  }, [navigate, route, shareToken, tool]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -156,7 +159,8 @@ function WorkspaceApp() {
         </div>
       )}
 
-      {!tool && <Hub onOpen={go} />}
+      {shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
+      {!tool && !shareToken && <Hub onOpen={go} />}
       {tool?.id === "notes" && (
         <Suspense
           fallback={

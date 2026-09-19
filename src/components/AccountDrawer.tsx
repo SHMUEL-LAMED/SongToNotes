@@ -15,6 +15,7 @@ import {
   Play,
   Save,
   Search,
+  Link2,
   Share2,
   Smartphone,
   Sparkles,
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useAuth } from "../lib/auth";
 import { canShareFiles, downloadFile, shareFile } from "../lib/export";
 import { clearFiles, type StoredFileInfo } from "../lib/fileStore";
+import { createShare } from "../lib/share";
 import { findTool } from "../lib/tools";
 import {
   KIND_LABELS,
@@ -331,6 +333,24 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
 
   const download = (work: SavedWork) =>
     void withFile(work, (file) => downloadFile(file, file.name, file.type || "audio/wav"));
+
+  /** A public link, copied to the clipboard. */
+  const link = (work: SavedWork) => {
+    void (async () => {
+      try {
+        setMessage("יוצר קישור…");
+        const url = await createShare(work);
+        try {
+          await navigator.clipboard.writeText(url);
+          setMessage(`הקישור הועתק: ${url}`);
+        } catch {
+          setMessage(`הקישור לשיתוף: ${url}`);
+        }
+      } catch (caught) {
+        setMessage(caught instanceof Error ? caught.message : "יצירת הקישור נכשלה.");
+      }
+    })();
+  };
 
   const share = (work: SavedWork) =>
     void withFile(work, async (file) => {
@@ -727,6 +747,17 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
                                 </button>
                               )}
                             </>
+                          )}
+                          {userId && !work.localOnly && (
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label="קישור ציבורי לשיתוף"
+                              title="קישור ציבורי"
+                              onClick={() => link(work)}
+                            >
+                              <Link2 size={17} />
+                            </button>
                           )}
                           <button
                             type="button"
