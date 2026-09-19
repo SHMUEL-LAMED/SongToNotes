@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 12, "hub renders all 12 tool cards", `found ${cards}`);
+log(cards === 14, "hub renders all 14 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -528,6 +528,33 @@ await page.locator(".songbook-toolbar .segmented-control button", { hasText: "ע
 await page.locator(".songbook-editor").fill("Am      G\nהיה היה פעם");
 await page.locator(".songbook-editor-tools .link-button").first().click();
 log((await page.locator(".songbook-editor").inputValue()) === "[Am]היה היה [G]פעם", "songbook: chords pasted over lyrics fold into brackets");
+
+// --- converter: the demo becomes an MP3 in the browser, and can be handed to another tool ---
+await page.goto(`${BASE}#/convert`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".convert-tool .primary-button", { timeout: 30_000 });
+log(/MP3/.test((await page.locator(".convert-tool .primary-button").textContent()) ?? ""), "convert: offers MP3 by default with a size estimate");
+await page.locator(".convert-tool .primary-button").click();
+await page.waitForSelector(".convert-result", { timeout: 120_000 });
+const [mp3Download] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".convert-result .download-buttons button", { hasText: "הורד" }).click(),
+]);
+const mp3Bytes = readFileSync(await mp3Download.path());
+log(mp3Download.suggestedFilename().endsWith(".mp3") && mp3Bytes.length > 10_000, "convert: an MP3 file comes out", `${mp3Bytes.length} bytes`);
+log((mp3Bytes[0] === 0xff && (mp3Bytes[1] & 0xe0) === 0xe0) || (mp3Bytes[0] === 0x49 && mp3Bytes[1] === 0x44), "convert: the file starts with an MP3 frame or ID3 tag");
+await page.locator(".convert-result .download-buttons button", { hasText: "לתמלול" }).click();
+await page.waitForSelector(".transcript-tool .selected-file", { timeout: 30_000 });
+log(/\.mp3/.test((await page.locator(".transcript-tool .selected-file strong").textContent()) ?? ""), "convert: the result is handed to the transcript tool without a re-upload");
+
+// --- video: the tool has its own drop zone that only takes video ---
+await page.goto(`${BASE}#/video`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+log(await page.locator(".video-tool .drop-zone").isVisible(), "video: a drop zone for a video file");
+log(/video/.test((await page.locator(".video-tool input[type=file]").getAttribute("accept")) ?? ""), "video: accepts video files");
 
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");

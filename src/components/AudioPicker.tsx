@@ -1,6 +1,7 @@
 import { FileAudio, Mic, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decodeAudioFile, formatTime } from "../lib/audio";
+import { hasHandoff, takeHandoff } from "../lib/handoff";
 import { decodeMonoAt } from "../lib/longAudio";
 import {
   isRecordingSupported,
@@ -84,6 +85,8 @@ export type LoadedAudio = {
 };
 
 export type AudioFileOptions = {
+  /** Take a file another tool handed over, when one is waiting. Default true. */
+  acceptHandoff?: boolean;
   /** The largest file to accept; the default suits tools that keep the full-rate audio. */
   maxBytes?: number;
   /**
@@ -101,7 +104,7 @@ export type AudioFileOptions = {
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAudioFile(options: AudioFileOptions = {}) {
-  const { maxBytes = MAX_BYTES, monoAt } = options;
+  const { maxBytes = MAX_BYTES, monoAt, acceptHandoff = true } = options;
   const [audio, setAudio] = useState<LoadedAudio | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -173,6 +176,18 @@ export function useAudioFile(options: AudioFileOptions = {}) {
       }
     }
   }, [maxBytes, monoAt]);
+
+  // A file another tool left for this one is opened on arrival.
+  useEffect(() => {
+    if (!acceptHandoff || !hasHandoff()) return;
+    let cancelled = false;
+    void takeHandoff().then((handed) => {
+      if (!cancelled && handed) void load(handed.file);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [acceptHandoff, load]);
 
   const clear = useCallback(() => {
     loadTokenRef.current += 1;

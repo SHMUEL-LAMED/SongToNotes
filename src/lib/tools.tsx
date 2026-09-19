@@ -1,8 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  ArrowLeftRight,
   BookOpen,
   Captions,
+  Clapperboard,
   Guitar,
   Ear,
   FileMusic,
@@ -62,6 +64,30 @@ export const TOOLS: ToolDefinition[] = [
     hue: 335,
     category: "create",
     tags: ["צלצול", "חיתוך", "טלפון", "fade"],
+  },
+  {
+    id: "convert",
+    title: "המרת פורמטים",
+    tagline: "MP3 או WAV, באיכות שתבחר",
+    description:
+      "ממירים כל קובץ שמע ל־MP3 או WAV עם שליטה בקצב הדגימה, בערוצים ובאיכות, חיתוך ועוצמה — בדפדפן, בלי להעלות.",
+    icon: ArrowLeftRight,
+    hue: 200,
+    category: "create",
+    tags: ["המרה", "mp3", "wav", "פורמט", "קצב דגימה"],
+    badge: "חדש",
+  },
+  {
+    id: "video",
+    title: "וידאו לאודיו",
+    tagline: "הצליל מתוך הסרטון",
+    description:
+      "מעלים סרטון ומקבלים את פס הקול כקובץ MP3 או WAV, או שולחים אותו ישר לתמלול, לצלצול, לתווים ולשאר הכלים.",
+    icon: Clapperboard,
+    hue: 12,
+    category: "create",
+    tags: ["וידאו", "mp4", "חילוץ שמע", "סרטון"],
+    badge: "חדש",
   },
   {
     id: "vocals",
