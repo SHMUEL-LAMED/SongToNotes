@@ -202,22 +202,42 @@ Deno.serve(async (req: Request) => {
 
   // The configured model first, then the known good ones, then whatever
   // the service says it serves. A model that answered is remembered.
+  // A model that is only busy (429: its tokens-per-minute bucket is spent)
+  // is skipped for this one request — each model has its own bucket — and
+  // not forgotten; when every model is busy, the request waits the moment
+  // the service asks for, once, and tries the first again.
   const candidates = [...new Set([configured, ...FALLBACK_MODELS])];
   let response: Response | null = null;
   let model = configured;
+  let busySeen = false;
   const gone = (status: number) => status === 404 || status === 400;
+  const busy = (status: number) => status === 429;
   try {
     for (const candidate of candidates) {
       model = candidate;
       response = await ask(candidate);
-      if (response.ok || !gone(response.status)) break;
+      if (response.ok) break;
+      if (busy(response.status)) {
+        busySeen = true;
+        continue;
+      }
+      if (!gone(response.status)) break;
     }
-    if (response && gone(response.status)) {
+    if (response && gone(response.status) && !busySeen) {
       const found = await discoverModel(base, apiKey);
       if (found && !candidates.includes(found)) {
         model = found;
         response = await ask(found);
       }
+    }
+    if (response && (busy(response.status) || (busySeen && gone(response.status)))) {
+      const detail = await response.text().catch(() => "");
+      const match = /try again in ([\d.]+)(ms|s)/i.exec(detail);
+      const wait = match ? Math.min(8000, Number(match[1]) * (match[2] === "ms" ? 1 : 1000)) : 2000;
+      console.warn("language models busy; waiting", wait, "ms");
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      model = configured;
+      response = await ask(configured);
     }
   } catch (caught) {
     console.error("language model unreachable", caught);
@@ -231,7 +251,7 @@ Deno.serve(async (req: Request) => {
     if (response.status === 429) return json(502, { error: "provider_busy" });
     return json(502, { error: "provider_error", status: response.status });
   }
-  if (model !== configured) {
+  if (model !== configured && !busySeen) {
     await admin.rpc("stt_set_setting", { setting_key: "AI_MODEL", setting_value: model }).catch(() => undefined);
   }
 
