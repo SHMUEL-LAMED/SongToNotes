@@ -9,13 +9,35 @@ import { deleteFile, getFile, putFile } from "./fileStore";
 const HANDOFF_ID = "handoff";
 const NOTE_KEY = "musictools.handoff.v1";
 
-export async function setHandoff(file: File, note?: string) {
-  await putFile(HANDOFF_ID, file, file.name);
+export async function setHandoff(file: File | File[], note?: string) {
+  const files = Array.isArray(file) ? file : [file];
+  await Promise.all(files.map((item, index) => putFile(index === 0 ? HANDOFF_ID : `${HANDOFF_ID}-${index}`, item, item.name)));
   try {
-    sessionStorage.setItem(NOTE_KEY, JSON.stringify({ name: file.name, note: note ?? null, at: Date.now() }));
+    sessionStorage.setItem(NOTE_KEY, JSON.stringify({ name: files[0]?.name ?? "", count: files.length, note: note ?? null, at: Date.now() }));
   } catch {
     // Without session storage the file still waits; only the note is lost.
   }
+}
+
+/** Every waiting file, for a tool that takes several; they stop waiting. */
+export async function takeHandoffFiles(): Promise<File[]> {
+  if (!hasHandoff()) return [];
+  let count = 1;
+  try {
+    const raw = sessionStorage.getItem(NOTE_KEY);
+    count = raw ? Number((JSON.parse(raw) as { count?: number }).count) || 1 : 1;
+    sessionStorage.removeItem(NOTE_KEY);
+  } catch {
+    // Fine.
+  }
+  const files: File[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const id = index === 0 ? HANDOFF_ID : `${HANDOFF_ID}-${index}`;
+    const file = await getFile(id).catch(() => null);
+    await deleteFile(id).catch(() => undefined);
+    if (file) files.push(file);
+  }
+  return files;
 }
 
 /** True when a file is waiting, without taking it. */
@@ -48,7 +70,7 @@ export async function takeHandoff(): Promise<{ file: File; note: string | null }
 }
 
 /** Sends a file to a tool: stores it and navigates. */
-export async function handOffTo(tool: string, file: File, note?: string) {
+export async function handOffTo(tool: string, file: File | File[], note?: string) {
   await setHandoff(file, note);
   window.location.assign(`#/${tool}`);
 }

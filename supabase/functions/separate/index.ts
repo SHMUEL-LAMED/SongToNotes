@@ -33,6 +33,17 @@ const MIME: Record<string, string> = {
   flac: "audio/flac",
 };
 
+/** Every stem URL the model produced, by the name it gave it. */
+function allStems(output: unknown): Record<string, string> {
+  const urls: Record<string, string> = {};
+  if (output && typeof output === "object" && !Array.isArray(output)) {
+    for (const [key, value] of Object.entries(output as Record<string, unknown>)) {
+      if (typeof value === "string" && /^https?:/.test(value)) urls[key.toLowerCase()] = value;
+    }
+  }
+  return urls;
+}
+
 /** The vocals and the rest, from whatever names the model gives its outputs. */
 function pickStems(output: unknown): { vocals: string | null; instrumental: string | null } {
   const urls = new Map<string, string>();
@@ -92,11 +103,12 @@ Deno.serve(async (req) => {
     };
     if (prediction.status === "succeeded") {
       const stems = pickStems(prediction.output);
-      if (!stems.vocals && !stems.instrumental) {
+      const all = allStems(prediction.output);
+      if (!stems.vocals && !stems.instrumental && !Object.keys(all).length) {
         console.error("separation output had no stems", JSON.stringify(prediction.output).slice(0, 300));
         return json(502, { error: "provider_error" });
       }
-      return json(200, { status: "done", ...stems });
+      return json(200, { status: "done", ...stems, stems: all });
     }
     if (prediction.status === "failed" || prediction.status === "canceled") {
       console.error("separation failed", prediction.error, (prediction.logs ?? "").slice(-300));
@@ -143,6 +155,10 @@ Deno.serve(async (req) => {
 
   const { used } = await usedToday(admin, user.id, "separation");
   if (used >= limit) return json(429, { error: "quota", used, limit });
+  // "stems" asks for every part the model can give — drums, bass, the rest —
+  // instead of only the voice and everything else.
+  const mode = form.get("mode") === "stems" ? "stems" : "vocals";
+  const input = mode === "stems" ? { ...extra, stem: "none" } : extra;
 
   const extension = (file.name.split(".").pop() ?? "").toLowerCase();
   const contentType = MIME[extension] ?? (MIME[file.type.split("/")[1] ?? ""] ?? "audio/mpeg");
@@ -162,7 +178,7 @@ Deno.serve(async (req) => {
   const response = await fetch(`${REPLICATE}/models/${owner}/${name}/predictions`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ input: { audio: signed.data.signedUrl, ...extra } }),
+    body: JSON.stringify({ input: { audio: signed.data.signedUrl, ...input } }),
   }).catch((caught) => {
     console.error("separation service unreachable", caught);
     return null;

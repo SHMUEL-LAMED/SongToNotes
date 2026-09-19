@@ -10,8 +10,12 @@ import { encodeWav } from "./wav";
 
 export const TRANSCRIBE_URL = `${SUPABASE_URL}/functions/v1/transcribe`;
 
+export type SpeechWord = { word: string; start: number; end: number };
+
 export type SpeechResult = {
   segments: TranscriptSegment[];
+  /** Word timings, when asked for. */
+  words?: SpeechWord[];
   language: string | null;
   model: string;
   /** Seconds of audio this account has used today, and its daily allowance. */
@@ -55,6 +59,8 @@ export function describeAllowance(seconds: number) {
 
 type Options = {
   language: string | null;
+  /** Ask for word timestamps as well. */
+  words?: boolean;
   signal?: AbortSignal;
   /** 0–100 while the window goes up. */
   onUpload?: (percent: number) => void;
@@ -74,7 +80,7 @@ export async function hasSession() {
 export async function transcribeWindow(
   samples: Float32Array,
   sampleRate: number,
-  { language, signal, onUpload }: Options,
+  { language, signal, onUpload, words = false }: Options,
 ): Promise<SpeechResult> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -84,6 +90,7 @@ export async function transcribeWindow(
   const form = new FormData();
   form.append("file", encodeWav({ channels: [samples], sampleRate }), "window.wav");
   if (language) form.append("language", language);
+  if (words) form.append("words", "1");
 
   return new Promise<SpeechResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -113,6 +120,7 @@ export async function transcribeWindow(
       }
       resolve({
         segments: Array.isArray(body?.segments) ? body.segments : [],
+        words: Array.isArray(body?.words) ? body.words : undefined,
         language: typeof body?.language === "string" ? body.language : null,
         model: typeof body?.model === "string" ? body.model : "server",
         used: typeof body?.used === "number" ? body.used : 0,

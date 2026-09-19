@@ -99,6 +99,8 @@ Deno.serve(async (req) => {
   if (!(file instanceof File)) return json(400, { error: "bad_request" });
   if (file.size > MAX_BYTES) return json(413, { error: "too_large" });
   const language = typeof form.get("language") === "string" ? String(form.get("language")).trim() : "";
+  // Word timestamps, for lyrics that light up word by word.
+  const wantWords = form.get("words") === "1";
   const bytes = await file.arrayBuffer();
   const seconds = Math.max(1, Math.round(wavSeconds(bytes)));
 
@@ -120,6 +122,10 @@ Deno.serve(async (req) => {
   upstream.append("model", model);
   upstream.append("response_format", "verbose_json");
   upstream.append("temperature", "0");
+  if (wantWords) {
+    upstream.append("timestamp_granularities[]", "word");
+    upstream.append("timestamp_granularities[]", "segment");
+  }
   if (language) upstream.append("language", language);
 
   let response: Response;
@@ -146,7 +152,13 @@ Deno.serve(async (req) => {
     text?: string;
     language?: string;
     segments?: { start?: number; end?: number; text?: string }[];
+    words?: { word?: string; start?: number; end?: number }[];
   };
+  const words = wantWords && Array.isArray(parsed.words)
+    ? parsed.words
+        .map((item) => ({ word: String(item.word ?? "").trim(), start: Number(item.start) || 0, end: Number(item.end) || 0 }))
+        .filter((item) => item.word.length > 0)
+    : undefined;
   const segments: Segment[] = Array.isArray(parsed.segments)
     ? parsed.segments
         .map((item) => ({
@@ -166,6 +178,7 @@ Deno.serve(async (req) => {
   const heard = parsed.language?.toLowerCase();
   return json(200, {
     segments,
+    ...(words ? { words } : {}),
     language: language || (heard ? (LANGUAGE_CODES[heard] ?? heard) : null),
     model,
     seconds,

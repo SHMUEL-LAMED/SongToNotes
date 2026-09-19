@@ -8,6 +8,7 @@ import {
   Drum,
   Guitar,
   Layers,
+  Mic2,
   Ear,
   FileMusic,
   Gauge,
@@ -182,6 +183,18 @@ export const TOOLS: ToolDefinition[] = [
     hue: 300,
     category: "practice",
     tags: ["שמיעה", "מרווחים", "אקורדים", "סולפז׳", "תרגול"],
+    badge: "חדש",
+  },
+  {
+    id: "lyrics",
+    title: "מילים מסונכרנות",
+    tagline: "קריוקי מילה אחר מילה",
+    description:
+      "האתר מזהה את מילות השיר עם הזמן של כל מילה, מציג קריוקי שנדלק תוך כדי שירה, ומייצא LRC ו־SRT.",
+    icon: Mic2,
+    hue: 320,
+    category: "create",
+    tags: ["מילים", "קריוקי", "lrc", "כתוביות", "סנכרון"],
     badge: "חדש",
   },
   {

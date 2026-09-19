@@ -201,7 +201,7 @@ export async function chatStream(
 export type SeparationJob = { id: string; used: number; limit: number };
 export type SeparationStatus =
   | { status: "starting" | "processing" | "queued"; percent: number | null }
-  | { status: "done"; vocals: string | null; instrumental: string | null }
+  | { status: "done"; vocals: string | null; instrumental: string | null; stems?: Record<string, string> }
   | { status: "failed"; message: string };
 
 /** Checks whether server-side separation is configured without uploading the song. */
@@ -214,9 +214,10 @@ export function separationAvailability(signal?: AbortSignal) {
 }
 
 /** Sends the song up and starts the job. */
-export function startSeparation(file: File, signal?: AbortSignal) {
+export function startSeparation(file: File, signal?: AbortSignal, mode: "vocals" | "stems" = "vocals") {
   const form = new FormData();
   form.append("file", file, file.name);
+  form.append("mode", mode);
   return call<SeparationJob>("separate", { method: "POST", body: form, signal });
 }
 
@@ -246,9 +247,10 @@ export async function separateOnServer(
   decode: (bytes: ArrayBuffer) => Promise<AudioBuffer>,
   report: (message: string, percent: number | null) => void,
   signal?: AbortSignal,
-): Promise<{ vocals: AudioBuffer | null; instrumental: AudioBuffer | null; used: number; limit: number }> {
+  mode: "vocals" | "stems" = "vocals",
+): Promise<{ vocals: AudioBuffer | null; instrumental: AudioBuffer | null; stems: Record<string, AudioBuffer>; used: number; limit: number }> {
   report("שולח את השיר לשרת…", 5);
-  const job = await startSeparation(file, signal);
+  const job = await startSeparation(file, signal, mode);
   report("השרת מפריד את השירה מהליווי…", 10);
   const startedAt = Date.now();
   for (;;) {
@@ -257,12 +259,22 @@ export async function separateOnServer(
     const state = await separationStatus(job.id, signal);
     if (state.status === "done") {
       report("מוריד את התוצאה…", 90);
+      if (mode === "stems") {
+        const entries = Object.entries(state.stems ?? {});
+        const decoded = await Promise.all(entries.map(([, url]) => fetchStem(url, signal).then(decode)));
+        const stems: Record<string, AudioBuffer> = {};
+        entries.forEach(([name], index) => {
+          stems[name] = decoded[index];
+        });
+        report("ההפרדה הושלמה.", 100);
+        return { vocals: stems.vocals ?? null, instrumental: null, stems, used: job.used, limit: job.limit };
+      }
       const [vocals, instrumental] = await Promise.all([
         state.vocals ? fetchStem(state.vocals, signal).then(decode) : Promise.resolve(null),
         state.instrumental ? fetchStem(state.instrumental, signal).then(decode) : Promise.resolve(null),
       ]);
       report("ההפרדה הושלמה.", 100);
-      return { vocals, instrumental, used: job.used, limit: job.limit };
+      return { vocals, instrumental, stems: {}, used: job.used, limit: job.limit };
     }
     if (state.status === "failed") {
       throw new AiError("provider_error", state.message ? `ההפרדה נכשלה: ${state.message}` : MESSAGES.provider_error);

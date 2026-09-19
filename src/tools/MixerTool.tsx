@@ -6,7 +6,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, decodeAudioFile, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
-import { handOffTo } from "../lib/handoff";
+import { handOffTo, hasHandoff, takeHandoffFiles } from "../lib/handoff";
 import { MixPlayer, audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
@@ -50,6 +50,18 @@ export function MixerTool({ initial = null }: Props) {
   useEffect(() => {
     playerRef.current?.setTracks(tracks);
   }, [tracks]);
+  // Stems from the vocal separator, or a file from any tool, arrive as tracks.
+  const [handed, setHanded] = useState<File[] | null>(null);
+  useEffect(() => {
+    if (!hasHandoff()) return;
+    let cancelled = false;
+    void takeHandoffFiles().then((files) => {
+      if (!cancelled && files.length) setHanded(files);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     playerRef.current?.setLoop(loop);
   }, [loop]);
@@ -110,6 +122,18 @@ export function MixerTool({ initial = null }: Props) {
     setLoading(false);
     setResult(null);
   };
+
+  useEffect(() => {
+    if (!handed) return;
+    const files = handed;
+    const timer = window.setTimeout(() => {
+      setHanded(null);
+      void addFiles(files);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The files were taken once; adding them is the whole point of the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handed]);
 
   const update = (id: string, patch: Partial<MixTrack>) => {
     setTracks((current) => current.map((track) => (track.id === id ? { ...track, ...patch } : track)));
