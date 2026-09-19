@@ -180,13 +180,12 @@ export function useAudioFile(options: AudioFileOptions = {}) {
   // A file another tool left for this one is opened on arrival.
   useEffect(() => {
     if (!acceptHandoff || !hasHandoff()) return;
-    let cancelled = false;
+    // Taking the file empties the hand-off, so a re-run of this effect
+    // (StrictMode in development) finds nothing; the first run's file is
+    // opened regardless of the teardown in between.
     void takeHandoff().then((handed) => {
-      if (!cancelled && handed) void load(handed.file);
+      if (handed) void load(handed.file);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [acceptHandoff, load]);
 
   const clear = useCallback(() => {

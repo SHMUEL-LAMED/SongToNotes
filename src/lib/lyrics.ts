@@ -17,7 +17,10 @@ export function buildLines(segments: TranscriptSegment[], words: SpeechWord[]): 
     .map((segment) => ({ start: segment.start, end: segment.end ?? segment.start + 3, text: segment.text.trim(), words: [] }));
   if (!lines.length) return [];
   for (const word of words) {
-    let line = lines.find((item) => word.start >= item.start - 0.05 && word.start < item.end + 0.05);
+    // The segment whose own span holds the word wins; a little tolerance
+    // only helps a word that sits just outside every segment.
+    let line = lines.find((item) => word.start >= item.start && word.start < item.end);
+    if (!line) line = lines.find((item) => word.start >= item.start - 0.05 && word.start < item.end + 0.05);
     if (!line) {
       // Between lines: attach to whichever is nearer.
       line = lines.reduce((best, item) => (Math.abs(item.start - word.start) < Math.abs(best.start - word.start) ? item : best), lines[0]);
@@ -60,10 +63,11 @@ export function linesToText(lines: LyricLine[]) {
 }
 
 function lrcTime(seconds: number) {
-  const whole = Math.max(0, seconds);
-  const minutes = Math.floor(whole / 60);
-  const rest = whole - minutes * 60;
-  return `${String(minutes).padStart(2, "0")}:${rest.toFixed(2).padStart(5, "0")}`;
+  // Rounded to centiseconds first, so 59.996 becomes 01:00.00 and never "00:60.00".
+  const centis = Math.round(Math.max(0, seconds) * 100);
+  const minutes = Math.floor(centis / 6000);
+  const rest = centis - minutes * 6000;
+  return `${String(minutes).padStart(2, "0")}:${String(Math.floor(rest / 100)).padStart(2, "0")}.${String(rest % 100).padStart(2, "0")}`;
 }
 
 /** LRC: a time tag per line, and with `enhanced`, one per word too. */

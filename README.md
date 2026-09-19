@@ -82,7 +82,7 @@ npm run dev
   לא מוריד את הרשת של 180MB. השיר עולה לתיקייה הפרטית של הגולש, המודל מקבל
   כתובת חתומה, והערוצים חוזרים דרך הפונקציה. הגדרות: `SEPARATION_API_KEY`
   (טוקן של Replicate), `SEPARATION_MODEL` (ברירת מחדל `ryan5453/demucs`),
-  `SEPARATION_INPUT`, `SEPARATION_DAILY`. עד שיש טוקן, הכלי מציע להפריד
+  `SEPARATION_INPUT`, `SEPARATION_STEMS_INPUT` (הקלט למצב הערוצים; ברירת המחדל מתאימה ל־Demucs), `SEPARATION_DAILY`. עד שיש טוקן, הכלי מציע להפריד
   בדפדפן כמו קודם.
 
 המכסות היומיות של שתיהן נרשמות ב־`ai_usage`.

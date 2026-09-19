@@ -54,13 +54,12 @@ export function MixerTool({ initial = null }: Props) {
   const [handed, setHanded] = useState<File[] | null>(null);
   useEffect(() => {
     if (!hasHandoff()) return;
-    let cancelled = false;
+    // Taking the files empties the hand-off, so the result is kept even when
+    // the effect is torn down and re-run (StrictMode does that in development):
+    // the second run finds nothing waiting and must not lose the first's files.
     void takeHandoffFiles().then((files) => {
-      if (!cancelled && files.length) setHanded(files);
+      if (files.length) setHanded(files);
     });
-    return () => {
-      cancelled = true;
-    };
   }, []);
   useEffect(() => {
     playerRef.current?.setLoop(loop);

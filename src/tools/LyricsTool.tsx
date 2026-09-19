@@ -8,7 +8,6 @@ import { Waveform } from "../components/Waveform";
 import { useAuth } from "../lib/auth";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
-import { decodeMonoAt } from "../lib/longAudio";
 import { applyLineEdits, buildLines, linesToLrc, linesToText, positionAt, type LyricLine } from "../lib/lyrics";
 import { CANCELLED, transcribeWindow, type SpeechWord } from "../lib/speechApi";
 import { LANGUAGES, languageLabel, segmentsToSrt, splitIntoWindows, type TranscriptSegment } from "../lib/transcript";
@@ -37,6 +36,11 @@ function normalizeLines(value: unknown): LyricLine[] {
 
 type Props = { initial?: SavedWork | null };
 
+function normalizeLanguage(value: unknown): string | null {
+  if (value === null) return null;
+  return typeof value === "string" && LANGUAGES.some((item) => item.id === value) ? value : "he";
+}
+
 /**
  * Lyrics that follow the song: the recogniser hears the words with their
  * times, the page lights each word as it is sung, and the result goes out
@@ -45,9 +49,11 @@ type Props = { initial?: SavedWork | null };
  * the separator it is cleaner still.
  */
 export function LyricsTool({ initial = null }: Props) {
-  const { audio, error, setError, isLoading, progress, load, clear } = useAudioFile({ maxBytes: 600 * 1024 * 1024 });
+  // Decoded once, as mono at the recogniser's rate: a long song stays small
+  // in memory, and the same samples are what go up to the server.
+  const { audio, error, setError, isLoading, progress, load, clear } = useAudioFile({ maxBytes: 600 * 1024 * 1024, monoAt: RATE });
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
-  const [language, setLanguage] = useState<string | null>("he");
+  const [language, setLanguage] = useState<string | null>(() => (initial && "language" in initial.payload ? normalizeLanguage(initial.payload.language) : "he"));
   const [lines, setLines] = useState<LyricLine[]>(() => normalizeLines(initial?.payload.lines));
   const [text, setText] = useState(() => linesToText(normalizeLines(initial?.payload.lines)));
   const [trim, setTrim] = useState<TrimRange>(null);
@@ -58,6 +64,7 @@ export function LyricsTool({ initial = null }: Props) {
   const [notice, setNotice] = useState<string | null>(initial ? "פתחת מילים שמורות. השיר עצמו לא נשמר — בחר אותו שוב כדי לשיר איתו." : null);
   const abortRef = useRef<AbortController | null>(null);
   const tokenRef = useRef(0);
+  const karaokeRef = useRef<HTMLDivElement>(null);
   const saving = useSaveWork();
   const resetSave = saving.reset;
   const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
@@ -75,8 +82,7 @@ export function LyricsTool({ initial = null }: Props) {
     setNotice(null);
     setStage({ index: 0, count: 1, upload: 0 });
     try {
-      const mono = (await decodeMonoAt(await audio.file.arrayBuffer(), RATE)).getChannelData(0);
-      if (tokenRef.current !== token) return;
+      const mono = audio.buffer.getChannelData(0);
       const from = trim ? Math.floor(trim.start * RATE) : 0;
       const to = trim ? Math.ceil(trim.end * RATE) : mono.length;
       const windows = splitIntoWindows(mono, RATE, WINDOW_SECONDS, 8, from, to);
@@ -119,34 +125,52 @@ export function LyricsTool({ initial = null }: Props) {
     setStage(null);
   };
 
+  /** The lines as they stand, with the textbox's unapplied edits included. */
+  const currentLines = () => (editing ? applyLineEdits(lines, text) : lines);
+
   const commitEdits = () => {
     setLines((current) => applyLineEdits(current, text));
     setEditing(false);
   };
 
   const position = positionAt(lines, time);
+  const currentLine = position.line;
+
+  // The line being sung stays in view while the song plays.
+  useEffect(() => {
+    const box = karaokeRef.current;
+    if (!box || currentLine < 0) return;
+    const element = box.children[currentLine] as HTMLElement | undefined;
+    if (!element) return;
+    const top = element.offsetTop - box.offsetTop;
+    const target = top - box.clientHeight / 2 + element.offsetHeight / 2;
+    if (Math.abs(box.scrollTop - target) > 8) box.scrollTop = Math.max(0, target);
+  }, [currentLine, editing]);
   const title = audio ? audio.file.name.replace(/\.[^/.]+$/, "") : initial?.title ?? "מילים";
 
   const buildFile = (format: "lrc" | "elrc" | "srt" | "txt") => {
-    if (!lines.length) return null;
+    const rows = currentLines();
+    if (!rows.length) return null;
     const body =
       format === "srt"
-        ? segmentsToSrt(lines.map((line) => ({ start: line.start, end: line.end, text: line.text })))
+        ? segmentsToSrt(rows.map((line) => ({ start: line.start, end: line.end, text: line.text })))
         : format === "txt"
-          ? linesToText(lines)
-          : linesToLrc(lines, format === "elrc", { title });
+          ? linesToText(rows)
+          : linesToLrc(rows, format === "elrc", { title });
     const ext = format === "elrc" ? "lrc" : format;
     return new File([`\uFEFF${body}`], `${safeFilename(title)}${format === "elrc" ? "-words" : ""}.${ext}`, { type: "text/plain;charset=utf-8" });
   };
 
   const save = () => {
-    if (!lines.length) return;
+    const rows = currentLines();
+    if (!rows.length) return;
+    if (editing) setLines(rows);
     void saving.save({
       kind: "lyrics",
       title,
       sourceName: audio?.file.name ?? initial?.sourceName ?? null,
-      summary: { lines: lines.length, languageLabel: languageLabel(language), duration: audio?.buffer.duration ?? lines[lines.length - 1].end },
-      payload: { lines, language },
+      summary: { lines: rows.length, languageLabel: languageLabel(language), duration: audio?.buffer.duration ?? rows[rows.length - 1].end },
+      payload: { lines: rows, language },
     });
   };
 
@@ -267,7 +291,7 @@ export function LyricsTool({ initial = null }: Props) {
                 </div>
               </>
             ) : (
-              <div className="lyrics-karaoke" dir="auto" aria-live="off">
+              <div className="lyrics-karaoke" dir="auto" aria-live="off" ref={karaokeRef}>
                 {lines.map((line, lineIndex) => (
                   <p
                     key={`${line.start}-${lineIndex}`}
