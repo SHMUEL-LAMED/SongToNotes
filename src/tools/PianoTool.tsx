@@ -340,6 +340,11 @@ export function PianoTool() {
           <h1>פסנתר וירטואלי</h1>
           <p>נגן בעכבר, במגע או במקלדת.</p>
         </div>
+        {!recording && recorded.length > 0 && (
+          <div className="tool-intro-side">
+            <SaveButton state={saving.state} onSave={saveRecording} label="שמור את ההקלטה" message={saving.message} compact />
+          </div>
+        )}
       </div>
 
       <div className="piano-status" aria-live="polite">
@@ -442,15 +447,6 @@ export function PianoTool() {
           <button className="primary-button compact" type="button" onClick={downloadMidi}>
             <Download size={16} /> הורד MIDI ({recorded.length} תווים)
           </button>
-        )}
-        {!recording && recorded.length > 0 && (
-          <SaveButton
-            state={saving.state}
-            onSave={saveRecording}
-            label="שמור את ההקלטה"
-            message={saving.message}
-            compact
-          />
         )}
       </div>
 

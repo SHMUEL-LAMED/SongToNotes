@@ -9,11 +9,11 @@ import { deleteFile, getFile, putFile } from "./fileStore";
 const HANDOFF_ID = "handoff";
 const NOTE_KEY = "musictools.handoff.v1";
 
-export async function setHandoff(file: File | File[], note?: string) {
+export async function setHandoff(file: File | File[], note?: string, tool?: string) {
   const files = Array.isArray(file) ? file : [file];
   await Promise.all(files.map((item, index) => putFile(index === 0 ? HANDOFF_ID : `${HANDOFF_ID}-${index}`, item, item.name)));
   try {
-    sessionStorage.setItem(NOTE_KEY, JSON.stringify({ name: files[0]?.name ?? "", count: files.length, note: note ?? null, at: Date.now() }));
+    sessionStorage.setItem(NOTE_KEY, JSON.stringify({ name: files[0]?.name ?? "", count: files.length, note: note ?? null, tool: tool ?? null, at: Date.now() }));
   } catch {
     // Without session storage the file still waits; only the note is lost.
   }
@@ -45,9 +45,15 @@ export function hasHandoff() {
   try {
     const raw = sessionStorage.getItem(NOTE_KEY);
     if (!raw) return false;
-    const parsed = JSON.parse(raw) as { at?: number };
-    // A file left behind for an hour is stale, not a hand-off.
-    return typeof parsed.at === "number" && Date.now() - parsed.at < 3_600_000;
+    const parsed = JSON.parse(raw) as { at?: number; tool?: string | null };
+    // A file left behind for an hour is stale, not a hand-off; and a file
+    // sent to one tool is not for another the visitor wandered into.
+    if (typeof parsed.at !== "number" || Date.now() - parsed.at > 3_600_000) return false;
+    if (parsed.tool) {
+      const route = window.location.hash.replace(/^#\/?/, "").trim();
+      return route === parsed.tool;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -71,6 +77,6 @@ export async function takeHandoff(): Promise<{ file: File; note: string | null }
 
 /** Sends a file to a tool: stores it and navigates. */
 export async function handOffTo(tool: string, file: File | File[], note?: string) {
-  await setHandoff(file, note);
+  await setHandoff(file, note, tool);
   window.location.assign(`#/${tool}`);
 }

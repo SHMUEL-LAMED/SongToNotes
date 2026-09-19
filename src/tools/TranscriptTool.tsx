@@ -721,6 +721,14 @@ export function TranscriptTool({ initial = null }: Props) {
               {wordsPerMinute !== null && <span>{wordsPerMinute} מילים לדקה</span>}
               <span>{languageLabel(result.language)}</span>
             </div>
+            <SaveButton
+              state={saving.state}
+              onSave={saveTranscript}
+              disabled={!segments.length}
+              label="שמור את התמלול"
+              message={saving.message}
+              compact
+            />
           </div>
 
           {audio && <Transport buffer={audio.buffer} label="נגן עם התמלול" onTime={setPlayTime} seek={seek} />}
@@ -923,13 +931,6 @@ export function TranscriptTool({ initial = null }: Props) {
               </button>
               <ShareButton build={() => buildFile("txt")} title={`תמלול — ${title}`} />
             </div>
-            <SaveButton
-              state={saving.state}
-              onSave={saveTranscript}
-              disabled={!segments.length}
-              label="שמור את התמלול"
-              message={saving.message}
-            />
           </div>
 
           {finished && (

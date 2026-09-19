@@ -285,6 +285,9 @@ export function EarTrainingTool({ initial = null }: Props) {
           <h1>מאמן שמיעה</h1>
           <p>{MODE_HINTS[mode]}</p>
         </div>
+        <div className="tool-intro-side">
+          <SaveButton state={saving.state} onSave={saveSession} disabled={stats.asked === 0} label="שמור את האימון" message={saving.message} compact />
+        </div>
       </div>
 
       <div className="settings-panel">
@@ -440,14 +443,6 @@ export function EarTrainingTool({ initial = null }: Props) {
         </button>
       </div>
 
-      <SaveButton
-        state={saving.state}
-        onSave={saveSession}
-        disabled={stats.asked === 0}
-        label="שמור את האימון"
-        message={saving.message}
-        compact
-      />
     </section>
   );
 }

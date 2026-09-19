@@ -2291,8 +2291,22 @@ input[type="range"]::-moz-range-thumb {
 .save-work-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
 .save-work .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.downloads-card .save-work { padding-top: 4px; border-top: 1px dashed var(--line); }
-.downloads-card .save-work-button { min-height: 50px; padding: 0 22px; }
+/* The save button sits at the top of the work, beside its title, on every
+   tool: the downloads card lays out as a grid with the button in the head row. */
+.downloads-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.downloads-card > * { grid-column: 1 / -1; min-width: 0; }
+.downloads-card > div:first-child { grid-column: 1; grid-row: 1; }
+.downloads-card > .save-work { grid-column: 2; grid-row: 1; justify-self: end; align-items: flex-end; }
+.downloads-card .save-work-button { min-height: 48px; padding: 0 20px; }
+.downloads-card .save-work-note { text-align: end; max-width: 260px; }
+.results-header .save-work { align-items: flex-end; }
+.tool-intro-side { margin-inline-start: auto; align-self: center; flex: none; }
+@media (max-width: 640px) {
+  .downloads-card > .save-work { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; align-items: stretch; }
+  .downloads-card .save-work-note { text-align: start; max-width: none; }
+  .tool-intro { flex-wrap: wrap; }
+  .tool-intro-side { margin-inline-start: 0; width: 100%; }
+}
 
 /* ==========================================================================
    The personal area
@@ -3279,3 +3293,9 @@ footer .brand-mark { font-size: 19px; }
 .share-text { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); line-height: 1.8; max-height: 60vh; overflow: auto; }
 .share-text p { margin: 0 0 4px; }
 .share-meta { display: flex; align-items: center; gap: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel, .assistant-launcher, .assistant-bubble.is-thinking span, .assistant-bubble.is-live::after,
+  .identify-listen.is-live, .rhythm-pad, .chords-block, .songbook-sheet { animation: none !important; transition: none !important; }
+  .songbook-sheet, .lyrics-karaoke { scroll-behavior: auto; }
+}

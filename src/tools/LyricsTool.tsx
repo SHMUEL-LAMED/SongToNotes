@@ -1,4 +1,4 @@
-import { Captions, Download, FileText, LogIn, Mic2, Play, Wand2, X } from "lucide-react";
+import { Captions, Download, FileText, LogIn, Mic2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
@@ -272,7 +272,16 @@ export function LyricsTool({ initial = null }: Props) {
                   <p
                     key={`${line.start}-${lineIndex}`}
                     className={`lyrics-line ${lineIndex === position.line ? "is-current" : lineIndex < position.line ? "is-past" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`נגן מ־${formatTime(line.start)}: ${line.text}`}
                     onClick={() => setSeek({ time: line.start, key: Date.now(), play: true })}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSeek({ time: line.start, key: Date.now(), play: true });
+                      }
+                    }}
                   >
                     <time>{formatTime(line.start)}</time>
                     {line.words.map((word, wordIndex) => (
@@ -317,11 +326,6 @@ export function LyricsTool({ initial = null }: Props) {
               <SaveButton state={saving.state} onSave={save} label="שמור את המילים" message={saving.message} />
             </div>
           </>
-        )}
-        {!audio && lines.length > 0 && !initial && (
-          <button type="button" className="link-button" onClick={() => setSeek({ time: 0, key: Date.now() })}>
-            <Play size={14} /> בחר את השיר כדי לשיר איתו
-          </button>
         )}
       </div>
     </section>
