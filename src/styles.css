@@ -3223,3 +3223,16 @@ footer .brand-mark { font-size: 19px; }
 .mixer-track-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; margin-top: 8px; }
 .mixer-track-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-muted); }
 .mixer-loop-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent-text); }
+
+/* --- synced lyrics --- */
+.lyrics-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lyrics-toolbar .table-footnote { margin-inline-start: auto; }
+.lyrics-karaoke { max-height: 60vh; overflow: auto; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 6px; scroll-behavior: smooth; }
+.lyrics-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; font-size: 20px; line-height: 1.6; color: var(--text-muted); cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.lyrics-line time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-inline-end: 6px; opacity: 0.7; }
+.lyrics-line.is-past { opacity: 0.55; }
+.lyrics-line.is-current { color: var(--text); background: var(--surface-sunken); font-size: 24px; }
+.lyrics-word { transition: color 0.1s; }
+.lyrics-word.is-sung { color: var(--accent-text); }
+.lyrics-word.is-now { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
+.vocals-pro { display: flex; flex-direction: column; gap: 14px; }

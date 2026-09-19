@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 16, "hub renders all 16 tool cards", `found ${cards}`);
+log(cards === 17, "hub renders all 17 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -591,6 +591,47 @@ const [mixDownload] = await Promise.all([
 ]);
 const mixBytes = readFileSync(await mixDownload.path());
 log(mixDownload.suggestedFilename().endsWith("-mix.wav") && mixBytes.length > 44 && mixBytes.toString("ascii", 0, 4) === "RIFF", "mixer: the mix renders to a WAV", `${mixBytes.length} bytes`);
+
+// --- lyrics: a saved work reopens as karaoke lines and exports LRC ---
+await page.goto(`${BASE}#/lyrics`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".lyrics-tool .transcript-signin", { timeout: 30_000 });
+log(true, "lyrics: signed out, the run asks to sign in (the recogniser is on the server)");
+await page.evaluate(() => {
+  const now = new Date().toISOString();
+  localStorage.setItem("music-tools.works.v1", JSON.stringify([{
+    id: "l1", kind: "lyrics", title: "שיר", sourceName: "song.mp3",
+    summary: { lines: 2, duration: 5 },
+    payload: { lines: [
+      { start: 0, end: 2, text: "שלום עולם", words: [{ text: "שלום", start: 0.1, end: 0.6 }, { text: "עולם", start: 0.8, end: 1.5 }] },
+      { start: 2.5, end: 4, text: "מה נשמע", words: [{ text: "מה", start: 2.6, end: 2.9 }, { text: "נשמע", start: 3.1, end: 3.8 }] },
+    ], language: "he" },
+    fileName: null, deviceId: null, filePath: null, createdAt: now, updatedAt: now, localOnly: true,
+  }]));
+});
+await page.locator(".account-button").click();
+await page.waitForSelector(".me-item");
+await page.locator(".me-item-title", { hasText: "שיר" }).first().click();
+await page.waitForSelector(".lyrics-karaoke", { timeout: 10_000 });
+log((await page.locator(".lyrics-word").count()) === 4, "lyrics: a saved work reopens with its words");
+const [lrc] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".lyrics-tool .download-buttons button", { hasText: "LRC מילים" }).click(),
+]);
+const lrcText = readFileSync(await lrc.path(), "utf8");
+log(/\[00:00\.00\]<00:00\.10>שלום <00:00\.80>עולם/.test(lrcText), "lyrics: the enhanced LRC carries word times", lrcText.split("\n")[1]);
+
+// --- vocals pro mode: the mode switch exists and explains itself ---
+await page.goto(`${BASE}#/vocals`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".vocals-tool .segmented-control", { timeout: 30_000 });
+await page.locator(".vocals-tool .segmented-control button", { hasText: "מקצועי" }).click();
+log(await page.locator(".vocals-pro").isVisible(), "vocals: pro mode offers separation into stems");
+log(/ערוצים/.test((await page.locator(".vocals-pro").textContent()) ?? ""), "vocals: pro mode explains the stems");
 
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");

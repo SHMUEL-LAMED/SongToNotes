@@ -1,4 +1,4 @@
-import { Cpu, Download, MicVocal, Sparkles, Wand2 } from "lucide-react";
+import { Cpu, Download, Headphones, Layers, MicVocal, Sparkles, Volume2, VolumeX, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiError, separateOnServer, separationAvailability } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
@@ -19,7 +19,12 @@ import type { SeparateTarget } from "../lib/separate";
 import { useSaveWork } from "../lib/useSaveWork";
 import { useSeparation } from "../lib/useSeparation";
 import { encodeWav } from "../lib/wav";
+import { handOffTo } from "../lib/handoff";
+import { MixPlayer, audibleTracks, renderMix, type MixTrack } from "../lib/mixer";
 import type { SavedWork } from "../lib/works";
+
+const STEM_NAMES: Record<string, string> = { vocals: "שירה", drums: "תופים", bass: "בס", other: "שאר הכלים", guitar: "גיטרה", piano: "פסנתר", no_vocals: "ליווי" };
+const STEM_HUES: Record<string, number> = { vocals: 340, drums: 20, bass: 260, other: 200, guitar: 45, piano: 120 };
 
 function sharedContext() {
   const Context =
@@ -75,6 +80,13 @@ export function VocalsTool({ initial = null }: Props) {
   // `true` means the free on-device Demucs model is used. `null` is while the
   // very small availability check is still pending.
   const [serverMissing, setServerMissing] = useState<boolean | null>(null);
+  // Simple: the voice or the backing track. Pro: every part the model finds,
+  // each on its own fader, mixed live and rendered together.
+  const [mode, setMode] = useState<"simple" | "pro">(initial?.payload.mode === "pro" ? "pro" : "simple");
+  const [stems, setStems] = useState<{ key: string; tracks: MixTrack[] } | null>(null);
+  const [stemsPlaying, setStemsPlaying] = useState(false);
+  const [stemsRendering, setStemsRendering] = useState(false);
+  const stemsPlayerRef = useRef<MixPlayer | null>(null);
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
@@ -91,6 +103,15 @@ export function VocalsTool({ initial = null }: Props) {
   const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => () => void context?.close(), [context]);
+  useEffect(() => {
+    const player = new MixPlayer();
+    player.onEnd = () => setStemsPlaying(false);
+    stemsPlayerRef.current = player;
+    return () => player.dispose();
+  }, []);
+  useEffect(() => {
+    stemsPlayerRef.current?.setTracks(stems?.tracks ?? []);
+  }, [stems]);
   useEffect(() => {
     const controller = new AbortController();
     void separationAvailability(controller.signal)
@@ -214,6 +235,103 @@ export function VocalsTool({ initial = null }: Props) {
       }
     }
   }, [audio, context, settingsKey, target]);
+
+  /** Pro mode: every stem the server can give, into faders. */
+  const runStems = useCallback(async () => {
+    if (!audio) return;
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setAiBusy(true);
+    setAiProgress(0);
+    setAiStatus("מכין הפרדה לערוצים…");
+    try {
+      const availability = await separationAvailability(controller.signal);
+      if (!availability.configured) {
+        setServerMissing(true);
+        setAiStatus("הפרדה לערוצים נפרדים דורשת את השרת, שעדיין לא הופעל. במצב פשוט אפשר להפריד בדפדפן.");
+        return;
+      }
+      const result = await separateOnServer(
+        audio.file,
+        decodeAudioFile,
+        (message, percent) => {
+          if (controller.signal.aborted) return;
+          setAiStatus(message);
+          if (percent !== null) setAiProgress(percent);
+        },
+        controller.signal,
+        "stems",
+      );
+      if (controller.signal.aborted) return;
+      const names = Object.keys(result.stems).filter((name) => name !== "no_vocals");
+      if (!names.length) throw new AiError("provider_error", "השרת לא החזיר ערוצים.");
+      const order = ["vocals", "drums", "bass", "guitar", "piano", "other"];
+      names.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
+      setStems({
+        key: audio.url,
+        tracks: names.map((name) => ({
+          id: name,
+          name: STEM_NAMES[name] ?? name,
+          buffer: result.stems[name],
+          gain: 1,
+          pan: 0,
+          muted: false,
+          solo: false,
+          offset: 0,
+          color: STEM_HUES[name] ?? 180,
+        })),
+      });
+      setUsedAi(true);
+      setAiProgress(100);
+      setAiStatus(`ההפרדה הושלמה: ${names.length} ערוצים. נוצלו היום ${result.used} מתוך ${result.limit} שירים.`);
+    } catch (caught) {
+      if (controller.signal.aborted) return;
+      setAiStatus(caught instanceof Error ? caught.message : "ההפרדה נכשלה.");
+    } finally {
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+        setAiBusy(false);
+      }
+    }
+  }, [audio]);
+
+  const updateStem = (id: string, patch: Partial<MixTrack>) =>
+    setStems((current) => (current ? { ...current, tracks: current.tracks.map((track) => (track.id === id ? { ...track, ...patch } : track)) } : current));
+
+  const stemFile = (track: MixTrack) => {
+    const channels = Array.from({ length: track.buffer.numberOfChannels }, (_, index) => track.buffer.getChannelData(index));
+    const base = safeFilename((audio?.file.name ?? "song").replace(/\.[^/.]+$/, ""));
+    return new File([encodeWav({ channels, sampleRate: track.buffer.sampleRate })], `${base}-${track.id}.wav`, { type: "audio/wav" });
+  };
+
+  const renderStemMix = async () => {
+    if (!stems || !audio) return null;
+    setStemsRendering(true);
+    try {
+      const rendered = await renderMix(stems.tracks);
+      const channels = [rendered.getChannelData(0), rendered.getChannelData(1)];
+      const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
+      return new File([encodeWav({ channels, sampleRate: rendered.sampleRate })], `${base}-mix.wav`, { type: "audio/wav" });
+    } finally {
+      setStemsRendering(false);
+    }
+  };
+
+  const saveStems = async () => {
+    const file = await renderStemMix();
+    if (!file || !audio || !stems) return;
+    void saving.save(
+      {
+        kind: "vocals",
+        title: `${audio.file.name.replace(/\.[^/.]+$/, "")} — מיקס ערוצים`,
+        sourceName: audio.file.name,
+        summary: { target: "mix", usedAi: true, mode: "pro", stems: stems.tracks.length, duration: file.size / (44_100 * 4) },
+        payload: { mode: "pro", usedAi: true, tracks: stems.tracks.map((track) => ({ id: track.id, gain: track.gain, pan: track.pan, muted: track.muted, solo: track.solo })) },
+      },
+      file,
+    );
+  };
 
   /** The browser path, offered only while the server has no key. */
   const runAiInBrowser = useCallback(async () => {
@@ -348,6 +466,20 @@ export function VocalsTool({ initial = null }: Props) {
             <div className="settings-panel">
               <div className="settings-grid">
                 <div className="setting-field">
+                  <span id="vocals-mode">מצב</span>
+                  <div className="segmented-control" role="group" aria-labelledby="vocals-mode">
+                    <button className={mode === "simple" ? "active" : ""} onClick={() => setMode("simple")} type="button" aria-pressed={mode === "simple"} disabled={busy}>
+                      פשוט
+                    </button>
+                    <button className={mode === "pro" ? "active" : ""} onClick={() => setMode("pro")} type="button" aria-pressed={mode === "pro"} disabled={busy}>
+                      <Layers size={14} /> מקצועי
+                    </button>
+                  </div>
+                  <small>{mode === "simple" ? "שירה או ליווי, בלחיצה." : "כל הערוצים בנפרד: שירה, תופים, בס ושאר הכלים — עם עוצמה, השתקה וסולו לכל אחד."}</small>
+                </div>
+                {mode === "simple" && (
+                <>
+                <div className="setting-field">
                   <span id="vocals-target">מה להשאיר?</span>
                   <div
                     className="segmented-control"
@@ -403,8 +535,132 @@ export function VocalsTool({ initial = null }: Props) {
                   />
                   <span>השווה למקור בזמן ההשמעה</span>
                 </label>
+                </>
+                )}
               </div>
             </div>
+
+            {mode === "pro" && (
+              <div className="vocals-pro">
+                {!stems || stems.key !== audio.url ? (
+                  <div className="ai-separator">
+                    <div className="ai-separator-head">
+                      <span className="tool-intro-icon">
+                        <Layers size={20} />
+                      </span>
+                      <div>
+                        <h3>
+                          <Sparkles size={16} /> הפרדה לערוצים נפרדים
+                        </h3>
+                        <p>שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו, בשרת. לוקח כדקה.{!user ? " צריך להתחבר לחשבון." : ""}</p>
+                      </div>
+                    </div>
+                    <button className="primary-button compact" type="button" onClick={() => void runStems()} disabled={busy}>
+                      <Sparkles size={17} /> הפרד לערוצים
+                    </button>
+                    {aiBusy && (
+                      <>
+                        <div className="progress-track" role="progressbar" aria-label="התקדמות ההפרדה" aria-valuenow={aiProgress} aria-valuemin={0} aria-valuemax={100}>
+                          <div style={{ width: `${Math.max(2, aiProgress)}%` }} />
+                        </div>
+                        <button type="button" className="link-button" onClick={() => { aiAbortRef.current?.abort(); aiAbortRef.current = null; setAiBusy(false); setAiStatus("ההפרדה בוטלה."); }}>
+                          בטל
+                        </button>
+                      </>
+                    )}
+                    {aiStatus && (
+                      <small className="ai-status" role="status">
+                        {aiStatus}
+                      </small>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="mixer-tracks" role="list" aria-label="ערוצים">
+                      {stems.tracks.map((track) => {
+                        const audible = audibleTracks(stems.tracks).includes(track);
+                        return (
+                          <div key={track.id} role="listitem" className={`mixer-track ${audible ? "" : "is-silent"}`} style={{ "--track-hue": track.color } as React.CSSProperties}>
+                            <div className="mixer-track-head">
+                              <strong className="mixer-track-name">{track.name}</strong>
+                              <button type="button" className={`mixer-toggle ${track.muted ? "active" : ""}`} onClick={() => updateStem(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`השתק ${track.name}`} title="השתק (מחק מהמיקס)">
+                                {track.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                              </button>
+                              <button type="button" className={`mixer-toggle ${track.solo ? "active" : ""}`} onClick={() => updateStem(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`סולו ${track.name}`} title="סולו">
+                                <Headphones size={15} />
+                              </button>
+                              <button type="button" className="link-button" onClick={() => { const file = stemFile(track); downloadFile(file, file.name, "audio/wav"); }}>
+                                <Download size={14} /> WAV
+                              </button>
+                            </div>
+                            <div className="mixer-track-controls">
+                              <label>
+                                <span>עוצמה {Math.round(track.gain * 100)}%</span>
+                                <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => updateStem(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
+                              </label>
+                              <label>
+                                <span>פאן {track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</span>
+                                <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => updateStem(track.id, { pan: Number(event.target.value) / 100 })} aria-label={`פאן של ${track.name}`} />
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="transport">
+                      <button
+                        className="transport-button primary"
+                        type="button"
+                        onClick={() => {
+                          const player = stemsPlayerRef.current;
+                          if (!player) return;
+                          if (player.isPlaying) {
+                            player.pause();
+                            setStemsPlaying(false);
+                          } else void player.play().then((started) => setStemsPlaying(started));
+                        }}
+                      >
+                        {stemsPlaying ? "השהה" : "נגן את המיקס"}
+                      </button>
+                      <button className="transport-button" type="button" onClick={() => { stemsPlayerRef.current?.stop(); setStemsPlaying(false); }} aria-label="עצור">
+                        ■
+                      </button>
+                      <small className="ai-status">{aiStatus}</small>
+                    </div>
+                    <div className="downloads-card">
+                      <div>
+                        <span className="download-icon">
+                          <Download size={22} />
+                        </span>
+                        <div>
+                          <h3>המיקס שלך</h3>
+                          <p>הערוצים שהשארת, בעוצמות שבחרת — כקובץ WAV אחד, או כל ערוץ בנפרד למעלה.</p>
+                        </div>
+                      </div>
+                      <div className="download-buttons">
+                        <button type="button" disabled={stemsRendering} onClick={() => void renderStemMix().then((file) => file && downloadFile(file, file.name, "audio/wav"))}>
+                          <Download size={17} />
+                          <span>
+                            {stemsRendering ? "מרנדר…" : "הורד מיקס"}
+                            <small>WAV</small>
+                          </span>
+                        </button>
+                        <button type="button" onClick={() => void handOffTo("mixer", stems.tracks.map(stemFile), "הערוצים מהסרת השירה")}>
+                          <Layers size={17} />
+                          <span>
+                            למיקסר<small>עם לולאה והזזות</small>
+                          </span>
+                        </button>
+                      </div>
+                      <SaveButton state={saving.state} onSave={() => void saveStems()} disabled={stemsRendering} label="שמור את המיקס" message={saving.message} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {mode === "simple" && (
+            <>
 
             {separation.isRunning ? (
               <div className="processing-box">
@@ -556,6 +812,8 @@ export function VocalsTool({ initial = null }: Props) {
                 message={saving.message}
               />
             </div>
+            </>
+            )}
           </>
         )}
       </div>
