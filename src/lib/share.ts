@@ -70,9 +70,16 @@ export async function createShare(work: Pick<SavedWork, "id" | "origin" | "rowId
 
 export async function revokeShare(token: string) {
   const headers = await authed();
-  await fetch(`${SHARE_URL}?${new URLSearchParams({ token })}`, { method: "DELETE", headers }).catch(() => {
+  let response: Response;
+  try {
+    response = await fetch(`${SHARE_URL}?${new URLSearchParams({ token })}`, { method: "DELETE", headers });
+  } catch {
     throw new ShareError("network", MESSAGES.network);
-  });
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new ShareError(body?.error ?? "http", describe(body?.error ?? "http"));
+  }
 }
 
 /** What a token shows: no account needed. */
