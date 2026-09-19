@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 14, "hub renders all 14 tool cards", `found ${cards}`);
+log(cards === 16, "hub renders all 16 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -555,6 +555,42 @@ await page.reload({ waitUntil: "load" });
 await page.waitForTimeout(300);
 log(await page.locator(".video-tool .drop-zone").isVisible(), "video: a drop zone for a video file");
 log(/video/.test((await page.locator(".video-tool input[type=file]").getAttribute("accept")) ?? ""), "video: accepts video files");
+
+// --- rhythm: a round runs from the audio clock; taps are judged and scored ---
+await page.goto(`${BASE}#/rhythm`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+log((await page.locator(".rhythm-step.is-hit").count()) === 4, "rhythm: the default pattern shows four hits");
+await page.locator("input[aria-label='קצב']").fill("200");
+await page.locator(".rhythm-tool .primary-button").click();
+await page.waitForSelector(".rhythm-pad.is-live", { timeout: 5_000 });
+// Tap eight times at 200 BPM quarter notes (300 ms) once the count-in is over.
+await page.waitForTimeout(1300);
+for (let index = 0; index < 8; index += 1) {
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+}
+await page.waitForSelector(".rhythm-score", { timeout: 10_000 });
+const rhythmAccuracy = (await page.locator(".rhythm-score .stat-card strong").first().textContent()) ?? "";
+log(/\d+%/.test(rhythmAccuracy), "rhythm: the round ends with a score", rhythmAccuracy);
+log((await page.locator(".rhythm-tap").count()) === 8, "rhythm: every tap is drawn against its hit");
+
+// --- mixer: two copies of the demo become a stereo mix ---
+await page.goto(`${BASE}#/mixer`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".mixer-add input[type=file]").setInputFiles([DEMO, DEMO]);
+await page.waitForFunction(() => document.querySelectorAll(".mixer-track").length === 2, null, { timeout: 30_000 });
+log(true, "mixer: two tracks load side by side");
+await page.locator(".mixer-track").nth(1).locator("button[aria-label^='השתק']").click();
+log((await page.locator(".mixer-track.is-silent").count()) === 1, "mixer: muting silences one track");
+await page.locator(".mixer-tool .download-buttons button", { hasText: "צור מיקס" }).click();
+const [mixDownload] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".mixer-tool .download-buttons button", { hasText: "הורד" }).click({ timeout: 60_000 }),
+]);
+const mixBytes = readFileSync(await mixDownload.path());
+log(mixDownload.suggestedFilename().endsWith("-mix.wav") && mixBytes.length > 44 && mixBytes.toString("ascii", 0, 4) === "RIFF", "mixer: the mix renders to a WAV", `${mixBytes.length} bytes`);
 
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");

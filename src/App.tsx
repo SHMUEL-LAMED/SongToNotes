@@ -14,6 +14,8 @@ import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
 import { ChordsTool } from "./tools/ChordsTool";
 import { ConvertTool } from "./tools/ConvertTool";
+import { MixerTool } from "./tools/MixerTool";
+import { RhythmTool } from "./tools/RhythmTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SongbookTool } from "./tools/SongbookTool";
 import { EarTrainingTool } from "./tools/EarTrainingTool";
@@ -187,6 +189,8 @@ function WorkspaceApp() {
       {tool?.id === "analyze" && (
         <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
       )}
+      {tool?.id === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+      {tool?.id === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
       {tool?.id === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
       {tool?.id === "video" && <VideoTool />}
       {tool?.id === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
