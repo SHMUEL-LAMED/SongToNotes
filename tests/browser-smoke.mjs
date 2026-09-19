@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 17, "hub renders all 17 tool cards", `found ${cards}`);
+log(cards === 19, "hub renders all 19 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "identify"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -227,8 +227,8 @@ const [karaoke] = await Promise.all([
 const karaokeStats = rmsOf(await karaoke.path());
 log(karaokeStats.frames > 1000 && karaokeStats.rms > 0.001, "vocals: the karaoke export is real audio",
   `rms ${karaokeStats.rms.toFixed(3)}, ${karaokeStats.frames} samples`);
-log(/בשרת/.test((await page.locator(".ai-separator p").first().textContent()) ?? ""),
-  "vocals: the AI separation is described as server work, nothing to download");
+log(/בשרת|בדפדפן|בודק/.test((await page.locator(".ai-separator p").first().textContent()) ?? ""),
+  "vocals: the AI separation explains where it runs (server, or the browser when the server has no key)");
 
 // --- speed tool renders a stretched buffer ---
 await page.goto(`${BASE}#/speed`, { waitUntil: "load" });
@@ -632,6 +632,42 @@ await page.waitForSelector(".vocals-tool .segmented-control", { timeout: 30_000 
 await page.locator(".vocals-tool .segmented-control button", { hasText: "מקצועי" }).click();
 log(await page.locator(".vocals-pro").isVisible(), "vocals: pro mode offers separation into stems");
 log(/ערוצים/.test((await page.locator(".vocals-pro").textContent()) ?? ""), "vocals: pro mode explains the stems");
+
+// --- text to speech: the browser's voices, with a server file behind sign-in ---
+await page.goto(`${BASE}#/tts`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+const ttsSample = "שלום, זהו מבחן הקראה.";
+await page.locator(".tts-text").fill(ttsSample);
+log((await page.locator(".tts-meta").textContent() ?? "").includes(`${ttsSample.length}/4000`), "tts: counts the characters");
+log((await page.locator(".tts-tool .transport-button.primary").isEnabled()), "tts: the read-aloud button is ready");
+log(await page.locator(".tts-tool .download-buttons button").first().isDisabled(), "tts: the server MP3 waits for a sign-in");
+
+// --- song identifier: signed out, it asks to sign in; the page explains itself ---
+await page.goto(`${BASE}#/identify`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(600);
+log(await page.locator(".identify-tool .transcript-signin").isVisible(), "identify: signed out, it asks to sign in");
+
+// --- transcript extras: a reopened transcript has search with jump and a speakers button ---
+await page.evaluate(() => {
+  const now = new Date().toISOString();
+  localStorage.setItem("music-tools.works.v1", JSON.stringify([{
+    id: "t2", kind: "transcript", title: "פגישה", sourceName: "meeting.m4a",
+    summary: { words: 6, duration: 9, languageLabel: "עברית" },
+    payload: { segments: [{ start: 0, end: 4, text: "דנה: שלום לכולם" }, { start: 4.5, end: 9, text: "יוסי: ברוכים הבאים לפגישה" }], language: "he", model: "whisper-1" },
+    fileName: null, deviceId: null, filePath: null, createdAt: now, updatedAt: now, localOnly: true,
+  }]));
+});
+await page.goto(`${BASE}#/transcript`, { waitUntil: "load" });
+await page.locator(".account-button").click();
+await page.waitForSelector(".me-item");
+await page.locator(".me-item-title", { hasText: "פגישה" }).first().click();
+await page.waitForSelector(".transcript-result", { timeout: 10_000 });
+log(/2 דוברים/.test((await page.locator(".transcript-stats").textContent()) ?? ""), "transcript: counts the speakers from the labels");
+await page.locator(".transcript-search input").fill("פגישה");
+log((await page.locator(".transcript-segments li").count()) === 1 && (await page.locator(".transcript-segments mark").count()) === 1, "transcript: search narrows the sentences and highlights the match");
+log((await page.locator(".transcript-jump").count()) === 1, "transcript: each sentence can be jumped to");
 
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");
