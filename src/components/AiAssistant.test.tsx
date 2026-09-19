@@ -20,10 +20,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("assistant initial state", () => {
-  it("offers a detailed toggle and a single conversation, no modes", () => {
+  it("offers detailed answers and separate question/execute modes", () => {
     const html = render();
     expect(html).toContain("מפורט");
-    expect(html).not.toContain("מצב ביצוע");
+    expect(html).toContain("מצב שאלה");
+    expect(html).toContain("מצב ביצוע");
     expect(html).toContain('maxLength="3000"');
   });
   it("requires sign-in before composing", () => {
@@ -45,7 +46,7 @@ describe("assistant initial state", () => {
     expect(render()).toContain("valid-answer");
     expect(render()).not.toContain("bad-role");
   });
-  it("renders markdown and open-tool buttons in a reply", () => {
+  it("renders markdown but hides actions in question mode", () => {
     values.set(
       "musictools.assistant.v3.account-a",
       JSON.stringify([{ role: "assistant", content: "**חשוב**: תעלה קובץ\n- צעד אחד\n- צעד שני\n\n[[open:transcript]]" }]),
@@ -53,7 +54,7 @@ describe("assistant initial state", () => {
     const html = render();
     expect(html).toContain("<strong>חשוב</strong>");
     expect(html).toContain("<li>צעד אחד</li>");
-    expect(html).toContain("פתח את תמלול לטקסט");
+    expect(html).not.toContain("הצע פתיחת תמלול לטקסט");
     expect(html).not.toContain("[[open:");
   });
   it("recovers from corrupt storage", () => {
