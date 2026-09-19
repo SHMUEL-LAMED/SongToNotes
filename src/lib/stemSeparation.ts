@@ -101,7 +101,15 @@ async function readCached(cache: Cache): Promise<ArrayBuffer | null> {
   const stored = await cache.match(SITE_MODEL_URL).catch(() => undefined);
   if (!stored) return null;
   const buffer = await stored.arrayBuffer();
-  return buffer.byteLength ? buffer : null;
+  // A connection that was cut while Cache Storage was writing used to leave
+  // a short file behind. Every later click then retried the same corrupt
+  // model and looked like a permanently broken AI button. Reject and remove
+  // anything whose size differs from the build's known model.
+  if (!buffer.byteLength || (SITE_MODEL_BYTES > 0 && buffer.byteLength !== SITE_MODEL_BYTES)) {
+    await cache.delete(SITE_MODEL_URL).catch(() => false);
+    return null;
+  }
+  return buffer;
 }
 
 /**
