@@ -43,6 +43,24 @@ type Props = {
   initial?: SavedWork | null;
 };
 
+function readSavedStems(work: SavedWork | null | undefined) {
+  const tracks = work?.payload.tracks;
+  if (!Array.isArray(tracks)) return null;
+  const saved: Record<string, { gain: number; pan: number; muted: boolean; solo: boolean }> = {};
+  for (const item of tracks) {
+    if (!item || typeof item !== "object") continue;
+    const { id, gain, pan, muted, solo } = item as Record<string, unknown>;
+    if (typeof id !== "string") continue;
+    saved[id] = {
+      gain: typeof gain === "number" ? Math.max(0, Math.min(2, gain)) : 1,
+      pan: typeof pan === "number" ? Math.max(-1, Math.min(1, pan)) : 0,
+      muted: muted === true,
+      solo: solo === true,
+    };
+  }
+  return Object.keys(saved).length ? saved : null;
+}
+
 function readInitial(work: SavedWork | null | undefined) {
   const payload = work?.payload ?? {};
   return {
@@ -87,6 +105,8 @@ export function VocalsTool({ initial = null }: Props) {
   const [stemsPlaying, setStemsPlaying] = useState(false);
   const [stemsRendering, setStemsRendering] = useState(false);
   const stemsPlayerRef = useRef<MixPlayer | null>(null);
+  // Fader positions from a saved pro-mode work, applied once the stems are back.
+  const savedStemsRef = useRef<Record<string, { gain: number; pan: number; muted: boolean; solo: boolean }> | null>(readSavedStems(initial));
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
@@ -268,16 +288,18 @@ export function VocalsTool({ initial = null }: Props) {
       if (!names.length) throw new AiError("provider_error", "השרת לא החזיר ערוצים.");
       const order = ["vocals", "drums", "bass", "guitar", "piano", "other"];
       names.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
+      const saved = savedStemsRef.current;
+      savedStemsRef.current = null;
       setStems({
         key: audio.url,
         tracks: names.map((name) => ({
           id: name,
           name: STEM_NAMES[name] ?? name,
           buffer: result.stems[name],
-          gain: 1,
-          pan: 0,
-          muted: false,
-          solo: false,
+          gain: saved?.[name]?.gain ?? 1,
+          pan: saved?.[name]?.pan ?? 0,
+          muted: saved?.[name]?.muted ?? false,
+          solo: saved?.[name]?.solo ?? false,
           offset: 0,
           color: STEM_HUES[name] ?? 180,
         })),
@@ -295,6 +317,13 @@ export function VocalsTool({ initial = null }: Props) {
       }
     }
   }, [audio]);
+
+  /** Silences the stem mix, and with `drop`, forgets it: the song it came from is gone. */
+  const stopStems = (drop = false) => {
+    stemsPlayerRef.current?.stop();
+    setStemsPlaying(false);
+    if (drop) setStems(null);
+  };
 
   const updateStem = (id: string, patch: Partial<MixTrack>) =>
     setStems((current) => (current ? { ...current, tracks: current.tracks.map((track) => (track.id === id ? { ...track, ...patch } : track)) } : current));
@@ -431,10 +460,12 @@ export function VocalsTool({ initial = null }: Props) {
             setRendered(null);
             setUsedAi(false);
             setAiStatus(null);
+            stopStems(true);
             void load(file);
           }}
           onClear={() => {
             setRendered(null);
+            stopStems(true);
             clear();
           }}
           hint="קובץ סטריאו נותן את התוצאה הטובה ביותר"
@@ -468,7 +499,7 @@ export function VocalsTool({ initial = null }: Props) {
                 <div className="setting-field">
                   <span id="vocals-mode">מצב</span>
                   <div className="segmented-control" role="group" aria-labelledby="vocals-mode">
-                    <button className={mode === "simple" ? "active" : ""} onClick={() => setMode("simple")} type="button" aria-pressed={mode === "simple"} disabled={busy}>
+                    <button className={mode === "simple" ? "active" : ""} onClick={() => { stopStems(); setMode("simple"); }} type="button" aria-pressed={mode === "simple"} disabled={busy}>
                       פשוט
                     </button>
                     <button className={mode === "pro" ? "active" : ""} onClick={() => setMode("pro")} type="button" aria-pressed={mode === "pro"} disabled={busy}>
@@ -622,7 +653,7 @@ export function VocalsTool({ initial = null }: Props) {
                       >
                         {stemsPlaying ? "השהה" : "נגן את המיקס"}
                       </button>
-                      <button className="transport-button" type="button" onClick={() => { stemsPlayerRef.current?.stop(); setStemsPlaying(false); }} aria-label="עצור">
+                      <button className="transport-button" type="button" onClick={() => stopStems()} aria-label="עצור">
                         ■
                       </button>
                       <small className="ai-status">{aiStatus}</small>

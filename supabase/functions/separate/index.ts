@@ -12,6 +12,11 @@
  *   SEPARATION_API_KEY   a Replicate token — required
  *   SEPARATION_MODEL     default ryan5453/demucs
  *   SEPARATION_INPUT     extra input fields as JSON, default {"stem":"vocals","output_format":"wav"}
+ *   SEPARATION_STEMS_INPUT
+ *                        the input for a "stems" (every part) job, as JSON;
+ *                        default is SEPARATION_INPUT with {"stem":"none"},
+ *                        which is how Demucs asks for all the parts. Another
+ *                        model spells that differently, so set it here.
  *   SEPARATION_DAILY     songs per account per day, default 12
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
@@ -82,6 +87,13 @@ Deno.serve(async (req) => {
     if (raw) extra = JSON.parse(raw);
   } catch {
     // A malformed override keeps the default input.
+  }
+  let stemsExtra: Record<string, unknown> = { ...extra, stem: "none" };
+  try {
+    const raw = setting("SEPARATION_STEMS_INPUT");
+    if (raw) stemsExtra = JSON.parse(raw);
+  } catch {
+    // A malformed override keeps the Demucs default.
   }
   const limit = Number(setting("SEPARATION_DAILY")) || DEFAULT_DAILY;
 
@@ -158,7 +170,7 @@ Deno.serve(async (req) => {
   // "stems" asks for every part the model can give — drums, bass, the rest —
   // instead of only the voice and everything else.
   const mode = form.get("mode") === "stems" ? "stems" : "vocals";
-  const input = mode === "stems" ? { ...extra, stem: "none" } : extra;
+  const input = mode === "stems" ? stemsExtra : extra;
 
   const extension = (file.name.split(".").pop() ?? "").toLowerCase();
   const contentType = MIME[extension] ?? (MIME[file.type.split("/")[1] ?? ""] ?? "audio/mpeg");

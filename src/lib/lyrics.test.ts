@@ -33,6 +33,23 @@ describe("synced lyrics", () => {
     expect(linesToLrc(lines, true)).toContain("[00:00.00]<00:00.10>שלום <00:00.80>עולם");
     expect(linesToLrc(lines, false, { title: "שיר" })).toMatch(/^\[ti:שיר\]/);
   });
+  it("gives a word on a boundary to the line that starts there", () => {
+    const touching = [
+      { start: 0, end: 2, text: "אחת" },
+      { start: 2, end: 4, text: "שתיים" },
+    ];
+    const lines = buildLines(touching, [
+      { word: "אחת", start: 0.5, end: 1 },
+      { word: "שתיים", start: 2, end: 2.5 },
+    ]);
+    expect(lines[0].words.map((word) => word.text)).toEqual(["אחת"]);
+    expect(lines[1].words.map((word) => word.text)).toEqual(["שתיים"]);
+  });
+  it("never writes sixty seconds in LRC", () => {
+    const lines = [{ start: 59.996, end: 61, text: "כמעט דקה", words: [{ text: "כמעט", start: 119.999, end: 120.2 }] }];
+    expect(linesToLrc(lines)).toContain("[01:00.00]כמעט דקה");
+    expect(linesToLrc(lines, true)).toContain("<02:00.00>כמעט");
+  });
   it("finds the sounding line and word", () => {
     const lines = buildLines(segments, words);
     expect(positionAt(lines, 1)).toEqual({ line: 0, word: 1 });
