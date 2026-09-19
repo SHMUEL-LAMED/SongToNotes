@@ -2,9 +2,11 @@ import {
   ArrowLeft,
   Bot,
   Check,
+  CircleHelp,
   Copy,
   LogIn,
   Maximize2,
+  MousePointerClick,
   Minimize2,
   RefreshCw,
   SendHorizontal,
@@ -14,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { AiError, chatStream, type ChatMessage } from "../lib/aiApi";
+import { AiError, chatStream, type AssistantMode, type ChatMessage } from "../lib/aiApi";
 import { useAuth } from "../lib/auth";
 import { renderMarkdown, splitOpenMarkers } from "../lib/markdown";
 import { findTool } from "../lib/tools";
@@ -93,6 +95,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory(storageKey));
   const [draft, setDraft] = useState("");
   const [detailed, setDetailed] = useState(false);
+  const [mode, setMode] = useState<AssistantMode>("question");
   const [busy, setBusy] = useState(false);
   // The reply being written, shown as it grows.
   const [partial, setPartial] = useState<string | null>(null);
@@ -100,6 +103,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   const [retry, setRetry] = useState<string | null>(null);
   const [wide, setWide] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [pendingTool, setPendingTool] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -171,6 +175,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     setDraft("");
     setError(null);
     setRetry(null);
+    setPendingTool(null);
     setBusy(true);
     setPartial("");
     const controller = new AbortController();
@@ -183,7 +188,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     try {
       const reply = await chatStream(
         next.slice(-16),
-        { tool: toolId, detailed, signal: controller.signal },
+        { tool: toolId, detailed, mode, signal: controller.signal },
         (piece) => {
           if (controller.signal.aborted) return;
           writtenRef.current += piece;
@@ -195,6 +200,8 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       if (!text) throw new Error("התקבלה תשובה ריקה. אפשר לנסות שוב.");
       writtenRef.current = "";
       setMessages([...next, { role: "assistant" as const, content: text }].slice(-HISTORY));
+      const suggested = mode === "execute" ? splitOpenMarkers(text).tools.find((id) => findTool(id)) : undefined;
+      if (suggested) setPendingTool(suggested);
       setPartial(null);
     } catch (caught) {
       if (controller.signal.aborted) return;
@@ -253,15 +260,15 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     return (
       <div key={`a${index}`} className={`assistant-bubble is-assistant ${live ? "is-live" : ""}`} dir="auto">
         <div className="assistant-markdown">{renderMarkdown(text)}</div>
-        {!live && tools.length > 0 && (
+        {!live && mode === "execute" && tools.length > 0 && (
           <div className="assistant-tools">
             {tools.map((id) => {
               const tool = findTool(id);
               if (!tool) return null;
               const Icon = tool.icon;
               return (
-                <button key={id} type="button" className="assistant-open" onClick={() => openTool(id)}>
-                  <Icon size={16} /> פתח את {tool.title} <ArrowLeft size={14} />
+                <button key={id} type="button" className="assistant-open" onClick={() => setPendingTool(id)}>
+                  <Icon size={16} /> הצע פתיחת {tool.title} <ArrowLeft size={14} />
                 </button>
               );
             })}
@@ -326,6 +333,15 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             </button>
           </header>
 
+          <div className="segmented-control assistant-mode" role="group" aria-label="מצב העוזר">
+            <button type="button" className={mode === "question" ? "active" : ""} aria-pressed={mode === "question"} disabled={busy} onClick={() => { setMode("question"); setPendingTool(null); }}>
+              <CircleHelp size={15} /> מצב שאלה
+            </button>
+            <button type="button" className={mode === "execute" ? "active" : ""} aria-pressed={mode === "execute"} disabled={busy} onClick={() => setMode("execute")}>
+              <MousePointerClick size={15} /> מצב ביצוע
+            </button>
+          </div>
+
           <div className="assistant-messages" ref={listRef} aria-live="polite">
             {messages.length === 0 && !busy && (
               <div className="assistant-empty">
@@ -367,6 +383,22 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                 ))}
               </div>
             )}
+            {!busy && pendingTool && mode === "execute" && (() => {
+              const tool = findTool(pendingTool);
+              if (!tool) return null;
+              return (
+                <div className="assistant-bubble is-assistant assistant-confirm">
+                  <strong>לאישור: פתיחת {tool.title}</strong>
+                  <p>המעבר יפתח את הכלי בלבד. הוא לא יעלה קובץ ולא יתחיל עיבוד.</p>
+                  <div className="assistant-tools">
+                    <button type="button" className="assistant-open" onClick={() => { openTool(tool.id); setPendingTool(null); }}>
+                      <Check size={15} /> אישור ופתיחת הכלי
+                    </button>
+                    <button type="button" className="link-button" onClick={() => setPendingTool(null)}>ביטול</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {user ? (
@@ -386,7 +418,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                 }}
                 rows={1}
                 maxLength={MAX_MESSAGE}
-                placeholder="שאל משהו, או בקש לפתוח כלי…"
+                placeholder={mode === "execute" ? "כתוב מה תרצה לבצע…" : "כתוב שאלה…"}
                 aria-label="השאלה שלך"
                 dir="auto"
               />
