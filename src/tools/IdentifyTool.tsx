@@ -164,7 +164,12 @@ export function IdentifyTool() {
               {!recording && !busy && <small>כ־{CLIP_SECONDS} שניות מהמיקרופון</small>}
             </button>
             <label className="identify-file">
-              <input ref={inputRef} type="file" accept="audio/*,video/*" className="native-file-input" onChange={(event) => void fromFile(event.target.files?.[0])} aria-label="בחר קובץ לזיהוי" disabled={busy !== null || recording} />
+              <input ref={inputRef} type="file" accept="audio/*,video/*" className="native-file-input" onChange={(event) => {
+                const file = event.target.files?.[0];
+                // Cleared so the same file can be chosen again after a retry.
+                event.target.value = "";
+                void fromFile(file);
+              }} aria-label="בחר קובץ לזיהוי" disabled={busy !== null || recording} />
               <FileAudio size={18} /> או בחר קובץ
             </label>
           </div>

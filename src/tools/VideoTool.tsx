@@ -147,7 +147,11 @@ export function VideoTool() {
               className="native-file-input"
               type="file"
               accept="video/*,.mp4,.mov,.webm,.mkv,.m4v,.avi"
-              onChange={(event) => void pick(event.target.files?.[0])}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                void pick(file);
+              }}
               aria-label="בחר סרטון"
               disabled={loading}
             />

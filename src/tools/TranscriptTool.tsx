@@ -407,13 +407,16 @@ export function TranscriptTool({ initial = null }: Props) {
     setSpeakersBusy(true);
     setAiError(null);
     try {
-      const reply = await transformText("speakers", segments.map((segment) => segment.text).join("\n"));
+      // Labels from an earlier run come off first, so a second run does not
+      // stack "דובר 1: דובר 1:" and the model sees the words alone.
+      const bare = segments.map((segment) => segment.text.replace(/^([^:：]{1,30}):\s/, ""));
+      const reply = await transformText("speakers", bare.join("\n"));
       const lines = reply.text.split("\n").map((line) => line.trim()).filter(Boolean);
       if (lines.length !== segments.length) {
         // The model changed the line count; keep what lines up, in order.
         setNotice("זיהוי הדוברים החזיר מספר שורות שונה; הוחלו רק השורות שהתאימו.");
       }
-      setText(segments.map((segment, index) => (lines[index] && lines[index].includes(segment.text.slice(0, 12)) ? lines[index] : segment.text)).join("\n"));
+      setText(bare.map((line, index) => (lines[index] && lines[index].includes(line.slice(0, 12)) ? lines[index] : segments[index].text)).join("\n"));
     } catch (caught) {
       setAiError(caught instanceof AiError || caught instanceof Error ? caught.message : "זיהוי הדוברים נכשל.");
     } finally {
