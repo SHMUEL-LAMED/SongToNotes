@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
 import { centsOff, detectPitch, frequencyToMidi, midiToFrequency } from "../lib/dsp";
 import { hebrewNoteName, scientificName } from "../lib/key";
+import { parseNoteName } from "../lib/noteNames";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -78,7 +80,7 @@ export function TunerTool({ initial = null }: Props) {
   useEffect(() => resetSave(), [presetId, referenceA4, resetSave]);
 
   const saveSetup = () => {
-    void saving.save({
+    return saving.save({
       kind: "tuner",
       title: `${preset.label} · לה ${referenceA4} Hz`,
       summary: { presetId, presetLabel: preset.label, referenceA4 },
@@ -228,6 +230,51 @@ export function TunerTool({ initial = null }: Props) {
     };
   }, [preset.strings, reading, referenceA4]);
 
+  useAssistantTool("tuner", {
+    state: () =>
+      `מכוון כלים: ${preset.label}, לה = ${referenceA4} Hz, ${listening ? "מאזין למיקרופון" : "לא מאזין"}${display ? `; נקלט ${scientificName(display.midi)} (${display.cents > 0 ? "+" : ""}${Math.round(display.cents)} סנט, ${display.frequency.toFixed(1)} Hz)` : ""}${toneMidi !== null ? `; מושמע צליל ייחוס ${scientificName(toneMidi)}` : ""}.`,
+    handlers: {
+      "tuner.set": ({ instrument, referenceA4: reference }) => {
+        const done: string[] = [];
+        if (typeof instrument === "string") {
+          const found = PRESETS.find((item) => item.id === instrument);
+          if (!found) return { ok: false, message: `אין כלי כזה; יש: ${PRESETS.map((item) => item.id).join(", ")}` };
+          setPresetId(found.id);
+          done.push(found.label);
+        }
+        if (typeof reference === "number") {
+          const clamped = Math.max(430, Math.min(450, Math.round(reference)));
+          setReferenceA4(clamped);
+          done.push(`לה = ${clamped} Hz`);
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "tuner.listen": async ({ on }) => {
+        if (on) {
+          if (!listening) await start();
+          return { ok: true, message: "מאזין למיקרופון; נגן צליל" };
+        }
+        stop();
+        return { ok: true, message: "ההאזנה נעצרה" };
+      },
+      "tuner.tone": ({ note }) => {
+        const midi = parseNoteName(String(note));
+        if (midi === null) return { ok: false, message: "כתוב תו כמו E2, A4 או C#3" };
+        playTone(midi);
+        return { ok: true, message: toneMidi === midi ? `הצליל ${scientificName(midi)} הופסק` : `מושמע ${scientificName(midi)}` };
+      },
+      "tuner.save": async () => {
+        const saved = await saveSetup();
+        return saved ? { ok: true, message: "הכיוון נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "tuner.read": () => ({
+        ok: true,
+        message: display ? `${scientificName(display.midi)}, ${Math.round(display.cents)} סנט` : listening ? "לא נקלט צליל ברור" : "לא מאזין",
+        data: { listening, note: display ? scientificName(display.midi) : null, cents: display ? Math.round(display.cents) : null, frequency: display ? Number(display.frequency.toFixed(1)) : null, instrument: preset.id, referenceA4 },
+      }),
+    },
+  });
+
   const inTune = display ? Math.abs(display.cents) <= 5 : false;
   const needleAngle = display ? (display.cents / 50) * 60 : 0;
 
@@ -242,7 +289,7 @@ export function TunerTool({ initial = null }: Props) {
           <p>נגן צליל ליד המיקרופון כדי לכוון את הכלי.</p>
         </div>
         <div className="tool-intro-side">
-          <SaveButton state={saving.state} onSave={saveSetup} label="שמור את הכיוון" message={saving.message} compact />
+          <SaveButton state={saving.state} onSave={() => void saveSetup()} label="שמור את הכיוון" message={saving.message} compact />
         </div>
       </div>
 

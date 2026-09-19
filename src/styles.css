@@ -3130,6 +3130,23 @@ footer .brand-mark { font-size: 19px; }
 .assistant-bubble-tools { display: flex; gap: 12px; margin-top: 8px; }
 .assistant-bubble-tools .link-button { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; }
 .assistant-suggestions.is-followups { flex-direction: row; flex-wrap: wrap; }
+.assistant-actions { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.assistant-action {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 13px; line-height: 1.5; white-space: normal;
+}
+.assistant-action svg { flex: none; margin-top: 4px; color: var(--success); }
+.assistant-action.is-failed { border-color: var(--danger); background: var(--danger-soft); }
+.assistant-action.is-failed svg { color: var(--danger); }
+.assistant-action.is-cancelled { opacity: 0.65; }
+.assistant-action.is-cancelled svg { color: var(--text-muted); }
+.assistant-action b { font-weight: 700; }
+.assistant-action span { color: var(--text-soft); }
+.assistant-acting { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); padding: 2px 4px; }
+.assistant-confirm p { margin: 6px 0 10px; font-size: 13.5px; line-height: 1.6; color: var(--text-soft); }
+.assistant-confirm code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(127, 127, 127, 0.15); padding: 1px 5px; border-radius: 5px; unicode-bidi: embed; }
 @media (max-width: 640px) {
   .assistant-panel { inset-inline-start: 10px; bottom: 10px; width: calc(100vw - 20px); height: min(560px, calc(100vh - 20px)); }
   .assistant-launcher { inset-inline-start: 12px; bottom: 12px; }

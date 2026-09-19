@@ -1,36 +1,239 @@
 /**
  * The site's language model, on the server.
  *
- * Four jobs through one OpenAI-compatible chat endpoint (Groq by default,
- * the same account as the transcription): tidying a transcript into
- * punctuated paragraphs, summarising it, translating it, and the assistant
- * that answers questions about the tools and about music. The key stays
- * here; a visitor has to be signed in and each account has a daily token
- * allowance.
+ * Four jobs through one OpenAI-compatible chat endpoint: tidying a transcript
+ * into punctuated paragraphs, summarising it, translating it, and the
+ * assistant — which answers questions about the tools and about music, and
+ * carries out what the visitor asks for on the site. The key stays here; a
+ * visitor has to be signed in and each account has a daily token allowance.
+ *
+ * ## Providers
+ *
+ * Chat is a commodity, and several services give it away: this function
+ * knows a dozen of them ({@link PROVIDERS}) and uses whichever ones the
+ * project has a key for, in order, moving to the next the moment one is
+ * busy, out of quota, broken, or no longer serves the model it was asked
+ * for. Nothing has to be configured beyond dropping a key in: a key named
+ * for a provider (GROQ_API_KEY, GEMINI_API_KEY, CEREBRAS_API_KEY…) turns it
+ * on, and `AI_PROVIDERS` fixes the order when the default one is not what
+ * the project wants. The older AI_API_KEY / AI_BASE_URL / AI_MODEL still
+ * work and are tried first, so an existing project keeps behaving exactly
+ * as it did.
  *
  * The assistant streams its reply when asked to (`stream: true`), and may
- * end a reply with [[open:tool]] markers that the site turns into buttons.
+ * end a reply with ```action blocks that the site runs — see
+ * `src/lib/assistantProtocol.ts` for the parsing and
+ * `src/lib/assistantActions.ts` for what the actions are.
  *
- * Settings (secrets or private.stt_settings):
- *   AI_API_KEY       falls back to STT_API_KEY
- *   AI_BASE_URL      falls back to STT_BASE_URL, then https://api.openai.com/v1
- *   AI_MODEL         the model to try first; when the service no longer serves
- *                    it, the best one it lists is picked and remembered
- *   AI_DAILY_TOKENS  default 300000
+ * Settings (function secrets, or rows in private.stt_settings):
+ *   AI_PROVIDERS      the providers to try, in order, comma-separated
+ *   AI_API_KEY        a key for a service not in the list (with AI_BASE_URL)
+ *   AI_BASE_URL       that service's base URL
+ *   AI_MODEL          the model to try first on it
+ *   AI_DAILY_TOKENS   default 300000
+ *   <NAME>_API_KEY    a key for one of the known providers
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "./common.ts";
 
 const DEFAULT_DAILY_TOKENS = 300_000;
 const MAX_INPUT_CHARS = 60_000;
-const DEFAULT_MODEL = "openai/gpt-oss-120b";
-/** Tried in order after the configured model, before asking the service what it has. */
-const FALLBACK_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
-/** Every tool the assistant may point at; anything else in a marker is dropped. */
-const TOOLS = [
-  "notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear",
-  "transcript", "analyze", "chords", "songbook", "convert", "video", "rhythm",
-  "mixer", "lyrics", "tts", "identify",
+
+type Provider = {
+  id: string;
+  label: string;
+  base: string;
+  /** The setting names that hold this provider's key, in order. */
+  keys: string[];
+  /** Tried in order; the first that answers is remembered. */
+  models: string[];
+  /** Some services still reject `max_completion_tokens`. */
+  tokenParam?: "max_tokens" | "max_completion_tokens";
+  /** Free of charge at the time of writing, within a daily or per-minute allowance. */
+  free: boolean;
+  /** Extra headers the service asks for. */
+  headers?: Record<string, string>;
+};
+
+/**
+ * The services this function can talk to. All of them speak the OpenAI chat
+ * API, so the only differences are the address, the key and the model names.
+ * The order here is the default order they are tried in: the fastest free
+ * ones first, the paid ones last.
+ */
+const PROVIDERS: Provider[] = [
+  {
+    id: "groq",
+    label: "Groq",
+    base: "https://api.groq.com/openai/v1",
+    keys: ["GROQ_API_KEY", "AI_GROQ_KEY", "STT_API_KEY"],
+    models: ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"],
+    free: true,
+  },
+  {
+    id: "cerebras",
+    label: "Cerebras",
+    base: "https://api.cerebras.ai/v1",
+    keys: ["CEREBRAS_API_KEY", "AI_CEREBRAS_KEY"],
+    models: ["gpt-oss-120b", "llama-3.3-70b", "qwen-3-235b-a22b-instruct-2507", "llama3.1-8b"],
+    free: true,
+  },
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    base: "https://generativelanguage.googleapis.com/v1beta/openai",
+    keys: ["GEMINI_API_KEY", "GOOGLE_API_KEY", "AI_GEMINI_KEY"],
+    models: ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "github",
+    label: "GitHub Models",
+    base: "https://models.github.ai/inference",
+    keys: ["GITHUB_MODELS_TOKEN", "GITHUB_TOKEN", "AI_GITHUB_KEY"],
+    models: ["openai/gpt-4.1-mini", "openai/gpt-4o-mini", "meta/Llama-3.3-70B-Instruct", "mistral-ai/Mistral-Nemo"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    base: "https://openrouter.ai/api/v1",
+    keys: ["OPENROUTER_API_KEY", "AI_OPENROUTER_KEY"],
+    // The ":free" suffix is OpenRouter's own marker for a model that costs nothing.
+    models: [
+      "google/gemini-2.0-flash-exp:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen-2.5-72b-instruct:free",
+      "mistralai/mistral-small-3.2-24b-instruct:free",
+    ],
+    free: true,
+    headers: { "HTTP-Referer": "https://shmuel-lamed.github.io/SongToNotes/", "X-Title": "SongToNotes" },
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    base: "https://api.mistral.ai/v1",
+    keys: ["MISTRAL_API_KEY", "AI_MISTRAL_KEY"],
+    models: ["mistral-small-latest", "open-mistral-nemo", "mistral-large-latest"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "sambanova",
+    label: "SambaNova",
+    base: "https://api.sambanova.ai/v1",
+    keys: ["SAMBANOVA_API_KEY", "AI_SAMBANOVA_KEY"],
+    models: ["Meta-Llama-3.3-70B-Instruct", "Llama-4-Maverick-17B-128E-Instruct", "Meta-Llama-3.1-8B-Instruct"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "nvidia",
+    label: "NVIDIA NIM",
+    base: "https://integrate.api.nvidia.com/v1",
+    keys: ["NVIDIA_API_KEY", "AI_NVIDIA_KEY"],
+    models: ["meta/llama-3.3-70b-instruct", "openai/gpt-oss-120b", "qwen/qwen3-235b-a22b"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "huggingface",
+    label: "Hugging Face",
+    base: "https://router.huggingface.co/v1",
+    keys: ["HF_TOKEN", "HUGGINGFACE_API_KEY", "AI_HF_KEY"],
+    models: ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct", "mistralai/Mistral-Nemo-Instruct-2407"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "together",
+    label: "Together",
+    base: "https://api.together.xyz/v1",
+    keys: ["TOGETHER_API_KEY", "AI_TOGETHER_KEY"],
+    models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free", "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"],
+    tokenParam: "max_tokens",
+    free: true,
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    base: "https://api.deepseek.com/v1",
+    keys: ["DEEPSEEK_API_KEY", "AI_DEEPSEEK_KEY"],
+    models: ["deepseek-chat"],
+    tokenParam: "max_tokens",
+    free: false,
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    base: "https://api.openai.com/v1",
+    keys: ["OPENAI_API_KEY", "AI_OPENAI_KEY"],
+    models: ["gpt-4.1-mini", "gpt-4o-mini"],
+    free: false,
+  },
 ];
+
+/** A service with a key, ready to be asked. */
+type Endpoint = { id: string; label: string; base: string; apiKey: string; models: string[]; tokenParam: string; headers: Record<string, string>; free: boolean };
+
+type Setting = (name: string, ...fallbacks: string[]) => string | undefined;
+
+/**
+ * Which services this project can use, in the order to try them.
+ *
+ * A project that set AI_API_KEY and AI_BASE_URL by hand keeps that first —
+ * it is a deliberate choice. After it come the providers named in
+ * AI_PROVIDERS, and then every other provider a key was found for, free
+ * ones before paid ones. The model remembered from a previous request
+ * ({@link AI_MODEL}) moves to the front of its own provider's list.
+ */
+function endpoints(setting: Setting): Endpoint[] {
+  const list: Endpoint[] = [];
+  const remembered = setting("AI_MODEL");
+  const custom = setting("AI_API_KEY");
+  const customBase = setting("AI_BASE_URL", "STT_BASE_URL");
+  if (custom && customBase) {
+    const base = customBase.replace(/\/+$/, "");
+    const known = PROVIDERS.find((provider) => base.startsWith(provider.base.replace(/\/+$/, "")));
+    list.push({
+      id: known?.id ?? "custom",
+      label: known?.label ?? "השירות שהוגדר",
+      base,
+      apiKey: custom,
+      models: [...new Set([remembered, ...(known?.models ?? [])].filter((item): item is string => Boolean(item)))],
+      tokenParam: known?.tokenParam ?? "max_completion_tokens",
+      headers: known?.headers ?? {},
+      free: known?.free ?? false,
+    });
+  }
+
+  const wanted = (setting("AI_PROVIDERS") ?? "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const ordered = [
+    ...wanted.map((id) => PROVIDERS.find((provider) => provider.id === id)).filter((item): item is Provider => Boolean(item)),
+    ...PROVIDERS.filter((provider) => !wanted.includes(provider.id)).sort((a, b) => Number(b.free) - Number(a.free)),
+  ];
+  for (const provider of ordered) {
+    if (list.some((item) => item.id === provider.id)) continue;
+    const apiKey = setting(...provider.keys);
+    if (!apiKey) continue;
+    const models = remembered && provider.models.includes(remembered) ? [remembered, ...provider.models.filter((item) => item !== remembered)] : provider.models;
+    list.push({
+      id: provider.id,
+      label: provider.label,
+      base: provider.base,
+      apiKey,
+      models,
+      tokenParam: provider.tokenParam ?? "max_completion_tokens",
+      headers: provider.headers ?? {},
+      free: provider.free,
+    });
+  }
+  return list;
+}
 
 /**
  * Model names come and go on the hosted services. In order of preference,
@@ -39,24 +242,30 @@ const TOOLS = [
  */
 const PREFERRED = [
   /gpt-oss-120b/i,
+  /gemini-2\.\d-flash$/i,
   /llama-4.*maverick/i,
-  /llama-4.*scout/i,
   /llama-3\.3-70b/i,
-  /qwen3-(32|235)b/i,
+  /qwen3?-(32|72|235)b/i,
+  /mistral-small/i,
   /kimi-k2/i,
   /gpt-oss-20b/i,
+  /gpt-4[.o]/i,
   /llama-3\.1-8b/i,
 ];
-const NOT_CHAT = /whisper|tts|guard|embed|orpheus|playai|moderation|rerank|vision-preview/i;
+const NOT_CHAT = /whisper|tts|guard|embed|orpheus|playai|moderation|rerank|vision-preview|image|video|veo|imagen|aqa|gecko/i;
 
-async function discoverModel(base: string, apiKey: string) {
-  const response = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${apiKey}` } }).catch(() => null);
+/** What else the service says it serves, when none of the known names worked. */
+async function discoverModel(endpoint: Endpoint) {
+  const response = await fetch(`${endpoint.base}/models`, {
+    headers: { Authorization: `Bearer ${endpoint.apiKey}`, ...endpoint.headers },
+  }).catch(() => null);
   if (!response?.ok) return null;
   const parsed = (await response.json().catch(() => null)) as { data?: { id?: string }[] } | null;
-  const ids = (parsed?.data ?? []).map((item) => String(item.id ?? "")).filter(Boolean);
-  console.log("models served:", ids.join(", "));
+  const ids = (parsed?.data ?? []).map((item) => String(item.id ?? "").replace(/^models\//, "")).filter(Boolean);
+  if (!ids.length) return null;
+  console.log(`${endpoint.id} serves:`, ids.slice(0, 40).join(", "));
   for (const pattern of PREFERRED) {
-    const hit = ids.find((id) => pattern.test(id));
+    const hit = ids.find((id) => pattern.test(id) && !NOT_CHAT.test(id));
     if (hit) return hit;
   }
   return ids.find((id) => !NOT_CHAT.test(id)) ?? null;
@@ -64,26 +273,55 @@ async function discoverModel(base: string, apiKey: string) {
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
 
-const ASSISTANT_PROMPT = `אתה "העוזר" של האתר "כלי מוזיקה" (SongToNotes) — אתר עברי חינמי עם כלים למוזיקאים שעובד בדפדפן, בלי להתקין ובלי להוריד דבר. אתה חם, ענייני ומדויק. עונה בעברית (או בשפה שבה פנו אליך), במשפטים קצרים, ברשימות או בצעדים כשזה עוזר, ובלי מילים מיותרות. אל תמציא תכונות שאין באתר; אם אינך בטוח, אמור זאת. אין לך גישה לקבצים של הגולש או לתוצאות שלו — אתה מסביר ומדריך, והגולש מבצע בכלי.
-
-הכלים באתר (מזהה בסוגריים) ואיך משתמשים בהם:
-- שיר לתווים (notes): מעלים שיר, מזמזמים או שרים למיקרופון; האתר מזהה תווים, קצב וסולם ומייצא תווים, MIDI, MusicXML ו־ABC. אפשר לסמן קטע בגל הקול, לבחור כלי נגינה לניגון ולערוך את הקצב.
-- יצירת צלצול (ringtone): בוחרים קטע בגל הקול (ברירת מחדל 30 שניות), כניסה ויציאה רכות, עוצמה; הורדה M4R לאייפון או MP3/WAV לאנדרואיד, עם הוראות התקנה.
-- הסרת שירה (vocals): "ליווי בלבד (קריוקי)" או "שירה בלבד". הפרדה מהירה בדפדפן לפי תמונת הסטריאו (טובה כשהשירה במרכז), או "הפרדה מלאה עם AI" שרצה בשרת ונותנת תוצאה נקייה בהרבה, גם למונו. דורשת התחברות.
-- מאט ומאיץ (speed): משנים מהירות בלי לשנות גובה, או גובה בלי לשנות מהירות; לולאה על קטע; ייצוא.
+const TOOL_LIST = `- שיר לתווים (notes): מעלים שיר, מזמזמים או שרים למיקרופון; האתר מזהה תווים, קצב וסולם ומייצא תווים, MIDI, MusicXML ו־ABC. אפשר לסמן קטע בגל הקול, לבחור כלי נגינה לניגון ולערוך את הקצב.
+- יצירת צלצול (ringtone): בוחרים קטע בגל הקול (ברירת מחדל 30 שניות), כניסה ויציאה רכות, עוצמה; הורדה לטלפון. האתר מזהה לבד את הפזמון, הבית וקטע מוזיקלי.
+- הסרת שירה (vocals): "ליווי בלבד (קריוקי)" או "שירה בלבד". הפרדה מהירה בדפדפן לפי תמונת הסטריאו (טובה כשהשירה במרכז), או "הפרדה מלאה עם AI" שנותנת תוצאה נקייה בהרבה, גם למונו. במצב מקצועי מפרידים לערוצים נפרדים — שירה, תופים, בס ושאר הכלים — עם עוצמה, פאן, השתקה וסולו לכל אחד.
+- מאט ומאיץ (speed): משנים מהירות בלי לשנות גובה, או גובה בלי לשנות מהירות; לולאה על קטע; ייצוא WAV.
 - מטרונום (metronome): BPM, משקל, חלוקות משנה, הדגשות, טאפ־טמפו; עובד גם כשהמסך כבוי.
-- מכוון כלים / טיונר (tuner): כרומטי מהמיקרופון, מראה סנטים; לגיטרה, כינור, יוקללה וקול.
-- פסנתר וירטואלי (piano): מנגנים בעכבר, במגע או במקלדת; הדגשת סולמות; הקלטה ושליחה לכלי התווים.
-- מאמן שמיעה (ear): מרווחים, סוגי אקורדים ודרגות בסולם; רמות קושי, ניקוד ורצף.
-- תמלול לטקסט (transcript): דיבור לטקסט עם חותמות זמן, בשרת, גם הקלטות של שעות; עריכה במקום; ייצוא TXT/SRT/VTT; כרטיס "עיבוד עם AI": פיסוק ופסקאות, סיכום, תרגום. דורש התחברות.
-- מזהה קצב וסולם (analyze): BPM, סולם, Camelot לדי־ג'יי, עוצמה.
-- מזהה אקורדים לגיטרה (chords): אקורדים לאורך השיר עם דיאגרמות אחיזה, טרנספוזיציה וקאפו, דף אקורדים להורדה, שליחה לשירון.
-- שירון (songbook): מילים עם אקורדים מעליהן (כותבים [Am] לפני המילה), טרנספוזיציה, גלילה אוטומטית להופעה, הדפסה, שמירה.
-האזור האישי: כפתור בראש כל עמוד; כל כלי שומר את העבודה ("שמור"), והקבצים עולים לענן אחרי התחברות עם Google וזמינים מכל מכשיר. ההתחברות חינמית.
+- מכוון כלים / טיונר (tuner): כרומטי מהמיקרופון, מראה סנטים; לגיטרה, בס, כינור, יוקללה, צ׳לו; כיוון לה 430–450 Hz וצלילי ייחוס למיתרים.
+- פסנתר וירטואלי (piano): מנגנים בעכבר, במגע או במקלדת; שלושה צלילים, הדגשת סולמות, פדל סוסטיין, הקלטה וייצוא MIDI.
+- מאמן שמיעה (ear): מרווחים, סוגי אקורדים ודרגות בסולם; שלוש רמות, ניקוד ורצף הצלחות.
+- מאמן קצב (rhythm): תבניות קצב בשלוש רמות; ספירה ואז הקשה, וכל הקשה נמדדת מול שעון האודיו עם ציון ונטייה להקדים או לאחר.
+- תמלול לטקסט (transcript): דיבור לטקסט עם חותמות זמן, בשרת, גם הקלטות של שעות; עריכה במקום; ייצוא TXT/SRT/VTT; עיבוד AI: פיסוק ופסקאות, סיכום, תרגום וזיהוי דוברים. דורש התחברות.
+- מילים מסונכרנות (lyrics): מילות השיר עם זמן לכל מילה, קריוקי שנדלק מילה אחר מילה, ייצוא LRC, LRC מילה־מילה ו־SRT. דורש התחברות.
+- מזהה קצב וסולם (analyze): BPM, סולם, קוד Camelot לדי־ג'יי, פרופיל צלילים ועוצמה — בשניות.
+- מזהה אקורדים לגיטרה (chords): אקורדים לאורך השיר עם דיאגרמות אחיזה, טרנספוזיציה וקאפו, דף אקורדים להורדה ושליחה לשירון.
+- שירון (songbook): מילים עם אקורדים מעליהן (כותבים [Am] לפני המילה שבה האקורד מתחלף, וכותרת קטע כמו [פזמון] בשורה לבד), טרנספוזיציה, גלילה אוטומטית להופעה, הדפסה ושמירה.
+- המרת פורמטים (convert): כל קובץ שמע ל־MP3 או WAV עם קצב דגימה, ערוצים, איכות, חיתוך ועוצמה — בדפדפן.
+- וידאו לאודיו (video): פס הקול של סרטון כ־MP3 או WAV, או ישר לכל כלי אחר באתר.
+- מיקסר ולופר (mixer): עד שמונה ערוצים עם עוצמה, פאן, השתקה, סולו והזזה, לולאה על קטע, ומיקס אחד ל־WAV.
+- טקסט לדיבור (tts): הקראה בקולות של המכשיר, וקובץ MP3 מהשרת (דורש התחברות).
+- מזהה שיר (identify): כמה שניות מהמיקרופון או מקובץ, ובחזרה שם השיר, האמן וקישורים להאזנה. דורש התחברות.`;
 
-כאשר מצב הבקשה הוא "ביצוע", אפשר להציע פתיחת כלי באמצעות סמן בשורה נפרדת בפורמט [[open:מזהה]] — למשל [[open:transcript]]. עד שני סמנים בתשובה ורק לכלים שברשימה. הכפתור דורש אישור נוסף מהגולש. אינך יכול להעלות קובץ, להתחיל עיבוד, למחוק מידע או לשנות הגדרות. במצב "שאלה" אסור להוסיף סמני פתיחה או לטעון שביצעת פעולה.
+const ASSISTANT_PROMPT = `אתה "העוזר" של האתר "כלי מוזיקה" (SongToNotes) — אתר עברי חינמי עם כלים למוזיקאים שעובד בדפדפן, בלי להתקין ובלי להוריד דבר. אתה חם, ענייני ומדויק. עונה בעברית (או בשפה שבה פנו אליך), במשפטים קצרים, ובלי מילים מיותרות. אל תמציא תכונות שאין באתר; אם אינך בטוח, אמור זאת.
 
-בנוסף אתה מורה למוזיקה: תיאוריה, אקורדים, סולמות, קצב, טכניקה, טיפים לתרגול — ענה בבהירות, עם דוגמאות קצרות. אפשר להשתמש ב־Markdown פשוט: כותרות קצרות, רשימות, הדגשה.`;
+הכלים באתר (המזהה בסוגריים):
+${TOOL_LIST}
+
+האזור האישי: כפתור בראש כל עמוד; כל כלי שומר את העבודה, והקבצים עולים לענן אחרי התחברות עם Google וזמינים מכל מכשיר. ההתחברות חינמית. אפשר ליצור קישור ציבורי לכל עבודה שמורה.
+
+בנוסף אתה מורה למוזיקה: תיאוריה, אקורדים, סולמות, קצב, טכניקה וטיפים לתרגול — בבהירות ועם דוגמאות קצרות. אפשר להשתמש ב־Markdown פשוט: כותרות קצרות, רשימות, הדגשה.`;
+
+/** What is added in "do" mode: how to ask the site to act. */
+const ACTION_PROTOCOL = `אתה לא רק מסביר — אתה גם מבצע. כדי לבצע פעולה באתר, כתוב בתשובה בלוק בפורמט הזה:
+
+\`\`\`action
+{"action": "שם_הפעולה", "params": {"פרמטר": "ערך"}}
+\`\`\`
+
+כללים:
+- בלוק אחד לכל פעולה. כמה פעולות — כמה בלוקים, בסדר שבו הן צריכות לרוץ. עד שמונה בבקשה אחת.
+- השתמש רק בפעולות שברשימה למטה ורק בפרמטרים שלהן, באותיות ובאיות המדויקים. פרמטר עם ? הוא רשות.
+- פעולה של כלי אחר פותחת את הכלי בעצמה — אין צורך ב־navigate לפניה.
+- כתוב משפט קצר לפני הבלוקים שאומר מה אתה עושה. אל תכתוב "בוצע" לפני שקיבלת תוצאה.
+- פעולות שמסומנות [קריאה] מחזירות לך מידע: בקש אותן, המתן לתוצאה, ורק אז המשך. פעולות שמסומנות [דורש אישור] נעצרות עד שהגולש מאשר.
+- אחרי הרצת הפעולות תקבל הודעה "[תוצאות פעולות]" עם מה שהצליח, מה נכשל ומה חזר. הסתמך עליה בלבד — אל תניח שפעולה הצליחה. אם פעולה נכשלה, תקן ונסה שוב, או הסבר לגולש מה חסר.
+- אינך יכול לבחור קובץ מהמכשיר של הגולש, להקליט במקומו או ללחוץ על דברים שאינם ברשימה. אם פעולה דורשת קובץ ואין קובץ — בקש מהגולש לבחור אותו.
+- כשהגולש מבקש תוכן (שיר, מילים, טקסט להקראה) — חבר אותו בעצמך וכתוב אותו לתוך הכלי בפעולה, אל תבקש ממנו לכתוב.
+- אל תמציא מזהי עבודות: works.list מחזיר אותם.
+- כשהמשימה הושלמה, סכם בשורה אחת מה נעשה.`;
+
+const QUESTION_MODE = `מצב הבקשה הוא "שאלה": ענה בלבד. אל תכתוב בלוקי action ואל תטען שביצעת משהו. אם הגולש מבקש שתבצע, אמור לו שיעבור ל"מצב ביצוע" בראש חלון העוזר.`;
 
 function prompts(action: string, language: string | null): Message[] {
   switch (action) {
@@ -112,19 +350,9 @@ function prompts(action: string, language: string | null): Message[] {
   }
 }
 
-/** The [[open:tool]] markers out of a reply: the text without them, and the tools. */
-function extractTools(raw: string) {
-  const tools: string[] = [];
-  const text = raw
-    .replace(/\[\[open:([a-z-]+)\]\]/gi, (_, id: string) => {
-      const clean = id.toLowerCase();
-      if (TOOLS.includes(clean) && !tools.includes(clean)) tools.push(clean);
-      return "";
-    })
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { text, tools: tools.slice(0, 2) };
-}
+const GONE = (status: number) => status === 404 || status === 400 || status === 422;
+const BUSY = (status: number) => status === 429 || status === 402 || status >= 500;
+const BAD_KEY = (status: number) => status === 401 || status === 403;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -132,10 +360,8 @@ Deno.serve(async (req: Request) => {
 
   const admin = adminClient();
   const setting = await settings(admin);
-  const apiKey = setting("AI_API_KEY", "STT_API_KEY");
-  if (!apiKey) return json(503, { error: "not_configured" });
-  const base = (setting("AI_BASE_URL", "STT_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  const configured = setting("AI_MODEL") ?? DEFAULT_MODEL;
+  const services = endpoints(setting);
+  if (!services.length) return json(503, { error: "not_configured" });
   const limit = Number(setting("AI_DAILY_TOKENS")) || DEFAULT_DAILY_TOKENS;
 
   const user = await visitor(req);
@@ -150,6 +376,7 @@ Deno.serve(async (req: Request) => {
     stream?: boolean;
     detailed?: boolean;
     mode?: "question" | "execute";
+    context?: { state?: string; catalog?: string };
   };
   try {
     body = await req.json();
@@ -165,15 +392,18 @@ Deno.serve(async (req: Request) => {
     const clean = history
       .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
       .slice(-16)
-      .map((item) => ({ role: item.role, content: item.content.slice(0, 4000) }));
+      .map((item) => ({ role: item.role, content: item.content.slice(0, 6000) }));
     if (!clean.length) return json(400, { error: "bad_request" });
     const tool = typeof body.tool === "string" ? body.tool.replace(/[^a-z-]/g, "").slice(0, 30) : "";
+    const execute = body.mode === "execute";
+    const catalog = execute && typeof body.context?.catalog === "string" ? body.context.catalog.slice(0, 14_000) : "";
+    const state = typeof body.context?.state === "string" ? body.context.state.slice(0, 4000) : "";
     const context = [
-      tool ? `הגולש נמצא כרגע בכלי "${tool}". אם שאלתו קשורה אליו, הסבר עליו ישירות.` : "הגולש בדף הבית של האתר.",
+      tool ? `הגולש נמצא כרגע בכלי "${tool}".` : "הגולש נמצא בדף הבית של האתר.",
       body.detailed ? "הגולש ביקש הסברים מפורטים: צעדים, דוגמה, ומה לעשות אם משהו לא עובד." : "השב בקצרה; הרחב רק אם מבקשים.",
-      body.mode === "execute"
-        ? "מצב הבקשה הוא ביצוע. אם הבקשה היא לפתוח כלי קיים ומתאים, הצע אותו בסמן [[open:tool]]. הסבר במדויק מה יקרה וחכה לאישור בכפתור."
-        : "מצב הבקשה הוא שאלה. ענה בלבד ואל תוסיף סמני [[open:tool]] או פעולה אחרת.",
+      execute ? ACTION_PROTOCOL : QUESTION_MODE,
+      state ? `\n\nמצב המסך עכשיו (עדכני לרגע זה — הסתמך עליו ואל תשאל על מה שכתוב כאן):\n${state}` : "",
+      catalog ? `\n\nהפעולות שאתה יכול לבצע:\n${catalog}` : "",
     ].join(" ");
     messages = [...messages, { role: "system", content: context }, ...clean];
   } else {
@@ -187,73 +417,106 @@ Deno.serve(async (req: Request) => {
   if (used >= limit) return json(429, { error: "quota", used, limit });
 
   const wantStream = action === "chat" && body.stream === true;
-  const ask = (chosen: string) =>
-    fetch(`${base}/chat/completions`, {
+  const ask = (endpoint: Endpoint, model: string) =>
+    fetch(`${endpoint.base}/chat/completions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${endpoint.apiKey}`, "Content-Type": "application/json", ...endpoint.headers },
       body: JSON.stringify({
-        model: chosen,
+        model,
         messages,
-        temperature: action === "chat" ? 0.45 : 0.2,
-        max_completion_tokens: action === "chat" ? 1400 : 2400,
+        temperature: action === "chat" ? 0.4 : 0.2,
+        [endpoint.tokenParam]: action === "chat" ? 2000 : 2400,
         ...(wantStream ? { stream: true } : {}),
       }),
     });
 
-  // The configured model first, then the known good ones, then whatever
-  // the service says it serves. A model that answered is remembered.
-  // A model that is only busy (429: its tokens-per-minute bucket is spent)
-  // is skipped for this one request — each model has its own bucket — and
-  // not forgotten; when every model is busy, the request waits the moment
-  // the service asks for, once, and tries the first again.
-  const candidates = [...new Set([configured, ...FALLBACK_MODELS])];
+  /**
+   * Every service, every model, until one answers. A model the service no
+   * longer has is skipped; a service that is busy, out of quota or broken is
+   * left for the next request. Only when nothing at all answered is the
+   * first service asked once more, after the pause it asked for — that is
+   * the case where waiting a moment is the whole fix.
+   */
   let response: Response | null = null;
-  let model = configured;
-  let busySeen = false;
-  const gone = (status: number) => status === 404 || status === 400;
-  const busy = (status: number) => status === 429;
+  let endpoint: Endpoint | null = null;
+  let model = "";
+  let retryAfterMs = 0;
+  const failures: string[] = [];
   try {
-    for (const candidate of candidates) {
-      model = candidate;
-      response = await ask(candidate);
-      if (response.ok) break;
-      if (busy(response.status)) {
-        busySeen = true;
-        continue;
+    outer: for (const service of services) {
+      let discovered = false;
+      for (let index = 0; index < service.models.length + 1; index += 1) {
+        const candidate = index < service.models.length ? service.models[index] : null;
+        if (candidate === null) {
+          // Every known name is gone; ask the service what it does serve.
+          if (discovered) break;
+          discovered = true;
+          const found = await discoverModel(service);
+          if (!found || service.models.includes(found)) break;
+          model = found;
+        } else {
+          model = candidate;
+        }
+        const attempt = await ask(service, model).catch(() => null);
+        if (!attempt) {
+          failures.push(`${service.id}: לא נענה`);
+          continue;
+        }
+        if (attempt.ok) {
+          response = attempt;
+          endpoint = service;
+          break outer;
+        }
+        const detail = (await attempt.text().catch(() => "")).slice(0, 200);
+        failures.push(`${service.id}/${model}: ${attempt.status} ${detail.slice(0, 90)}`);
+        if (BUSY(attempt.status)) {
+          const match = /try again in ([\d.]+)\s*(ms|s)/i.exec(detail);
+          if (match && !retryAfterMs) retryAfterMs = Math.min(8000, Number(match[1]) * (match[2] === "ms" ? 1 : 1000));
+          // Another model on the same service has its own bucket; after that,
+          // the next service.
+          continue;
+        }
+        if (BAD_KEY(attempt.status)) break;
+        if (GONE(attempt.status)) continue;
+        break;
       }
-      if (!gone(response.status)) break;
     }
-    if (response && gone(response.status) && !busySeen) {
-      const found = await discoverModel(base, apiKey);
-      if (found && !candidates.includes(found)) {
-        model = found;
-        response = await ask(found);
+
+    if (!response && services.length) {
+      // Everything was busy at once. The services tell us how long to wait.
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs || 1500));
+      const first = services[0];
+      const attempt = await ask(first, first.models[0] ?? "").catch(() => null);
+      if (attempt?.ok) {
+        response = attempt;
+        endpoint = first;
+        model = first.models[0] ?? "";
+      } else if (attempt) {
+        failures.push(`${first.id}: ${attempt.status} (גם אחרי המתנה)`);
+        if (BUSY(attempt.status)) {
+          console.error("language models unavailable:", failures.join(" | "));
+          return json(502, { error: "provider_busy" });
+        }
+        if (BAD_KEY(attempt.status)) {
+          console.error("language models unavailable:", failures.join(" | "));
+          return json(502, { error: "provider_key" });
+        }
       }
-    }
-    if (response && (busy(response.status) || (busySeen && gone(response.status)))) {
-      const detail = await response.text().catch(() => "");
-      const match = /try again in ([\d.]+)(ms|s)/i.exec(detail);
-      const wait = match ? Math.min(8000, Number(match[1]) * (match[2] === "ms" ? 1 : 1000)) : 2000;
-      console.warn("language models busy; waiting", wait, "ms");
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      model = configured;
-      response = await ask(configured);
     }
   } catch (caught) {
     console.error("language model unreachable", caught);
     return json(502, { error: "provider_unreachable" });
   }
-  if (!response) return json(502, { error: "provider_unreachable" });
-  if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).slice(0, 300);
-    console.error("language model refused", response.status, detail);
-    if (response.status === 401 || response.status === 403) return json(502, { error: "provider_key" });
-    if (response.status === 429) return json(502, { error: "provider_busy" });
-    return json(502, { error: "provider_error", status: response.status });
+
+  if (!response || !endpoint) {
+    console.error("language models unavailable:", failures.join(" | "));
+    return json(502, { error: failures.some((item) => /: 40[13]/.test(item)) ? "provider_key" : "provider_unreachable" });
   }
-  if (model !== configured && !busySeen) {
+  // The model that answered is where the next request starts.
+  if (model && setting("AI_MODEL") !== model) {
     await admin.rpc("stt_set_setting", { setting_key: "AI_MODEL", setting_value: model }).catch(() => undefined);
   }
+  if (failures.length) console.warn(`answered by ${endpoint.id}/${model} after:`, failures.join(" | "));
 
   if (wantStream && response.body) {
     // Tokens flow straight through as they arrive; the usage is counted
@@ -275,6 +538,7 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache",
         "X-Model": model,
+        "X-Provider": endpoint.id,
       },
     });
   }
@@ -283,15 +547,13 @@ Deno.serve(async (req: Request) => {
     choices?: { message?: { content?: string } }[];
     usage?: { total_tokens?: number };
   };
-  const raw = parsed.choices?.[0]?.message?.content?.trim() ?? "";
-  const { text, tools } = action === "chat" ? extractTools(raw) : { text: raw, tools: [] };
-  const tokens = Number(parsed.usage?.total_tokens) || Math.ceil(raw.length / 3);
+  const text = parsed.choices?.[0]?.message?.content?.trim() ?? "";
+  const tokens = Number(parsed.usage?.total_tokens) || Math.ceil(text.length / 3);
   const total = await recordUsage(admin, user.id, "ai", tokens);
   return json(200, {
     text: text || (action === "chat" ? "לא הצלחתי להכין תשובה. נסה לנסח שוב." : ""),
-    tools,
-    action: tools[0] ? { type: "navigate", route: tools[0] } : null,
     model,
+    provider: endpoint.id,
     tokens,
     used: total,
     limit,

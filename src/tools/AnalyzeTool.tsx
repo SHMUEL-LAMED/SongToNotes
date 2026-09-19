@@ -10,6 +10,7 @@ import {
   type AudioKey,
   type AudioTempo,
 } from "../lib/dsp";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -152,8 +153,8 @@ export function AnalyzeTool({ initial = null }: Props) {
   const chromaMax = analysis ? Math.max(...analysis.key.chroma, 0.0001) : 1;
 
   const saveAnalysis = () => {
-    if (!audio || !fresh) return;
-    void saving.save({
+    if (!audio || !fresh) return Promise.resolve(null);
+    return saving.save({
       kind: "analysis",
       title: audio.file.name.replace(/\.[^/.]+$/, ""),
       sourceName: audio.file.name,
@@ -174,6 +175,44 @@ export function AnalyzeTool({ initial = null }: Props) {
       },
     });
   };
+
+  useAssistantTool("analyze", {
+    state: () =>
+      `מזהה קצב וסולם: ${audio ? `השיר „${audio.file.name}”` : showingSaved ? `ניתוח שמור של „${restored.title}”` : "לא נבחר שיר (רק הגולש בוחר קובץ)"}; ${
+        busy
+          ? "מנתח עכשיו"
+          : analysis
+            ? `${Math.round(analysis.tempo.bpm)} BPM (${confidenceLabel(analysis.tempo.confidence)}), ${keyLabel(analysis.key)} (${confidenceLabel(analysis.key.confidence)})${relative ? `, סולם יחסי ${keyLabel(relative)}` : ""}, Camelot ${camelot(analysis.key)}, עוצמה ממוצעת ${Math.round(analysis.loudness * 100)}%, משך ${formatTime(shownDuration)}`
+            : "אין ניתוח"
+      }.`,
+    handlers: {
+      "analyze.read": () => {
+        if (!analysis) return { ok: false, message: "אין ניתוח; הגולש צריך לבחור שיר" };
+        return {
+          ok: true,
+          message: `${Math.round(analysis.tempo.bpm)} BPM, ${keyLabel(analysis.key)}`,
+          data: {
+            bpm: Math.round(analysis.tempo.bpm),
+            bpmAlternatives: analysis.tempo.bpm > 0 ? [Math.round(analysis.tempo.bpm / 2), Math.round(analysis.tempo.bpm * 2)] : [],
+            tempoConfidence: Number(analysis.tempo.confidence.toFixed(2)),
+            key: keyLabel(analysis.key),
+            keyHebrew: HEBREW_NAMES[analysis.key.tonicPitchClass],
+            keyConfidence: Number(analysis.key.confidence.toFixed(2)),
+            relativeKey: relative ? keyLabel(relative) : null,
+            camelot: camelot(analysis.key),
+            loudness: Math.round(analysis.loudness * 100),
+            duration: Number(shownDuration.toFixed(1)),
+            chroma: analysis.key.chroma.map((value, index) => ({ note: NOTE_NAMES[index], weight: Number(value.toFixed(3)) })),
+          },
+        };
+      },
+      "analyze.save": async () => {
+        if (!audio || !fresh) return { ok: false, message: "אין ניתוח טרי לשמור" };
+        const saved = await saveAnalysis();
+        return saved ? { ok: true, message: "הניתוח נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body analyze-tool">
@@ -288,7 +327,7 @@ export function AnalyzeTool({ initial = null }: Props) {
             {audio && fresh && (
               <SaveButton
                 state={saving.state}
-                onSave={saveAnalysis}
+                onSave={() => void saveAnalysis()}
                 label="שמור את הניתוח"
                 message={saving.message}
               />

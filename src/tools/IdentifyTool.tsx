@@ -5,6 +5,7 @@ import { AiError, identifyAvailability, identifySong, type Identification } from
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
 
 const CLIP_SECONDS = 12;
@@ -123,6 +124,37 @@ export function IdentifyTool() {
       setBusy(null);
     }
   };
+
+  useAssistantTool("identify", {
+    state: () =>
+      `מזהה שיר: ${!user ? "הגולש לא מחובר (הזיהוי דורש חשבון)" : configured === false ? "השירות לא הופעל באתר" : recording ? `מאזין (${Math.ceil(CLIP_SECONDS - seconds)} שניות נותרו)` : (busy ?? "מוכן להאזין")}${
+        result ? (result.found ? `; זוהה לאחרונה: „${result.title}” של ${result.artist}${result.album ? ` (${result.album})` : ""}` : "; הניסיון האחרון לא זיהה שיר") : ""
+      }.`,
+    handlers: {
+      "identify.listen": async ({ on }) => {
+        if (!user) return { ok: false, message: "הזיהוי דורש חשבון מחובר" };
+        if (on) {
+          if (recording) return { ok: false, message: "כבר מאזין" };
+          if (busy) return { ok: false, message: busy };
+          if (!isRecordingSupported()) return { ok: false, message: "הדפדפן הזה לא תומך בהקלטה" };
+          await startListening();
+          return { ok: true, message: `מאזין ${CLIP_SECONDS} שניות למה שמתנגן; התוצאה תופיע על המסך` };
+        }
+        if (!recording) return { ok: false, message: "לא מאזין כרגע" };
+        await stopListening();
+        return { ok: true, message: "ההאזנה נעצרה והקטע נשלח לזיהוי" };
+      },
+      "identify.read": () => {
+        if (!result) return { ok: false, message: "עדיין לא היה זיהוי" };
+        if (!result.found) return { ok: true, message: "לא זוהה שיר בניסיון האחרון", data: { found: false } };
+        return {
+          ok: true,
+          message: `${result.title} — ${result.artist}`,
+          data: { found: true, title: result.title, artist: result.artist, album: result.album, releaseDate: result.releaseDate, links: result.links },
+        };
+      },
+    },
+  });
 
   return (
     <section className="tool-body identify-tool">

@@ -103,11 +103,20 @@ export function transformText(
   });
 }
 
+/** What the page tells the model about itself before each reply. */
+export type ChatContext = {
+  /** A few lines about what is on screen, from the mounted tools. */
+  state?: string;
+  /** The actions the site offers, as the model reads them; only in execute mode. */
+  catalog?: string;
+};
+
 export type ChatOptions = {
   /** The tool the visitor is looking at, so the answer can be about it. */
   tool?: string | null;
   detailed?: boolean;
   mode?: AssistantMode;
+  context?: ChatContext;
   signal?: AbortSignal;
 };
 
@@ -116,7 +125,7 @@ export function chat(messages: ChatMessage[], options: ChatOptions = {}) {
   return call<AiReply & { tools?: string[] }>("ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false, mode: options.mode ?? "question" }),
+    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false, mode: options.mode ?? "question", context: options.context }),
     signal: options.signal,
   });
 }
@@ -147,6 +156,7 @@ export async function chatStream(
         tool: options.tool ?? undefined,
         detailed: options.detailed ?? false,
         mode: options.mode ?? "question",
+        context: options.context,
         stream: true,
       }),
       signal: options.signal,

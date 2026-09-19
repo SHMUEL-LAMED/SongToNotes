@@ -8,6 +8,7 @@ import { decodeAudioFile, formatTime } from "../lib/audio";
 import { convertAudio } from "../lib/convert";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 
 const MAX_BYTES = 800 * 1024 * 1024;
@@ -69,8 +70,9 @@ export function VideoTool() {
     }
   };
 
-  const run = async () => {
-    if (!extracted || busy) return;
+  /** Resolves with the audio file, or null when it failed. */
+  const run = async (): Promise<File | null> => {
+    if (!extracted || busy) return null;
     setBusy({ message: "מתחיל…", fraction: 0 });
     setError(null);
     try {
@@ -84,16 +86,18 @@ export function VideoTool() {
         if (previous) URL.revokeObjectURL(previous.url);
         return { file, url: URL.createObjectURL(file), format };
       });
+      return file;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "החילוץ נכשל.");
+      return null;
     } finally {
       setBusy(null);
     }
   };
 
   const save = () => {
-    if (!result || !extracted) return;
-    void saving.save(
+    if (!result || !extracted) return Promise.resolve(null);
+    return saving.save(
       {
         kind: "convert",
         title: result.file.name,
@@ -113,6 +117,46 @@ export function VideoTool() {
     { id: "chords", label: "לאקורדים", note: "אקורדים לגיטרה", icon: Guitar },
     { id: "convert", label: "להמרה", note: "קצב, ערוצים, איכות", icon: ArrowLeftRight },
   ];
+
+  useAssistantTool("video", {
+    state: () =>
+      `וידאו לאודיו: ${extracted ? `הסרטון „${extracted.file.name}” (${formatTime(extracted.buffer.duration)}, ${formatBytes(extracted.file.size)})` : "לא נבחר סרטון (רק הגולש בוחר קובץ)"}; פורמט יעד ${format.toUpperCase()}; ${
+        busy ? `מחלץ עכשיו (${Math.round(busy.fraction * 100)}%)` : result ? `יש קובץ מוכן: ${result.file.name} (${formatBytes(result.file.size)})` : "אין קובץ עדיין"
+      }.`,
+    handlers: {
+      "video.read": () => ({
+        ok: true,
+        message: extracted ? (result ? "יש קובץ מוכן" : "הסרטון נטען") : "אין סרטון",
+        data: { video: extracted?.file.name ?? null, duration: extracted ? Number(extracted.buffer.duration.toFixed(1)) : null, format, result: result ? { name: result.file.name, bytes: result.file.size } : null, busy: Boolean(busy) },
+      }),
+      "video.set": ({ format: next }) => {
+        if (next !== "mp3" && next !== "wav") return { ok: false, message: "format הוא mp3 או wav" };
+        setFormat(next);
+        return { ok: true, message: `פורמט ${next.toUpperCase()}` };
+      },
+      "video.run": async () => {
+        if (!extracted) return { ok: false, message: "אין סרטון; הגולש צריך לבחור קובץ" };
+        if (busy) return { ok: false, message: "כבר מחלץ" };
+        const file = await run();
+        return file ? { ok: true, message: `השמע חולץ: ${file.name} (${formatBytes(file.size)})` } : { ok: false, message: "החילוץ נכשל" };
+      },
+      "video.download": () => {
+        if (!result) return { ok: false, message: "אין קובץ; video.run מחלץ" };
+        downloadFile(result.file, result.file.name, result.file.type);
+        return { ok: true, message: `${result.file.name} ירד` };
+      },
+      "video.save": async () => {
+        if (!result) return { ok: false, message: "אין קובץ; video.run מחלץ" };
+        const saved = await save();
+        return saved ? { ok: true, message: "הקובץ נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "video.sendTo": ({ tool }) => {
+        if (!result) return { ok: false, message: "אין קובץ; video.run מחלץ" };
+        void handOffTo(String(tool), result.file, "השמע מהסרטון");
+        return { ok: true, message: `השמע נשלח לכלי ${String(tool)}` };
+      },
+    },
+  });
 
   return (
     <section className="tool-body video-tool">
@@ -258,7 +302,7 @@ export function VideoTool() {
                     );
                   })}
                 </div>
-                <SaveButton state={saving.state} onSave={save} label="שמור את הקובץ" message={saving.message} />
+                <SaveButton state={saving.state} onSave={() => void save()} label="שמור את הקובץ" message={saving.message} />
               </div>
             )}
           </>
