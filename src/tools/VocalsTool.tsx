@@ -77,8 +77,9 @@ export function VocalsTool({ initial = null }: Props) {
   const { user } = useAuth();
   const separation = useSeparation(context);
   const aiAbortRef = useRef<AbortController | null>(null);
-  // Set when the server has no separation key yet, so the browser path is offered.
-  const [serverMissing, setServerMissing] = useState(false);
+  // `true` means the free on-device Demucs model is used. `null` is while the
+  // very small availability check is still pending.
+  const [serverMissing, setServerMissing] = useState<boolean | null>(null);
   // Simple: the voice or the backing track. Pro: every part the model finds,
   // each on its own fader, mixed live and rendered together.
   const [mode, setMode] = useState<"simple" | "pro">(initial?.payload.mode === "pro" ? "pro" : "simple");
@@ -111,11 +112,18 @@ export function VocalsTool({ initial = null }: Props) {
   useEffect(() => {
     stemsPlayerRef.current?.setTracks(stems?.tracks ?? []);
   }, [stems]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void separationAvailability(controller.signal)
+      .then(({ configured }) => setServerMissing(!configured))
+      .catch(() => setServerMissing(true));
+    return () => controller.abort();
+  }, []);
   // The network is fetched only once the visitor has chosen the browser path:
   // it is 180MB, and the server path needs none of it.
   useEffect(() => {
-    if (serverMissing) prefetchSeparationModel();
-  }, [serverMissing]);
+    if (audio && serverMissing === true) prefetchSeparationModel();
+  }, [audio, serverMissing]);
 
   const runFast = separation.run;
   const settingsKey = audio
@@ -691,6 +699,12 @@ export function VocalsTool({ initial = null }: Props) {
                 תוצאת AI. שינוי ההגדרות יחזיר להפרדה מהירה.
               </p>
             )}
+            {!usedAi && result && !wasMono && (
+              <p className="engine-note is-slow">
+                זו תצוגה מהירה המבוססת על מיקום השירה בסטריאו. לתוצאה שמפרידה באמת בין הקול
+                למוזיקה, לחץ על הפרדה מלאה עם AI.
+              </p>
+            )}
             {wasMono && !usedAi && (
               <p className="engine-note is-slow">
                 תוצאת ההפרדה חלקית.
@@ -707,8 +721,11 @@ export function VocalsTool({ initial = null }: Props) {
                     <Sparkles size={16} /> הפרדה מלאה עם AI
                   </h3>
                   <p>
-                    נעשית בשרת של האתר — אין מה להוריד או להתקין, וזה עובד גם בטלפון. לוקח בדרך
-                    כלל כדקה.{!user ? " צריך להתחבר לחשבון." : ""}
+                    {serverMissing === true
+                      ? "מודל Demucs אמיתי מפריד את הקול, התופים, הבס ושאר המוזיקה בדפדפן. בפעם הראשונה יורדים כ־180MB; כדאי להשאיר את הכרטיסייה פתוחה. אין צורך להתחבר."
+                      : serverMissing === false
+                        ? `נעשית בשרת של האתר ועובדת גם בטלפון. לוקח בדרך כלל כדקה.${!user ? " צריך להתחבר לחשבון." : ""}`
+                        : "בודק את מנוע ההפרדה הזמין…"}
                   </p>
                 </div>
               </div>
@@ -724,9 +741,9 @@ export function VocalsTool({ initial = null }: Props) {
                     ? "הפק אינסטרומנטלי עם AI"
                     : "הפק שירה בלבד עם AI"}
                 </button>
-                {serverMissing && !aiBusy && (
+                {serverMissing === true && !aiBusy && aiStatus?.includes("נכשלה") && (
                   <button className="link-button" type="button" onClick={runAiInBrowser} disabled={busy}>
-                    <Cpu size={14} /> הפרד בדפדפן במקום (הורדה חד־פעמית של 180MB)
+                    <Cpu size={14} /> נסה שוב את מודל ה־AI בדפדפן
                   </button>
                 )}
                 {aiBusy && (
