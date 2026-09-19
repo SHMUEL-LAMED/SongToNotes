@@ -38,6 +38,7 @@ import {
   snapToPhrase,
   type SongSections,
 } from "../lib/structure";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useRenderedAudio } from "../lib/useRenderedAudio";
 import { encodeWav } from "../lib/wav";
 
@@ -77,6 +78,22 @@ export function RingtoneTool() {
   // Fetched in the background from the moment the tool opens, so the
   // instrumental button later does not begin with a long first-time wait.
   useEffect(() => prefetchSeparationModel(), []);
+
+  // Until a song is chosen every ringtone action has the same answer; the
+  // editor below takes over once it is on screen.
+  const noSong = () => ({ ok: false, message: "לא נבחר שיר; רק הגולש יכול לבחור קובץ" });
+  useAssistantTool("ringtone", {
+    state: () => (audio ? null : "יצירת צלצול: לא נבחר שיר (רק הגולש בוחר קובץ)."),
+    handlers: {
+      "ringtone.read": () => ({ ok: true, message: "לא נבחר שיר", data: { file: null } }),
+      "ringtone.set": noSong,
+      "ringtone.section": noSong,
+      "ringtone.snap": noSong,
+      "ringtone.instrumental": noSong,
+      "ringtone.download": noSong,
+      "ringtone.save": noSong,
+    },
+  });
 
   return (
     <section className="tool-body ringtone-tool">
@@ -369,8 +386,10 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
         () => setSaved((current) => (current.key === key ? { ...current, state: "idle" } : current)),
         3200,
       );
+      return true;
     } catch {
       setSaved({ key, state: "failed", message: "לא הצלחנו לשמור. נסה שוב." });
+      return false;
     }
   };
 
@@ -380,6 +399,100 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
     downloadFile(file, file.name, "audio/wav");
     void saveToProfile(file);
   };
+
+  useAssistantTool("ringtone", {
+    state: () =>
+      `יצירת צלצול מתוך „${audio.file.name}” (${formatTime(duration)}): הקטע ${formatTime(range.start)}–${formatTime(range.end)} (${Math.round(length)} שניות${length > IPHONE_LIMIT ? ", ארוך מדי לאייפון" : ""})${
+        sections
+          ? `; זוהו: פזמון ב־${formatTime(sections.chorus)}, בית ב־${formatTime(sections.verse)}, קטע מוזיקלי ב־${formatTime(sections.instrumental)}${activeSection ? ` (נבחר: ${SECTION_LABELS[activeSection].title})` : ""}`
+          : "; עדיין מחפש את הפזמון"
+      }; כניסה רכה ${fadeIn.toFixed(1)} ש׳, יציאה רכה ${fadeOut.toFixed(1)} ש׳, עוצמה ${gain}%${normalize ? ", איזון עוצמה" : ""}${useInstrumental ? "; נחתך מהגרסה האינסטרומנטלית" : instrumental ? "; יש גרסה אינסטרומנטלית מוכנה" : ""}${aiBusy ? `; מפיק גרסה אינסטרומנטלית (${aiProgress}%)` : ""}.`,
+    handlers: {
+      "ringtone.read": () => ({
+        ok: true,
+        message: `${formatTime(range.start)}–${formatTime(range.end)}`,
+        data: {
+          file: audio.file.name,
+          duration: Number(duration.toFixed(1)),
+          start: Number(range.start.toFixed(1)),
+          end: Number(range.end.toFixed(1)),
+          length: Number(length.toFixed(1)),
+          sections: sections ? { chorus: Number(sections.chorus.toFixed(1)), verse: Number(sections.verse.toFixed(1)), instrumental: Number(sections.instrumental.toFixed(1)) } : null,
+          fadeIn,
+          fadeOut,
+          gain,
+          normalize,
+          instrumental: useInstrumental,
+        },
+      }),
+      "ringtone.set": ({ start, end, length: nextLength, fadeIn: nextFadeIn, fadeOut: nextFadeOut, gain: nextGain, normalize: nextNormalize }) => {
+        const done: string[] = [];
+        if (typeof start === "number" || typeof end === "number") {
+          const from = Math.max(0, Math.min(duration - MIN_LENGTH, typeof start === "number" ? start : range.start));
+          const wanted = typeof nextLength === "number" ? Math.max(MIN_LENGTH, Math.min(MAX_LENGTH, nextLength)) : length;
+          const to = typeof end === "number" ? Math.max(from + MIN_LENGTH, Math.min(duration, end)) : Math.min(duration, from + wanted);
+          setTrim({ start: from, end: to });
+          setActiveSection(null);
+          setSnapNote(null);
+          done.push(`הקטע ${formatTime(from)}–${formatTime(to)}`);
+        } else if (typeof nextLength === "number") {
+          const clamped = Math.max(MIN_LENGTH, Math.min(MAX_LENGTH, Math.round(nextLength)));
+          setLength(clamped);
+          done.push(`אורך ${clamped} שניות`);
+        }
+        if (typeof nextFadeIn === "number") {
+          const clamped = Math.max(0, Math.min(5, Math.round(nextFadeIn * 10) / 10));
+          setFadeIn(clamped);
+          done.push(`כניסה רכה ${clamped} ש׳`);
+        }
+        if (typeof nextFadeOut === "number") {
+          const clamped = Math.max(0, Math.min(5, Math.round(nextFadeOut * 10) / 10));
+          setFadeOut(clamped);
+          done.push(`יציאה רכה ${clamped} ש׳`);
+        }
+        if (typeof nextGain === "number") {
+          const clamped = Math.max(20, Math.min(200, Math.round(nextGain)));
+          setGain(clamped);
+          done.push(`עוצמה ${clamped}%`);
+        }
+        if (typeof nextNormalize === "boolean") {
+          setNormalize(nextNormalize);
+          done.push(nextNormalize ? "איזון עוצמה פועל" : "בלי איזון עוצמה");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "ringtone.section": ({ section }) => {
+        if (!sections) return { ok: false, message: "הקטעים עדיין מזוהים; נסה שוב בעוד רגע" };
+        const kind = section as SectionKind;
+        pickSection(kind);
+        return { ok: true, message: `${SECTION_LABELS[kind].title} נבחר (מ־${formatTime(sections[kind])})` };
+      },
+      "ringtone.snap": () => {
+        snapNow();
+        return { ok: true, message: "הקטע הותאם להתחלה ולסיום טבעיים" };
+      },
+      "ringtone.instrumental": () => {
+        if (instrumental) {
+          setUseInstrumental(true);
+          return { ok: true, message: "הצלצול נחתך מהגרסה האינסטרומנטלית" };
+        }
+        if (aiBusy) return { ok: false, message: "כבר מפיק גרסה אינסטרומנטלית" };
+        void makeInstrumental();
+        return { ok: true, message: "ההפקה התחילה ברקע; בפעם הראשונה זה יכול לקחת כמה דקות, וההתקדמות מוצגת על המסך" };
+      },
+      "ringtone.download": () => {
+        if (!rendered) return { ok: false, message: "הצלצול עדיין לא מוכן; נסה שוב בעוד רגע" };
+        exportWav();
+        return { ok: true, message: "קובץ ה־WAV ירד ונשמר באזור האישי" };
+      },
+      "ringtone.save": async () => {
+        const file = buildFile();
+        if (!file) return { ok: false, message: "הצלצול עדיין לא מוכן" };
+        const saved = await saveToProfile(file);
+        return saved ? { ok: true, message: "הצלצול נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   const tooLongForIphone = length > IPHONE_LIMIT;
 

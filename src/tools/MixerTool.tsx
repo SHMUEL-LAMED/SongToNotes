@@ -8,6 +8,7 @@ import { buildPeaks, decodeAudioFile, formatTime, type TrimRange } from "../lib/
 import { downloadFile, safeFilename } from "../lib/export";
 import { handOffTo, hasHandoff, takeHandoffFiles } from "../lib/handoff";
 import { MixPlayer, audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
@@ -150,8 +151,9 @@ export function MixerTool({ initial = null }: Props) {
     }
   };
 
-  const render = async () => {
-    if (!tracks.length || rendering) return;
+  /** Resolves with the rendered file, or null when there was nothing to render or it failed. */
+  const render = async (): Promise<File | null> => {
+    if (!tracks.length || rendering) return null;
     setRendering(true);
     setError(null);
     try {
@@ -163,16 +165,18 @@ export function MixerTool({ initial = null }: Props) {
         if (previous) URL.revokeObjectURL(previous.url);
         return { file, url: URL.createObjectURL(file) };
       });
+      return file;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "הרינדור נכשל.");
+      return null;
     } finally {
       setRendering(false);
     }
   };
 
   const save = () => {
-    if (!result) return;
-    void saving.save(
+    if (!result) return Promise.resolve(null);
+    return saving.save(
       {
         kind: "mix",
         title: result.file.name.replace(/\.wav$/, ""),
@@ -184,6 +188,106 @@ export function MixerTool({ initial = null }: Props) {
   };
 
   const anySolo = tracks.some((track) => track.solo);
+
+  /** A track by its number (1 is the first) or by its name. */
+  const findTrack = (key: unknown) => {
+    const raw = String(key).trim();
+    const index = Number(raw);
+    if (Number.isInteger(index) && index >= 1 && index <= tracks.length) return tracks[index - 1];
+    return tracks.find((track) => track.name === raw) ?? tracks.find((track) => track.name.toLowerCase().includes(raw.toLowerCase())) ?? null;
+  };
+  const trackList = () => tracks.map((track, index) => `${index + 1}. ${track.name}`).join(", ");
+  useAssistantTool("mixer", {
+    state: () =>
+      tracks.length
+        ? `מיקסר: ${tracks.length} ערוצים — ${tracks
+            .map((track, index) => `${index + 1}. „${track.name}” (${formatTime(track.buffer.duration)}, עוצמה ${Math.round(track.gain * 100)}%${track.pan ? `, פאן ${Math.round(track.pan * 100)}` : ""}${track.offset ? `, התחלה ${track.offset.toFixed(1)} ש׳` : ""}${track.muted ? ", מושתק" : ""}${track.solo ? ", סולו" : ""})`)
+            .join("; ")}; משך ${formatTime(duration)}${loop ? `, לולאה ${formatTime(loop.start)}–${formatTime(loop.end)}` : ""}${playing ? "; מנגן" : ""}${result ? "; יש מיקס מוכן להורדה" : ""}${rendering ? "; מרנדר" : ""}.`
+        : "מיקסר: אין ערוצים (רק הגולש מוסיף קבצים; הסרת השירה יכולה לשלוח לכאן ערוצים).",
+    handlers: {
+      "mixer.read": () => ({
+        ok: true,
+        message: tracks.length ? `${tracks.length} ערוצים` : "אין ערוצים",
+        data: {
+          tracks: tracks.map((track, index) => ({ index: index + 1, name: track.name, duration: Number(track.buffer.duration.toFixed(1)), gain: Math.round(track.gain * 100), pan: Math.round(track.pan * 100), muted: track.muted, solo: track.solo, offset: Number(track.offset.toFixed(2)) })),
+          duration: Number(duration.toFixed(1)),
+          loop,
+          playing,
+          hasMix: Boolean(result),
+        },
+      }),
+      "mixer.track": ({ track: key, gain, pan, muted, solo, offset, name }) => {
+        const track = findTrack(key);
+        if (!track) return { ok: false, message: tracks.length ? `אין ערוץ „${String(key)}”; יש: ${trackList()}` : "אין ערוצים" };
+        const changes: Partial<MixTrack> = {};
+        if (typeof gain === "number") changes.gain = Math.max(0, Math.min(1.5, gain / 100));
+        if (typeof pan === "number") changes.pan = Math.max(-1, Math.min(1, pan / 100));
+        if (typeof muted === "boolean") changes.muted = muted;
+        if (typeof solo === "boolean") changes.solo = solo;
+        if (typeof offset === "number") changes.offset = Math.max(0, Math.min(Math.max(1, Math.ceil(duration)), offset));
+        if (typeof name === "string" && name.trim()) changes.name = name.trim().slice(0, 60);
+        if (!Object.keys(changes).length) return { ok: false, message: "לא צוין מה לשנות" };
+        update(track.id, changes);
+        return { ok: true, message: `„${track.name}” עודכן` };
+      },
+      "mixer.remove": ({ track: key }) => {
+        const track = findTrack(key);
+        if (!track) return { ok: false, message: tracks.length ? `אין ערוץ „${String(key)}”; יש: ${trackList()}` : "אין ערוצים" };
+        setTracks((current) => current.filter((item) => item.id !== track.id));
+        setResult(null);
+        return { ok: true, message: `„${track.name}” הוסר` };
+      },
+      "mixer.transport": ({ command }) => {
+        const player = playerRef.current;
+        if (!tracks.length || !player) return { ok: false, message: "אין ערוצים" };
+        if (command === "play") {
+          if (!player.isPlaying) void player.play().then((started) => setPlaying(started));
+          return { ok: true, message: loop ? "מנגן בלולאה" : "מנגן את המיקס" };
+        }
+        if (command === "pause") {
+          player.pause();
+          setPlaying(false);
+          return { ok: true, message: "מושהה" };
+        }
+        player.stop();
+        setPlaying(false);
+        setPosition(0);
+        return { ok: true, message: "נעצר" };
+      },
+      "mixer.loop": ({ start, end }) => {
+        if (!tracks.length) return { ok: false, message: "אין ערוצים" };
+        if (typeof start !== "number" && typeof end !== "number") {
+          setLoop(null);
+          return { ok: true, message: "הלולאה בוטלה" };
+        }
+        const from = Math.max(0, Math.min(duration, typeof start === "number" ? start : 0));
+        const to = Math.max(from + 0.2, Math.min(duration, typeof end === "number" ? end : duration));
+        setLoop({ start: from, end: to });
+        return { ok: true, message: `לולאה ${formatTime(from)}–${formatTime(to)}` };
+      },
+      "mixer.render": async () => {
+        if (!tracks.length) return { ok: false, message: "אין ערוצים" };
+        if (rendering) return { ok: false, message: "כבר מרנדר" };
+        const file = await render();
+        return file ? { ok: true, message: `המיקס מוכן: ${file.name} (${formatBytes(file.size)})` } : { ok: false, message: "הרינדור נכשל" };
+      },
+      "mixer.download": () => {
+        if (!result) return { ok: false, message: "אין מיקס מוכן; mixer.render יוצר אותו" };
+        downloadFile(result.file, result.file.name, result.file.type);
+        return { ok: true, message: `${result.file.name} ירד` };
+      },
+      "mixer.save": async () => {
+        if (!result) return { ok: false, message: "אין מיקס מוכן; mixer.render יוצר אותו" };
+        const saved = await save();
+        return saved ? { ok: true, message: "המיקס נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "mixer.toConvert": () => {
+        if (!result) return { ok: false, message: "אין מיקס מוכן; mixer.render יוצר אותו" };
+        void handOffTo("convert", result.file, "המיקס");
+        return { ok: true, message: "המיקס נשלח להמרה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body mixer-tool">
@@ -339,7 +443,7 @@ export function MixerTool({ initial = null }: Props) {
                 )}
               </div>
               {result && <audio controls src={result.url} className="convert-preview" aria-label="האזנה למיקס" />}
-              <SaveButton state={saving.state} onSave={save} disabled={!result} label="שמור את המיקס" message={saving.message} />
+              <SaveButton state={saving.state} onSave={() => void save()} disabled={!result} label="שמור את המיקס" message={saving.message} />
             </div>
           </>
         )}

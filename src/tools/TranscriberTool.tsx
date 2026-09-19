@@ -44,6 +44,7 @@ import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
 import { moveTabFocus } from "../lib/tablist";
 import { alignOffset, estimateTempo } from "../lib/tempo";
 import type { DetectedNote } from "../lib/types";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useTranscriber } from "../lib/useTranscriber";
 import {
   loadSettings,
@@ -521,6 +522,165 @@ export function TranscriberTool({ initial }: Props) {
     },
     [],
   );
+
+  useAssistantTool("notes", {
+    state: () =>
+      `${[
+        `שיר לתווים: ${audio ? `הקובץ „${audio.file.name}” (${formatTime(audio.buffer.duration)})` : historyTitle ? `תוצאה שמורה „${historyTitle}” בלי קובץ השמע` : "לא נבחר קובץ (רק הגולש בוחר קובץ או מקליט; notes.demo טוען מנגינת דוגמה)"}${trim ? `, קטע מסומן ${formatTime(trim.start)}–${formatTime(trim.end)}` : ""}`,
+        `הגדרות: ${settings.mode === "melody" ? "מנגינה ראשית" : "כל התווים"}, מנוע ${settings.engine === "fast" ? "מהיר" : "מעמיק"}, רגישות ${settings.sensitivity}%, ניקוי הרמוניות ${Math.round(settings.harmonicCleanup * 100)}%, חלוקה ${settings.stepsPerBeat}, משקל ${settings.beatsPerMeasure}/4, טרנספוזיציה ${settings.transpose}`,
+        transcriber.isRunning || isStarting
+          ? `מנתח עכשיו (${transcriber.progress}%)`
+          : hasResults
+            ? `תוצאה: ${notes.length} תווים, ${Math.round(tempo.bpm)} BPM${bpmOverride ? " (ידני)" : ""}, סולם ${keyName(keySignature)}, ${formatTime(duration)}, ${score.measureCount} תיבות; תצוגה ${activeTab}; נגינה ${isPlaying ? "פועלת" : "עצורה"}, כלי ${instrument}`
+            : "אין תוצאה עדיין",
+      ].join("; ")}.`,
+    handlers: {
+      "notes.read": ({ limit }) => {
+        if (!hasResults) return { ok: false, message: "אין תווים עדיין" };
+        const count = Math.max(1, Math.min(400, typeof limit === "number" ? Math.round(limit) : 60));
+        return {
+          ok: true,
+          message: `${notes.length} תווים, ${Math.round(tempo.bpm)} BPM, ${keyName(keySignature)}`,
+          data: {
+            count: notes.length,
+            bpm: Math.round(tempo.bpm),
+            key: keyName(keySignature),
+            duration: Number(duration.toFixed(1)),
+            measures: score.measureCount,
+            notes: notes.slice(0, count).map((note) => ({ note: scientificName(note.midi + settings.transpose, keySignature.fifths), start: Number((note.start + analysisOffset).toFixed(2)), duration: Number(note.duration.toFixed(2)) })),
+            abc: abc.slice(0, 2000),
+          },
+        };
+      },
+      "notes.demo": async () => {
+        await loadDemo();
+        return { ok: true, message: "מנגינת הדוגמה נטענה; notes.run מנתח אותה" };
+      },
+      "notes.run": () => {
+        if (!audio) return { ok: false, message: "אין קובץ; הגולש צריך לבחור שיר או להקליט (או notes.demo)" };
+        if (transcriber.isRunning || isStarting) return { ok: false, message: "כבר מנתח" };
+        void startTranscription();
+        return { ok: true, message: "הניתוח התחיל ורץ ברקע; התוצאה תופיע על המסך" };
+      },
+      "notes.set": ({ mode, engine, sensitivity, harmonicCleanup, minDuration, stepsPerBeat, beatsPerMeasure, transpose, withChords, bpm }) => {
+        const done: string[] = [];
+        if (mode === "melody" || mode === "full") {
+          update("mode", mode);
+          done.push(mode === "melody" ? "מנגינה ראשית" : "כל התווים");
+        }
+        if (engine === "fast" || engine === "deep") {
+          update("engine", engine);
+          done.push(engine === "fast" ? "מנוע מהיר" : "מנוע מעמיק");
+        }
+        if (typeof sensitivity === "number") {
+          const clamped = Math.max(20, Math.min(90, Math.round(sensitivity)));
+          update("sensitivity", clamped);
+          done.push(`רגישות ${clamped}%`);
+        }
+        if (typeof harmonicCleanup === "number") {
+          const clamped = Math.max(0, Math.min(1, harmonicCleanup > 1 ? harmonicCleanup / 100 : harmonicCleanup));
+          update("harmonicCleanup", clamped);
+          done.push(`ניקוי הרמוניות ${Math.round(clamped * 100)}%`);
+        }
+        if (typeof minDuration === "number") {
+          const clamped = Math.max(0.02, Math.min(0.3, minDuration >= 1 ? minDuration / 1000 : minDuration));
+          update("minDuration", clamped);
+          done.push(`אורך תו מזערי ${Math.round(clamped * 1000)} מ״ש`);
+        }
+        if (typeof stepsPerBeat === "number") {
+          if (![1, 2, 3, 4, 8].includes(stepsPerBeat)) return { ok: false, message: "stepsPerBeat הוא 1, 2, 3, 4 או 8" };
+          update("stepsPerBeat", stepsPerBeat);
+          done.push(`חלוקה ${stepsPerBeat}`);
+        }
+        if (typeof beatsPerMeasure === "number") {
+          if (![2, 3, 4, 6].includes(beatsPerMeasure)) return { ok: false, message: "beatsPerMeasure הוא 2, 3, 4 או 6" };
+          update("beatsPerMeasure", beatsPerMeasure);
+          done.push(`משקל ${beatsPerMeasure}/4`);
+        }
+        if (typeof transpose === "number") {
+          const clamped = Math.max(-12, Math.min(12, Math.round(transpose)));
+          update("transpose", clamped);
+          done.push(`טרנספוזיציה ${clamped}`);
+        }
+        if (typeof withChords === "boolean") {
+          update("withChords", withChords);
+          done.push(withChords ? "עם אקורדים" : "בלי אקורדים");
+        }
+        if (typeof bpm === "number") {
+          if (bpm <= 0) {
+            setBpmOverride(0);
+            done.push("קצב אוטומטי");
+          } else {
+            const clamped = Math.max(40, Math.min(240, Math.round(bpm)));
+            setBpmOverride(clamped);
+            done.push(`${clamped} BPM`);
+          }
+          setBpmDraft("");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "notes.transport": async ({ command }) => {
+        if (!hasResults) return { ok: false, message: "אין תווים לנגן" };
+        if (command === "play") {
+          if (!isPlaying) await togglePlayback();
+          return { ok: true, message: "מנגן את התווים" };
+        }
+        if (command === "pause") {
+          if (isPlaying) await togglePlayback();
+          return { ok: true, message: "הנגינה מושהית" };
+        }
+        stopPlayback();
+        return { ok: true, message: "הנגינה נעצרה" };
+      },
+      "notes.playback": ({ instrument: nextInstrument, rate, volume: nextVolume, click, loop }) => {
+        const done: string[] = [];
+        if (typeof nextInstrument === "string") {
+          const found = INSTRUMENTS.find((item) => item.id === nextInstrument);
+          if (!found) return { ok: false, message: `אין כלי כזה; יש: ${INSTRUMENTS.map((item) => item.id).join(", ")}` };
+          setInstrument(found.id);
+          done.push(found.label);
+        }
+        if (typeof rate === "number") {
+          const clamped = Math.max(0.5, Math.min(1.5, rate));
+          setPlaybackRate(clamped);
+          done.push(`מהירות ${Math.round(clamped * 100)}%`);
+        }
+        if (typeof nextVolume === "number") {
+          setVolume(Math.max(0, Math.min(1, nextVolume / 100)));
+          done.push(`עוצמה ${Math.round(nextVolume)}%`);
+        }
+        if (typeof click === "boolean") {
+          setWithClick(click);
+          done.push(click ? "מטרונום פועל" : "מטרונום כבוי");
+        }
+        if (typeof loop === "boolean") {
+          if (loop && !trim) return { ok: false, message: "ללולאה צריך קטע מסומן בגל הקול; רק הגולש מסמן אותו" };
+          setLoopEnabled(loop);
+          done.push(loop ? "לולאה פועלת" : "לולאה כבויה");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "notes.tab": ({ tab }) => {
+        if (!hasResults) return { ok: false, message: "אין תוצאה להציג" };
+        setActiveTab(tab as Tab);
+        return { ok: true, message: tab === "sheet" ? "מוצגים התווים" : tab === "piano" ? "מוצג ה־Piano Roll" : "מוצגת רשימת התווים" };
+      },
+      "notes.download": ({ format }) => {
+        if (!hasResults) return { ok: false, message: "אין תוצאה להורדה" };
+        if (format === "print") {
+          printSheet(sheetSvgRef.current, title);
+          return { ok: true, message: "חלון ההדפסה נפתח" };
+        }
+        if (format === "svg" && !sheetSvgRef.current) return { ok: false, message: "לתמונת התווים צריך שלשונית התווים תהיה פתוחה (notes.tab sheet) ואז לנסות שוב" };
+        download(format as "midi" | "musicxml" | "abc" | "csv" | "svg");
+        return { ok: true, message: `קובץ ${String(format).toUpperCase()} ירד` };
+      },
+      "notes.reset": () => {
+        reset();
+        return { ok: true, message: "הקובץ והתוצאה נוקו; אפשר לבחור שיר חדש" };
+      },
+    },
+  });
 
   const supported = isAudioSupported();
   const combinedError = error ?? audioFile.error;

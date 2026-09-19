@@ -18,6 +18,7 @@ import {
   type Stats,
 } from "../lib/earTraining";
 import { NotePlayer } from "../lib/synth";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -120,8 +121,8 @@ export function EarTrainingTool({ initial = null }: Props) {
   useEffect(() => resetSave(), [resetSave, stats.asked, mode]);
 
   const saveSession = () => {
-    if (stats.asked === 0) return;
-    void saving.save({
+    if (stats.asked === 0) return Promise.resolve(null);
+    return saving.save({
       kind: "ear",
       title: `${MODE_LABELS[mode]} · ${LEVEL_LABELS[level]}`,
       summary: {
@@ -275,6 +276,83 @@ export function EarTrainingTool({ initial = null }: Props) {
   );
   const isRight = answered !== null && answered === question?.answer;
 
+  useAssistantTool("ear", {
+    state: () =>
+      `מאמן שמיעה: תרגיל ${MODE_LABELS[mode]}, רמה ${LEVEL_LABELS[level]}${mode === "intervals" ? `, מרווחים ${intervalStyle === "melodic" ? "בזה אחר זה" : "יחד"}` : ""}; ניקוד ${stats.correct}/${stats.asked} (${accuracy(stats)}%), רצף ${stats.streak}, שיא ${stats.best}; ${
+        question
+          ? answered
+            ? `השאלה האחרונה נענתה ${isRight ? "נכון" : `לא נכון (התשובה: ${correctChoice?.label ?? ""})`}`
+            : `שאלה פתוחה עם ${question.choices.length} תשובות: ${question.choices.map((choice, index) => `${index + 1}. ${choice.label}`).join(", ")}`
+          : "אין שאלה פתוחה"
+      }.`,
+    handlers: {
+      "ear.set": ({ mode: nextMode, level: nextLevel, style }) => {
+        const done: string[] = [];
+        if (nextMode === "intervals" || nextMode === "chords" || nextMode === "degrees") {
+          clearQuestion();
+          setMode(nextMode);
+          done.push(MODE_LABELS[nextMode]);
+        }
+        if (nextLevel === "easy" || nextLevel === "medium" || nextLevel === "hard") {
+          clearQuestion();
+          setLevel(nextLevel);
+          done.push(LEVEL_LABELS[nextLevel]);
+        }
+        if (style === "melodic" || style === "harmonic") {
+          clearQuestion();
+          setIntervalStyle(style);
+          done.push(style === "melodic" ? "בזה אחר זה" : "יחד");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "ear.start": () => {
+        const item = createQuestion({ mode, level, intervalStyle });
+        setQuestion(item);
+        setAnswered(null);
+        play(item);
+        return { ok: true, message: `השאלה מתנגנת. האפשרויות: ${item.choices.map((choice, index) => `${index + 1}. ${choice.label}`).join(", ")}` };
+      },
+      "ear.replay": () => {
+        if (!question) return { ok: false, message: "אין שאלה; ear.start מתחיל" };
+        play(question);
+        return { ok: true, message: "השאלה מתנגנת שוב" };
+      },
+      "ear.answer": ({ choice }) => {
+        if (!question) return { ok: false, message: "אין שאלה פתוחה; ear.start מתחיל" };
+        if (answered) return { ok: false, message: "השאלה כבר נענתה; ear.start לשאלה הבאה" };
+        const raw = String(choice).trim();
+        const index = Number(raw);
+        const picked =
+          Number.isInteger(index) && index >= 1 && index <= question.choices.length
+            ? question.choices[index - 1]
+            : (question.choices.find((item) => item.label === raw || item.id === raw) ?? question.choices.find((item) => item.label.includes(raw)));
+        if (!picked) return { ok: false, message: `לא זוהתה תשובה; האפשרויות: ${question.choices.map((item, at) => `${at + 1}. ${item.label}`).join(", ")}` };
+        answer(picked.id);
+        const right = picked.id === question.answer;
+        return { ok: true, message: right ? `נכון! ${picked.label}` : `לא נכון: ${picked.label}. התשובה הנכונה: ${correctChoice?.label ?? ""}` };
+      },
+      "ear.read": () => ({
+        ok: true,
+        message: `${stats.correct}/${stats.asked} נכונות`,
+        data: {
+          mode,
+          level,
+          stats: { asked: stats.asked, correct: stats.correct, accuracy: accuracy(stats), streak: stats.streak, best: stats.best },
+          question: question ? { choices: question.choices.map((item) => item.label), answered: answered !== null, correct: answered !== null ? (correctChoice?.label ?? null) : undefined } : null,
+        },
+      }),
+      "ear.resetScore": () => {
+        resetScore();
+        return { ok: true, message: `הניקוד של ${MODE_LABELS[mode]} אופס` };
+      },
+      "ear.save": async () => {
+        if (stats.asked === 0) return { ok: false, message: "עדיין לא נענו שאלות" };
+        const saved = await saveSession();
+        return saved ? { ok: true, message: "האימון נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
+
   return (
     <section className="tool-body ear-training" ref={rootRef}>
       <div className="tool-intro">
@@ -286,7 +364,7 @@ export function EarTrainingTool({ initial = null }: Props) {
           <p>{MODE_HINTS[mode]}</p>
         </div>
         <div className="tool-intro-side">
-          <SaveButton state={saving.state} onSave={saveSession} disabled={stats.asked === 0} label="שמור את האימון" message={saving.message} compact />
+          <SaveButton state={saving.state} onSave={() => void saveSession()} disabled={stats.asked === 0} label="שמור את האימון" message={saving.message} compact />
         </div>
       </div>
 

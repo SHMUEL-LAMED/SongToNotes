@@ -6,6 +6,7 @@ import { AiError, speakToFile } from "../lib/aiApi";
 import { useAuth } from "../lib/auth";
 import { downloadFile, safeFilename } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -119,8 +120,9 @@ export function TtsTool({ initial = null }: Props) {
     window.speechSynthesis.speak(utterance);
   };
 
-  const makeFile = async () => {
-    if (!text.trim() || busy) return;
+  /** Resolves with what went wrong, or null once the file is ready. */
+  const makeFile = async (): Promise<string | null> => {
+    if (!text.trim() || busy) return "אין טקסט, או שקובץ כבר נוצר";
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -128,15 +130,18 @@ export function TtsTool({ initial = null }: Props) {
     setError(null);
     try {
       const file = await speakToFile(text.trim(), { speed: rate, format: "mp3", signal: controller.signal });
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return "בוטל";
       const named = new File([file], `${safeFilename(text.trim().slice(0, 30) || "speech")}.mp3`, { type: file.type });
       setResult((previous) => {
         if (previous) URL.revokeObjectURL(previous.url);
         return { file: named, url: URL.createObjectURL(named), text: text.trim() };
       });
+      return null;
     } catch (caught) {
-      if (controller.signal.aborted) return;
-      setError(caught instanceof AiError || caught instanceof Error ? caught.message : "יצירת הקובץ נכשלה.");
+      if (controller.signal.aborted) return "בוטל";
+      const message = caught instanceof AiError || caught instanceof Error ? caught.message : "יצירת הקובץ נכשלה.";
+      setError(message);
+      return message;
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -146,8 +151,8 @@ export function TtsTool({ initial = null }: Props) {
   };
 
   const save = () => {
-    if (!result) return;
-    void saving.save(
+    if (!result) return Promise.resolve(null);
+    return saving.save(
       {
         kind: "tts",
         title: result.text.slice(0, 40),
@@ -157,6 +162,83 @@ export function TtsTool({ initial = null }: Props) {
       result.file,
     );
   };
+
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
+    setPaused(false);
+    setSpokenChars(0);
+  };
+
+  useAssistantTool("tts", {
+    state: () =>
+      `טקסט לדיבור: ${text.trim() ? `${text.length} תווים, מתחיל ב־„${text.slice(0, 160).replace(/\n/g, " ")}${text.length > 160 ? "…" : ""}”` : "התיבה ריקה"}; קול: ${chosen?.name ?? "ברירת מחדל"}, מהירות ${rate.toFixed(1)}, גובה ${pitch.toFixed(1)}${speaking ? (paused ? "; ההקראה מושהית" : "; מקריא כרגע") : ""}${result ? "; יש קובץ MP3 מוכן" : ""}${!user ? "; הגולש לא מחובר (קובץ מהשרת דורש חשבון)" : ""}.`,
+    handlers: {
+      "tts.write": ({ text: next }) => {
+        const clean = String(next).slice(0, MAX_CHARS);
+        setText(clean);
+        return { ok: true, message: `נכתבו ${clean.length} תווים` };
+      },
+      "tts.speak": ({ command }) => {
+        if (!supported) return { ok: false, message: "הדפדפן הזה לא תומך בהקראה" };
+        if (command === "play") {
+          if (!text.trim()) return { ok: false, message: "אין טקסט להקריא" };
+          speak();
+          return { ok: true, message: "ההקראה התחילה" };
+        }
+        if (command === "pause") {
+          if (!speaking) return { ok: false, message: "לא מקריא כרגע" };
+          window.speechSynthesis.pause();
+          setPaused(true);
+          return { ok: true, message: "ההקראה הושהתה" };
+        }
+        if (command === "resume") {
+          if (!speaking || !paused) return { ok: false, message: "אין הקראה מושהית" };
+          window.speechSynthesis.resume();
+          setPaused(false);
+          return { ok: true, message: "ההקראה ממשיכה" };
+        }
+        stopSpeaking();
+        return { ok: true, message: "ההקראה נעצרה" };
+      },
+      "tts.set": ({ rate: nextRate, pitch: nextPitch, voice }) => {
+        const done: string[] = [];
+        if (typeof nextRate === "number") {
+          setRate(Math.max(0.5, Math.min(2, Math.round(nextRate * 10) / 10)));
+          done.push(`מהירות ${nextRate}`);
+        }
+        if (typeof nextPitch === "number") {
+          setPitch(Math.max(0.5, Math.min(2, Math.round(nextPitch * 10) / 10)));
+          done.push(`גובה ${nextPitch}`);
+        }
+        if (typeof voice === "string" && voice.trim()) {
+          const needle = voice.trim().toLowerCase();
+          const found = sorted.find((item) => item.name.toLowerCase() === needle) ?? sorted.find((item) => item.name.toLowerCase().includes(needle) || item.lang.toLowerCase().startsWith(needle));
+          if (!found) return { ok: false, message: `אין קול כזה. קולות זמינים: ${sorted.slice(0, 12).map((item) => `${item.name} (${item.lang})`).join(", ")}` };
+          setVoiceName(found.name);
+          done.push(`קול ${found.name}`);
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "tts.makeFile": async () => {
+        if (!user) return { ok: false, message: "קובץ מהשרת דורש חשבון מחובר" };
+        if (!text.trim()) return { ok: false, message: "אין טקסט" };
+        const problem = await makeFile();
+        return problem ? { ok: false, message: problem } : { ok: true, message: "קובץ ה־MP3 מוכן להורדה" };
+      },
+      "tts.download": () => {
+        if (!result) return { ok: false, message: "עדיין אין קובץ; tts.makeFile יוצר אותו" };
+        downloadFile(result.file, result.file.name, result.file.type);
+        return { ok: true, message: `${result.file.name} ירד` };
+      },
+      "tts.save": async () => {
+        if (!result) return { ok: false, message: "עדיין אין קובץ; tts.makeFile יוצר אותו" };
+        const saved = await save();
+        return saved ? { ok: true, message: "ההקראה נשמרה באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "tts.read": () => ({ ok: true, message: "", data: { text, voice: chosen?.name ?? null, rate, pitch, hasFile: Boolean(result) } }),
+    },
+  });
 
   return (
     <section className="tool-body tts-tool">
@@ -253,18 +335,7 @@ export function TtsTool({ initial = null }: Props) {
                 {paused ? <Play size={19} /> : <Pause size={19} />} {paused ? "המשך" : "השהה"}
               </button>
             )}
-            <button
-              className="transport-button"
-              type="button"
-              onClick={() => {
-                window.speechSynthesis.cancel();
-                setSpeaking(false);
-                setPaused(false);
-                setSpokenChars(0);
-              }}
-              disabled={!speaking}
-              aria-label="עצור"
-            >
+            <button className="transport-button" type="button" onClick={stopSpeaking} disabled={!speaking} aria-label="עצור">
               <Square size={16} />
             </button>
           </div>
@@ -310,7 +381,7 @@ export function TtsTool({ initial = null }: Props) {
             )}
           </div>
           {result && <audio controls src={result.url} className="convert-preview" aria-label="האזנה להקראה" />}
-          <SaveButton state={saving.state} onSave={save} disabled={!result} label="שמור את ההקראה" message={saving.message} />
+          <SaveButton state={saving.state} onSave={() => void save()} disabled={!result} label="שמור את ההקראה" message={saving.message} />
         </div>
       </div>
     </section>

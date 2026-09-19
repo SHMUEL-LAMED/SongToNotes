@@ -43,6 +43,7 @@ import {
   type SampleWindow,
   type TranscriptSegment,
 } from "../lib/transcript";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -403,7 +404,7 @@ export function TranscriptTool({ initial = null }: Props) {
 
   /** Asks the model who said what; the lines come back prefixed and go into the text. */
   const labelSpeakers = async () => {
-    if (!segments.length || speakersBusy) return;
+    if (!segments.length || speakersBusy) return false;
     setSpeakersBusy(true);
     setAiError(null);
     try {
@@ -417,8 +418,10 @@ export function TranscriptTool({ initial = null }: Props) {
         setNotice("זיהוי הדוברים החזיר מספר שורות שונה; הוחלו רק השורות שהתאימו.");
       }
       setText(bare.map((line, index) => (lines[index] && lines[index].includes(line.slice(0, 12)) ? lines[index] : segments[index].text)).join("\n"));
+      return true;
     } catch (caught) {
       setAiError(caught instanceof AiError || caught instanceof Error ? caught.message : "זיהוי הדוברים נכשל.");
+      return false;
     } finally {
       setSpeakersBusy(false);
     }
@@ -455,8 +458,9 @@ export function TranscriptTool({ initial = null }: Props) {
     }
   };
 
-  const runAi = async (job: AiJob) => {
-    if (!text.trim() || aiBusy) return;
+  /** Resolves with the model's text, or null when it failed (the reason is on screen). */
+  const runAi = async (job: AiJob, targetLabel?: string): Promise<string | null> => {
+    if (!text.trim() || aiBusy) return null;
     aiAbortRef.current?.abort();
     const controller = new AbortController();
     aiAbortRef.current = controller;
@@ -464,15 +468,15 @@ export function TranscriptTool({ initial = null }: Props) {
     setAiError(null);
     try {
       const target = TRANSLATE_TO.find((item) => item.id === translateTo);
-      const reply = await transformText(job, text, {
-        language: job === "translate" ? target?.label : undefined,
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) return;
-      setAi({ job, text: reply.text, language: job === "translate" ? target?.label : undefined });
+      const language = job === "translate" ? (targetLabel ?? target?.label) : undefined;
+      const reply = await transformText(job, text, { language, signal: controller.signal });
+      if (controller.signal.aborted) return null;
+      setAi({ job, text: reply.text, language });
+      return reply.text;
     } catch (caught) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       setAiError(caught instanceof AiError || caught instanceof Error ? caught.message : "הפעולה נכשלה.");
+      return null;
     } finally {
       if (aiAbortRef.current === controller) {
         aiAbortRef.current = null;
@@ -503,8 +507,8 @@ export function TranscriptTool({ initial = null }: Props) {
   };
 
   const saveTranscript = () => {
-    if (!result || !segments.length) return;
-    void saving.save({
+    if (!result || !segments.length) return Promise.resolve(null);
+    return saving.save({
       kind: "transcript",
       title,
       sourceName: result.sourceName,
@@ -523,6 +527,108 @@ export function TranscriptTool({ initial = null }: Props) {
       },
     });
   };
+
+  useAssistantTool("transcript", {
+    state: () =>
+      `${[
+        `תמלול לטקסט: ${audio ? `הקלטה „${audio.file.name}” (${formatTime(audio.buffer.duration)})${trim ? `, קטע מסומן ${formatTime(trim.start)}–${formatTime(trim.end)}` : ""}` : "לא נבחרה הקלטה (רק הגולש יכול לבחור קובץ או להקליט)"}`,
+        `שפת הדיבור: ${languageLabel(language)}`,
+        busy
+          ? `מתמלל עכשיו (${overall}%)`
+          : result
+            ? `יש תמלול: ${words} מילים, ${segments.length} משפטים${result.duration ? `, ${formatTime(result.duration)}` : ""}; תחילתו: „${text.slice(0, 240).replace(/\n/g, " / ")}${text.length > 240 ? "…" : ""}”`
+            : "אין תמלול עדיין",
+        ai ? `יש תוצאת AI מסוג ${AI_LABELS[ai.job]}${ai.language ? ` (${ai.language})` : ""}` : "",
+        resume ? "יש תמלול שנעצר באמצע ואפשר להמשיך אותו" : "",
+        !user ? "הגולש לא מחובר — תמלול ועיבוד AI דורשים חשבון" : "",
+      ]
+        .filter(Boolean)
+        .join("; ")}.`,
+    handlers: {
+      "transcript.read": ({ from, chars }) => {
+        if (!text.trim()) return { ok: false, message: "אין תמלול" };
+        const start = Math.max(0, Math.min(text.length, typeof from === "number" ? Math.round(from) : 0));
+        const count = Math.max(200, Math.min(12_000, typeof chars === "number" ? Math.round(chars) : 6000));
+        return {
+          ok: true,
+          message: `${words} מילים, ${segments.length} משפטים`,
+          data: { text: text.slice(start, start + count), from: start, total: text.length, words, sentences: segments.length, language: result?.language ?? language },
+        };
+      },
+      "transcript.language": ({ language: next }) => {
+        const id = next === "auto" ? null : String(next);
+        if (id !== null && !LANGUAGES.some((item) => item.id === id)) return { ok: false, message: `שפה לא מוכרת; יש: ${LANGUAGES.map((item) => item.id ?? "auto").join(", ")}` };
+        setLanguage(id);
+        setResume(null);
+        return { ok: true, message: `שפת הדיבור: ${languageLabel(id)}` };
+      },
+      "transcript.run": () => {
+        if (!audio) return { ok: false, message: "אין הקלטה; הגולש צריך לבחור קובץ או להקליט" };
+        if (!user) return { ok: false, message: "התמלול דורש חשבון מחובר" };
+        if (busy) return { ok: false, message: "כבר מתמלל" };
+        void run(resume ?? undefined);
+        return { ok: true, message: resume ? "ממשיך את התמלול מאיפה שנעצר; זה רץ ברקע" : "התמלול התחיל ורץ ברקע; הטקסט מצטבר על המסך" };
+      },
+      "transcript.stop": () => {
+        if (!busy) return { ok: false, message: "לא מתמלל כרגע" };
+        stop();
+        return { ok: true, message: "התמלול נעצר; מה שתומלל נשאר" };
+      },
+      "transcript.write": ({ text: next }) => {
+        if (!result) return { ok: false, message: "אין תמלול להחליף" };
+        const clean = String(next);
+        setText(clean);
+        return { ok: true, message: `הטקסט הוחלף (${countWords(clean)} מילים)` };
+      },
+      "transcript.replace": ({ find, replaceWith, all }) => {
+        const needle = String(find);
+        const replacement = typeof replaceWith === "string" ? replaceWith : "";
+        if (!needle) return { ok: false, message: "לא צוין מה לחפש" };
+        const count = text.split(needle).length - 1;
+        if (!count) return { ok: false, message: `„${needle}” לא נמצא בתמלול` };
+        setText(all ? text.split(needle).join(replacement) : text.replace(needle, replacement));
+        return { ok: true, message: `הוחלפו ${all ? count : 1} מופעים של „${needle}”` };
+      },
+      "transcript.ai": async ({ job, language: target }) => {
+        if (!text.trim()) return { ok: false, message: "אין תמלול" };
+        if (!user) return { ok: false, message: "עיבוד AI דורש חשבון מחובר" };
+        if (aiBusy) return { ok: false, message: "ה־AI כבר עובד על התמלול" };
+        const kind = job as AiJob;
+        const wanted = typeof target === "string" ? target.trim() : "";
+        const label = wanted ? (TRANSLATE_TO.find((item) => item.id === wanted.toLowerCase() || item.label === wanted)?.label ?? wanted) : undefined;
+        const reply = await runAi(kind, label);
+        if (reply === null) return { ok: false, message: "הפעולה נכשלה; הודעת השגיאה מוצגת על המסך" };
+        return { ok: true, message: `${AI_LABELS[kind]} מוכן ומוצג בכרטיס ה־AI`, data: { job: kind, text: reply.slice(0, 5000) } };
+      },
+      "transcript.applyPolish": () => {
+        if (!ai || ai.job !== "polish") return { ok: false, message: "אין נוסח ערוך; קודם transcript.ai עם polish" };
+        setText(ai.text);
+        setNotice("הנוסח הערוך הוחלף בטקסט. השורות והזמנים של הכתוביות עודכנו בהתאם.");
+        return { ok: true, message: "הנוסח הערוך הוחל על הטקסט" };
+      },
+      "transcript.speakers": async () => {
+        if (!segments.length) return { ok: false, message: "אין תמלול" };
+        if (!user) return { ok: false, message: "זיהוי דוברים דורש חשבון מחובר" };
+        const done = await labelSpeakers();
+        return done ? { ok: true, message: "הדוברים סומנו בתחילת השורות" } : { ok: false, message: "זיהוי הדוברים נכשל" };
+      },
+      "transcript.search": ({ query: next }) => {
+        const needle = typeof next === "string" ? next : "";
+        setQuery(needle);
+        return { ok: true, message: needle ? `המשפטים מסוננים לפי „${needle}”` : "הסינון בוטל" };
+      },
+      "transcript.download": ({ format }) => {
+        if (!segments.length) return { ok: false, message: "אין תמלול" };
+        exportAs(format as "txt" | "srt" | "vtt");
+        return { ok: true, message: `קובץ ${String(format).toUpperCase()} ירד` };
+      },
+      "transcript.save": async () => {
+        if (!result || !segments.length) return { ok: false, message: "אין תמלול לשמור" };
+        const saved = await saveTranscript();
+        return saved ? { ok: true, message: "התמלול נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body transcript-tool">
@@ -726,7 +832,7 @@ export function TranscriptTool({ initial = null }: Props) {
             </div>
             <SaveButton
               state={saving.state}
-              onSave={saveTranscript}
+              onSave={() => void saveTranscript()}
               disabled={!segments.length}
               label="שמור את התמלול"
               message={saving.message}

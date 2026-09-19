@@ -6,6 +6,7 @@ import { ShareButton } from "../components/ShareButton";
 import { useAuth } from "../lib/auth";
 import { downloadFile, safeFilename } from "../lib/export";
 import { foldChordLines, parseChordSymbol, parseSong, songChords, songToText, takeSongbookDraft, transposeSong } from "../lib/songbook";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { listWorks, type SavedWork } from "../lib/works";
 
@@ -110,14 +111,87 @@ export function SongbookTool({ initial = null }: Props) {
   };
 
   const save = () => {
-    if (!body.trim()) return;
-    void saving.save({
+    if (!body.trim()) return Promise.resolve(null);
+    return saving.save({
       kind: "song",
       title: title.trim() || lines.find((line) => line.kind === "line" && line.lyric.trim())?.lyric.slice(0, 40) || "שיר",
       summary: { lines: lines.filter((line) => line.kind === "line").length, chords: chords.slice(0, 6).join(" "), transpose },
       payload: { body, transpose },
     });
   };
+
+  const lineCount = (text: string) => parseSong(text).filter((line) => line.kind === "line" && line.lyric.trim()).length;
+  useAssistantTool("songbook", {
+    state: () =>
+      body.trim()
+        ? `שירון: „${title || "ללא כותרת"}”, ${lines.filter((line) => line.kind === "line").length} שורות, אקורדים: ${chords.join(" ") || "אין"}, טרנספוזיציה ${transpose}, מצב ${editing ? "עריכה" : "תצוגה"}${scrolling ? ", גלילה אוטומטית פועלת" : ""}. תחילת הטקסט: ${body.slice(0, 160).replace(/\n/g, " / ")}`
+        : "שירון: ריק.",
+    handlers: {
+      "songbook.write": ({ title: nextTitle, body: nextBody }) => {
+        const text = String(nextBody);
+        setBody(text);
+        if (typeof nextTitle === "string") setTitle(nextTitle.slice(0, 120));
+        setEditing(false);
+        return { ok: true, message: `נכתבו ${lineCount(text)} שורות${typeof nextTitle === "string" ? ` בשם „${nextTitle.slice(0, 60)}”` : ""}` };
+      },
+      "songbook.append": ({ body: more }) => {
+        const extra = String(more);
+        setBody((current) => (current.trim() ? `${current.replace(/\s+$/, "")}\n\n${extra}` : extra));
+        setEditing(false);
+        return { ok: true, message: `נוספו ${lineCount(extra)} שורות` };
+      },
+      "songbook.read": () => ({ ok: true, message: body.trim() ? "" : "השירון ריק", data: { title, body, transpose, chords } }),
+      "songbook.set": ({ transpose: shift, fontSize: size, flats: useFlats, diagrams, view }) => {
+        const done: string[] = [];
+        if (typeof shift === "number") {
+          setTranspose(Math.max(-11, Math.min(11, Math.round(shift))));
+          done.push(`טרנספוזיציה ${Math.round(shift)}`);
+        }
+        if (typeof size === "number") {
+          setFontSize(Math.max(14, Math.min(32, Math.round(size))));
+          done.push(`גודל טקסט ${Math.round(size)}`);
+        }
+        if (typeof useFlats === "boolean") {
+          setFlats(useFlats);
+          done.push(useFlats ? "שמות עם במול" : "שמות עם דיאז");
+        }
+        if (typeof diagrams === "boolean") {
+          setShowDiagrams(diagrams);
+          done.push(diagrams ? "אחיזות מוצגות" : "אחיזות מוסתרות");
+        }
+        if (view === "edit" || view === "view") {
+          if (view === "view" && !body.trim()) return { ok: false, message: "אין טקסט להציג" };
+          setEditing(view === "edit");
+          done.push(view === "edit" ? "מצב עריכה" : "מצב תצוגה");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "songbook.scroll": ({ on, speed }) => {
+        if (!body.trim()) return { ok: false, message: "אין טקסט לגלול" };
+        if (typeof speed === "number") setScrollSpeed(Math.max(5, Math.min(120, Math.round(speed))));
+        setEditing(false);
+        setScrolling(Boolean(on));
+        return { ok: true, message: on ? "הגלילה האוטומטית פועלת" : "הגלילה נעצרה" };
+      },
+      "songbook.save": async () => {
+        if (!body.trim()) return { ok: false, message: "השירון ריק" };
+        const saved = await save();
+        return saved ? { ok: true, message: "השיר נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "songbook.download": () => {
+        const file = buildFile();
+        if (!file) return { ok: false, message: "השירון ריק" };
+        downloadFile(file, file.name, file.type);
+        return { ok: true, message: `${file.name} ירד` };
+      },
+      "songbook.print": () => {
+        if (!body.trim()) return { ok: false, message: "השירון ריק" };
+        setEditing(false);
+        window.setTimeout(() => window.print(), 150);
+        return { ok: true, message: "חלון ההדפסה נפתח" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body songbook-tool">
@@ -303,7 +377,7 @@ export function SongbookTool({ initial = null }: Props) {
             </button>
             <ShareButton build={buildFile} title={title || "שיר"} />
           </div>
-          <SaveButton state={saving.state} onSave={save} disabled={!body.trim()} label="שמור בשירון" message={saving.message} />
+          <SaveButton state={saving.state} onSave={() => void save()} disabled={!body.trim()} label="שמור בשירון" message={saving.message} />
         </div>
       </div>
     </section>

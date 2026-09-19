@@ -17,6 +17,7 @@ import {
 } from "../lib/audioChords";
 import { downloadFile, safeFilename } from "../lib/export";
 import { setSongbookDraft } from "../lib/songbook";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 import type { ChordsRequest, ChordsResponse } from "../workers/chords.worker";
@@ -163,8 +164,8 @@ export function ChordsTool({ initial = null }: Props) {
     result ? new File([`\uFEFF${title}\n\n${sheet}`], `${safeFilename(title)}-chords.txt`, { type: "text/plain;charset=utf-8" }) : null;
 
   const save = () => {
-    if (!result) return;
-    void saving.save({
+    if (!result) return Promise.resolve(null);
+    return saving.save({
       kind: "chords",
       title,
       sourceName: result.sourceName,
@@ -184,6 +185,68 @@ export function ChordsTool({ initial = null }: Props) {
     setSongbookDraft({ title, body: shown.map((segment) => `[${chordName(segment.root, segment.quality, flats)}]`).join(" ") });
     window.location.assign("#/songbook");
   };
+
+  useAssistantTool("chords", {
+    state: () =>
+      `מזהה אקורדים: ${audio ? `השיר „${audio.file.name}”` : result?.sourceName ? `אקורדים שמורים של „${title}” בלי קובץ השמע` : "לא נבחר שיר (רק הגולש בוחר קובץ)"}; ${
+        busy
+          ? "מאזין לאקורדים עכשיו"
+          : result
+            ? `${unique.length} אקורדים שונים, ${result.segments.length} מעברים: ${unique.map((item) => chordName(item.root, item.quality, flats)).join(" ")}; טרנספוזיציה ${transpose}, קאפו ${capo || "בלי"}${current ? `; מנגן עכשיו ${chordName(current.root, current.quality, flats)}` : ""}`
+            : "אין תוצאה עדיין"
+      }.`,
+    handlers: {
+      "chords.read": () => {
+        if (!result) return { ok: false, message: "אין אקורדים; הגולש צריך לבחור שיר" };
+        return {
+          ok: true,
+          message: `${unique.length} אקורדים שונים`,
+          data: {
+            unique: unique.map((item) => chordName(item.root, item.quality, flats)),
+            transpose,
+            capo,
+            timeline: shown.slice(0, 300).map((segment) => ({ chord: chordName(segment.root, segment.quality, flats), start: Number(segment.start.toFixed(1)), end: Number(segment.end.toFixed(1)) })),
+            sheet: sheet.slice(0, 3000),
+          },
+        };
+      },
+      "chords.set": ({ transpose: shift, capo: fret, flats: useFlats }) => {
+        if (!result) return { ok: false, message: "אין אקורדים עדיין" };
+        const done: string[] = [];
+        if (typeof shift === "number") {
+          const clamped = Math.max(-6, Math.min(6, Math.round(shift)));
+          setTranspose(clamped);
+          done.push(`טרנספוזיציה ${clamped > 0 ? "+" : ""}${clamped}`);
+        }
+        if (typeof fret === "number") {
+          const clamped = Math.max(0, Math.min(7, Math.round(fret)));
+          setCapo(clamped);
+          done.push(clamped ? `קאפו בשריג ${clamped}` : "בלי קאפו");
+        }
+        if (typeof useFlats === "boolean") {
+          setFlats(useFlats);
+          done.push(useFlats ? "שמות עם במול" : "שמות עם דיאז");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "chords.toSongbook": () => {
+        if (!result) return { ok: false, message: "אין אקורדים לשלוח" };
+        toSongbook();
+        return { ok: true, message: "האקורדים נשלחו לשירון; שם אפשר להוסיף מילים" };
+      },
+      "chords.download": () => {
+        const file = buildFile();
+        if (!file) return { ok: false, message: "אין אקורדים" };
+        downloadFile(file, file.name, file.type);
+        return { ok: true, message: `${file.name} ירד` };
+      },
+      "chords.save": async () => {
+        if (!result) return { ok: false, message: "אין אקורדים לשמור" };
+        const saved = await save();
+        return saved ? { ok: true, message: "האקורדים נשמרו באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body chords-tool">
@@ -349,7 +412,7 @@ export function ChordsTool({ initial = null }: Props) {
                 </button>
                 <ShareButton build={buildFile} title={`אקורדים — ${title}`} />
               </div>
-              <SaveButton state={saving.state} onSave={save} label="שמור את האקורדים" message={saving.message} />
+              <SaveButton state={saving.state} onSave={() => void save()} label="שמור את האקורדים" message={saving.message} />
             </div>
           </>
         )}

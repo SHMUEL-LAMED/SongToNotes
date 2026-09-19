@@ -1,6 +1,7 @@
 import { Minus, Pause, Play, Plus, Timer, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -125,7 +126,7 @@ export function MetronomeTool({ initial = null }: Props) {
   const savePreset = () => {
     const subdivisionLabel =
       SUBDIVISIONS.find((item) => item.value === subdivision)?.label ?? "";
-    void saving.save({
+    return saving.save({
       kind: "metronome",
       title: `${bpm} BPM · ${meter.label}`,
       summary: { bpm, meter: meter.label, subdivision, subdivisionLabel, sound },
@@ -330,6 +331,51 @@ export function MetronomeTool({ initial = null }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [nudge, tap, toggle]);
 
+  useAssistantTool("metronome", {
+    state: () =>
+      `מטרונום: ${bpm} BPM, משקל ${meter.label}, חלוקה ${SUBDIVISIONS.find((item) => item.value === subdivision)?.label ?? subdivision}, צליל ${sound}, עוצמה ${Math.round(volume * 100)}%, ${running ? "פועל" : "עצור"}.`,
+    handlers: {
+      "metronome.set": ({ bpm: nextBpm, meter: nextMeter, subdivision: nextSubdivision, sound: nextSound, volume: nextVolume }) => {
+        const done: string[] = [];
+        if (typeof nextBpm === "number") {
+          const clamped = Math.max(30, Math.min(260, Math.round(nextBpm)));
+          setBpm(clamped);
+          done.push(`${clamped} BPM`);
+        }
+        if (typeof nextMeter === "string") {
+          setMeterId(nextMeter);
+          done.push(`משקל ${nextMeter}`);
+        }
+        if (typeof nextSubdivision === "number") {
+          if (![1, 2, 3, 4].includes(nextSubdivision)) return { ok: false, message: "subdivision הוא 1, 2, 3 או 4" };
+          setSubdivision(nextSubdivision);
+          done.push(SUBDIVISIONS.find((item) => item.value === nextSubdivision)?.label ?? "");
+        }
+        if (nextSound === "click" || nextSound === "wood" || nextSound === "beep") {
+          setSound(nextSound);
+          done.push(`צליל ${nextSound}`);
+        }
+        if (typeof nextVolume === "number") {
+          setVolume(Math.max(0, Math.min(1, nextVolume / 100)));
+          done.push(`עוצמה ${Math.round(nextVolume)}%`);
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "metronome.start": () => {
+        if (!running) void start();
+        return { ok: true, message: `המטרונום פועל ב־${bpm} BPM` };
+      },
+      "metronome.stop": () => {
+        stop();
+        return { ok: true, message: "המטרונום נעצר" };
+      },
+      "metronome.save": async () => {
+        const saved = await savePreset();
+        return saved ? { ok: true, message: "הקצב נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
+
   const pendulumAngle = running ? (activeBeat % 2 === 0 ? -22 : 22) : 0;
   const beatSeconds = (60 / bpm) * (4 / meter.beatType);
 
@@ -344,7 +390,7 @@ export function MetronomeTool({ initial = null }: Props) {
           <p>בחר קצב ולחץ על הפעל.</p>
         </div>
         <div className="tool-intro-side">
-          <SaveButton state={saving.state} onSave={savePreset} label="שמור את הקצב" message={saving.message} compact />
+          <SaveButton state={saving.state} onSave={() => void savePreset()} label="שמור את הקצב" message={saving.message} compact />
         </div>
       </div>
 

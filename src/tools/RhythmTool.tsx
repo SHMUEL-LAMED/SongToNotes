@@ -14,6 +14,7 @@ import {
   type RoundScore,
   type TapResult,
 } from "../lib/rhythm";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -206,8 +207,8 @@ export function RhythmTool({ initial = null }: Props) {
   }, [tap]);
 
   const save = () => {
-    if (!score) return;
-    void saving.save({
+    if (!score) return Promise.resolve(null);
+    return saving.save({
       kind: "rhythm",
       title: `${pattern.name} · ${bpm} BPM`,
       summary: { accuracy: score.accuracy, levelLabel: LEVEL_LABELS[level], bpm, pattern: pattern.name, tendency: score.tendency },
@@ -218,6 +219,74 @@ export function RhythmTool({ initial = null }: Props) {
   const verdictLabel = (verdict: TapResult["verdict"]) =>
     verdict === "perfect" ? "מושלם" : verdict === "good" ? "טוב" : verdict === "early" ? "מוקדם" : verdict === "late" ? "מאוחר" : "החטאה";
   const busy = phase === "countin" || phase === "playing";
+
+  useAssistantTool("rhythm", {
+    state: () =>
+      `מאמן קצב: רמה ${LEVEL_LABELS[level]}, תבנית „${pattern.name}”, ${bpm} BPM${muteHits ? ", התבנית מושתקת" : ""}; ${
+        busy ? "סיבוב פועל עכשיו" : score ? `תוצאת הסיבוב האחרון: ${score.accuracy}% (${describeTendency(score.tendency)})` : "אין סיבוב"
+      }; שיא ${progress.best}% אחרי ${progress.rounds} סיבובים.`,
+    handlers: {
+      "rhythm.set": ({ level: nextLevel, bpm: nextBpm, pattern: nextPattern, mute }) => {
+        if (busy) return { ok: false, message: "אי אפשר לשנות באמצע סיבוב; rhythm.stop עוצר" };
+        const done: string[] = [];
+        let chosenLevel = level;
+        if (nextLevel === "easy" || nextLevel === "medium" || nextLevel === "hard") {
+          chosenLevel = nextLevel;
+          setLevel(nextLevel);
+          setPatternId(patternsFor(nextLevel)[0].id);
+          setScore(null);
+          done.push(`רמה ${LEVEL_LABELS[nextLevel]}`);
+        }
+        if (typeof nextBpm === "number") {
+          const clamped = Math.max(40, Math.min(200, Math.round(nextBpm)));
+          setBpm(clamped);
+          done.push(`${clamped} BPM`);
+        }
+        if (typeof nextPattern === "string" && nextPattern.trim()) {
+          const wanted = nextPattern.trim();
+          const options = patternsFor(chosenLevel);
+          const found = options.find((item) => item.id.toLowerCase() === wanted.toLowerCase() || item.name === wanted) ?? options.find((item) => item.name.includes(wanted));
+          if (!found) return { ok: false, message: `אין תבנית כזאת ברמה ${LEVEL_LABELS[chosenLevel]}; יש: ${options.map((item) => `${item.name} (${item.id})`).join(", ")}` };
+          setPatternId(found.id);
+          setScore(null);
+          done.push(`תבנית ${found.name}`);
+        }
+        if (typeof mute === "boolean") {
+          setMuteHits(mute);
+          done.push(mute ? "בלי לשמוע את התבנית" : "עם התבנית");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "rhythm.start": async () => {
+        if (busy) return { ok: false, message: "סיבוב כבר פועל" };
+        await start();
+        return { ok: true, message: "הסיבוב התחיל: ספירה של תיבה ואז שתי תיבות להקשה (רווח או הקשה על הכרית)" };
+      },
+      "rhythm.stop": () => {
+        if (!busy) return { ok: false, message: "אין סיבוב פעיל" };
+        stop();
+        return { ok: true, message: "הסיבוב נעצר" };
+      },
+      "rhythm.read": () => ({
+        ok: true,
+        message: score ? `${score.accuracy}% דיוק` : "אין תוצאה",
+        data: {
+          level,
+          bpm,
+          pattern: { id: pattern.id, name: pattern.name, steps: pattern.steps },
+          patterns: patternsFor(level).map((item) => ({ id: item.id, name: item.name })),
+          score,
+          best: progress.best,
+          rounds: progress.rounds,
+        },
+      }),
+      "rhythm.save": async () => {
+        if (!score) return { ok: false, message: "אין תוצאה לשמור; rhythm.start מתחיל סיבוב" };
+        const saved = await save();
+        return saved ? { ok: true, message: "התוצאה נשמרה באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body rhythm-tool">
@@ -231,7 +300,7 @@ export function RhythmTool({ initial = null }: Props) {
         </div>
         {score && (
           <div className="tool-intro-side">
-            <SaveButton state={saving.state} onSave={save} label="שמור את התוצאה" message={saving.message} compact />
+            <SaveButton state={saving.state} onSave={() => void save()} label="שמור את התוצאה" message={saving.message} compact />
           </div>
         )}
       </div>

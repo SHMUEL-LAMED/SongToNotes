@@ -16,6 +16,7 @@ import {
 import { channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import type { SeparateTarget } from "../lib/separate";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { useSeparation } from "../lib/useSeparation";
 import { encodeWav } from "../lib/wav";
@@ -349,8 +350,8 @@ export function VocalsTool({ initial = null }: Props) {
 
   const saveStems = async () => {
     const file = await renderStemMix();
-    if (!file || !audio || !stems) return;
-    void saving.save(
+    if (!file || !audio || !stems) return null;
+    return saving.save(
       {
         kind: "vocals",
         title: `${audio.file.name.replace(/\.[^/.]+$/, "")} — מיקס ערוצים`,
@@ -413,9 +414,9 @@ export function VocalsTool({ initial = null }: Props) {
 
   const saveToProfile = () => {
     const file = buildFile();
-    if (!file || !audio || !result) return;
+    if (!file || !audio || !result) return Promise.resolve(null);
     const base = audio.file.name.replace(/\.[^/.]+$/, "");
-    void saving.save(
+    return saving.save(
       {
         kind: "vocals",
         title: `${base} — ${target === "instrumental" ? "קריוקי" : "שירה בלבד"}`,
@@ -438,6 +439,112 @@ export function VocalsTool({ initial = null }: Props) {
   // The separator falls back to WebAssembly where WebGPU is missing and
   // resamples the song itself, so there is nothing left to gate on.
   const busy = separation.isRunning || aiBusy;
+
+  const stemsReady = Boolean(stems && audio && stems.key === audio.url);
+  useAssistantTool("vocals", {
+    state: () =>
+      `הסרת שירה: ${audio ? `השיר „${audio.file.name}” (${audio.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"})` : "לא נבחר שיר (רק הגולש בוחר קובץ)"}; מצב ${mode === "simple" ? "פשוט" : "מקצועי"}; ${
+        mode === "simple"
+          ? `להשאיר: ${target === "instrumental" ? "ליווי בלבד (קריוקי)" : "שירה בלבד"}, עוצמת הפרדה ${strength}%${target === "instrumental" ? `, שמירת בס ${keepBass ? "פועלת" : "כבויה"}` : ""}${result ? (usedAi ? "; יש תוצאת AI" : "; יש תוצאה מהירה לפי תמונת הסטריאו") : ""}`
+          : stemsReady && stems
+            ? `ערוצים: ${stems.tracks.map((track) => `${track.id} (${track.name}) ${Math.round(track.gain * 100)}%${track.muted ? " מושתק" : ""}${track.solo ? " סולו" : ""}`).join(", ")}`
+            : "עדיין לא הופרד לערוצים"
+      }${busy ? "; עובד עכשיו" : ""}${aiStatus ? `; סטטוס: ${aiStatus}` : ""}${serverMissing === true ? "; ההפרדה בשרת לא הופעלה, הפרדת AI תרוץ בדפדפן" : ""}${!user ? "; הגולש לא מחובר (הפרדה בשרת דורשת חשבון)" : ""}.`,
+    handlers: {
+      "vocals.read": () => ({
+        ok: true,
+        message: audio ? (result ? "יש תוצאה" : "אין תוצאה עדיין") : "אין שיר",
+        data: {
+          file: audio?.file.name ?? null,
+          mode,
+          target,
+          strength,
+          keepBass,
+          hasResult: Boolean(result),
+          usedAi,
+          stems: stemsReady && stems ? stems.tracks.map((track) => ({ name: track.id, label: track.name, gain: Math.round(track.gain * 100), pan: Math.round(track.pan * 100), muted: track.muted, solo: track.solo })) : null,
+          busy,
+          status: aiStatus,
+        },
+      }),
+      "vocals.set": ({ mode: nextMode, target: nextTarget, strength: nextStrength, keepBass: nextKeepBass, compare: nextCompare }) => {
+        if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
+        const done: string[] = [];
+        if (nextMode === "simple" || nextMode === "pro") {
+          if (busy) return { ok: false, message: "עובד כרגע; אפשר לשנות מצב כשההפרדה תסתיים" };
+          if (nextMode === "simple") stopStems();
+          setMode(nextMode);
+          done.push(nextMode === "simple" ? "מצב פשוט" : "מצב מקצועי");
+        }
+        if (nextTarget === "instrumental" || nextTarget === "vocals") {
+          setTarget(nextTarget);
+          done.push(nextTarget === "instrumental" ? "ליווי בלבד (קריוקי)" : "שירה בלבד");
+        }
+        if (typeof nextStrength === "number") {
+          const clamped = Math.max(0, Math.min(100, Math.round(nextStrength)));
+          setStrength(clamped);
+          done.push(`עוצמת הפרדה ${clamped}%`);
+        }
+        if (typeof nextKeepBass === "boolean") {
+          setKeepBass(nextKeepBass);
+          done.push(nextKeepBass ? "שמירת בס פועלת" : "שמירת בס כבויה");
+        }
+        if (typeof nextCompare === "boolean") {
+          setCompare(nextCompare);
+          done.push(nextCompare ? "השוואה למקור" : "בלי השוואה למקור");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "vocals.ai": () => {
+        if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
+        if (busy) return { ok: false, message: "כבר עובד" };
+        if (mode !== "simple") setMode("simple");
+        void runAi();
+        return { ok: true, message: "הפרדת ה־AI התחילה ורצה ברקע (כדקה); ההתקדמות מוצגת על המסך" };
+      },
+      "vocals.stems": () => {
+        if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
+        if (busy) return { ok: false, message: "כבר עובד" };
+        if (!user) return { ok: false, message: "הפרדה לערוצים דורשת חשבון מחובר" };
+        if (mode !== "pro") setMode("pro");
+        void runStems();
+        return { ok: true, message: "ההפרדה לערוצים התחילה ורצה ברקע (כדקה)" };
+      },
+      "vocals.stem": ({ name, gain, pan, muted, solo }) => {
+        if (!stemsReady || !stems) return { ok: false, message: "אין ערוצים; vocals.stems מפריד" };
+        const track = stems.tracks.find((item) => item.id === name);
+        if (!track) return { ok: false, message: `אין ערוץ ${String(name)}; יש: ${stems.tracks.map((item) => item.id).join(", ")}` };
+        const changes: Partial<MixTrack> = {};
+        if (typeof gain === "number") changes.gain = Math.max(0, Math.min(1.5, gain / 100));
+        if (typeof pan === "number") changes.pan = Math.max(-1, Math.min(1, pan / 100));
+        if (typeof muted === "boolean") changes.muted = muted;
+        if (typeof solo === "boolean") changes.solo = solo;
+        if (!Object.keys(changes).length) return { ok: false, message: "לא צוין מה לשנות" };
+        updateStem(track.id, changes);
+        return { ok: true, message: `${track.name} עודכן` };
+      },
+      "vocals.download": () => {
+        if (!result || busy) return { ok: false, message: audio ? "אין תוצאה מוכנה" : "אין שיר" };
+        exportWav();
+        return { ok: true, message: "קובץ ה־WAV ירד" };
+      },
+      "vocals.save": async () => {
+        if (mode === "pro") {
+          if (!stemsReady) return { ok: false, message: "אין ערוצים לשמור" };
+          const saved = await saveStems();
+          return saved ? { ok: true, message: "המיקס נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+        }
+        if (!result || busy) return { ok: false, message: audio ? "אין תוצאה מוכנה" : "אין שיר" };
+        const saved = await saveToProfile();
+        return saved ? { ok: true, message: "התוצאה נשמרה באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "vocals.toMixer": () => {
+        if (!stemsReady || !stems) return { ok: false, message: "אין ערוצים; vocals.stems מפריד" };
+        void handOffTo("mixer", stems.tracks.map(stemFile), "הערוצים מהסרת השירה");
+        return { ok: true, message: "הערוצים נשלחו למיקסר" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body vocals-tool">
@@ -838,7 +945,7 @@ export function VocalsTool({ initial = null }: Props) {
               </div>
               <SaveButton
                 state={saving.state}
-                onSave={saveToProfile}
+                onSave={() => void saveToProfile()}
                 disabled={!result || busy}
                 message={saving.message}
               />

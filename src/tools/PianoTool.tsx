@@ -4,7 +4,9 @@ import { SaveButton } from "../components/SaveButton";
 import { midiToFrequency } from "../lib/dsp";
 import { downloadFile, notesToMidi } from "../lib/export";
 import { plainNoteName, scientificName } from "../lib/key";
+import { parseNoteName } from "../lib/noteNames";
 import type { DetectedNote } from "../lib/types";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 
 type Timbre = "piano" | "organ" | "synth";
@@ -277,8 +279,8 @@ export function PianoTool() {
   }, [recording, resetSave]);
 
   const saveRecording = () => {
-    if (!recorded.length) return;
-    void saving.save({
+    if (!recorded.length) return Promise.resolve(null);
+    return saving.save({
       kind: "piano",
       title: `הקלטת פסנתר · ${recorded.length} תווים`,
       summary: {
@@ -326,6 +328,98 @@ export function PianoTool() {
     downloadFile(data, "piano-recording.mid", "audio/midi");
   };
 
+  useAssistantTool("piano", {
+    state: () =>
+      `פסנתר וירטואלי: מקשים C${octave}–C${octave + octaveCount}, צליל ${timbre}, הדגשת סולם ${scale.id === "none" ? "כבויה" : `${ROOT_NAMES[scaleRoot]} ${scale.label}`}, סוסטיין ${sustain ? "פועל" : "כבוי"}, עוצמה ${Math.round(volume * 100)}%${recording ? `; מקליט (${recorded.length} תווים עד כה)` : recorded.length ? `; יש הקלטה של ${recorded.length} תווים` : ""}.`,
+    handlers: {
+      "piano.play": async ({ notes: names, mode: how, seconds }) => {
+        const list = (names as string[]).slice(0, 32);
+        const midis = list.map((name) => parseNoteName(name));
+        const unknown = list.filter((_, index) => midis[index] === null);
+        if (unknown.length) return { ok: false, message: `תווים לא מוכרים: ${unknown.join(", ")}. כתוב כמו C4, F#3, Bb2` };
+        const valid = midis.filter((midi): midi is number => midi !== null);
+        if (!valid.length) return { ok: false, message: "לא צוינו תווים" };
+        const together = how === "chord";
+        const hold = Math.max(0.2, Math.min(4, typeof seconds === "number" ? seconds : together ? 1.5 : 0.5));
+        const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+        if (together) {
+          valid.forEach((midi) => noteOn(midi));
+          await wait(hold * 1000);
+          valid.forEach((midi) => noteOff(midi, true));
+        } else {
+          for (const midi of valid) {
+            noteOn(midi);
+            await wait(hold * 1000);
+            noteOff(midi, true);
+            await wait(40);
+          }
+        }
+        return { ok: true, message: `נוגנו ${valid.map((midi) => scientificName(midi)).join(" ")}${together ? " יחד" : ""}` };
+      },
+      "piano.set": ({ octave: nextOctave, timbre: nextTimbre, scale: nextScale, root, sustain: nextSustain, names: nextNames, volume: nextVolume, octaves }) => {
+        const done: string[] = [];
+        if (typeof nextOctave === "number") {
+          const clamped = Math.max(0, Math.min(7, Math.round(nextOctave)));
+          setOctave(clamped);
+          done.push(`אוקטבה ${clamped}`);
+        }
+        if (nextTimbre === "piano" || nextTimbre === "organ" || nextTimbre === "synth") {
+          setTimbre(nextTimbre);
+          done.push(`צליל ${nextTimbre}`);
+        }
+        if (typeof nextScale === "string") {
+          const found = SCALES.find((item) => item.id === nextScale);
+          if (!found) return { ok: false, message: `אין סולם כזה; יש: ${SCALES.map((item) => item.id).join(", ")}` };
+          setScaleId(found.id);
+          done.push(`סולם ${found.label}`);
+        }
+        if (typeof root === "string") {
+          const index = ROOT_NAMES.indexOf(root);
+          if (index < 0) return { ok: false, message: `שורש לא מוכר; יש: ${ROOT_NAMES.join(", ")}` };
+          setScaleRoot(index);
+          done.push(`שורש ${root}`);
+        }
+        if (typeof nextSustain === "boolean") {
+          setSustain(nextSustain);
+          done.push(nextSustain ? "סוסטיין פועל" : "סוסטיין כבוי");
+        }
+        if (typeof nextNames === "boolean") {
+          setShowNames(nextNames);
+          done.push(nextNames ? "שמות תווים מוצגים" : "שמות תווים מוסתרים");
+        }
+        if (typeof nextVolume === "number") {
+          setVolume(Math.max(0, Math.min(1, nextVolume / 100)));
+          done.push(`עוצמה ${Math.round(nextVolume)}%`);
+        }
+        if (typeof octaves === "number") {
+          setOctaveCount(octaves >= 3 ? 3 : 2);
+          done.push(`${octaves >= 3 ? 3 : 2} אוקטבות`);
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "piano.record": ({ on }) => {
+        if (Boolean(on) === recording) return { ok: true, message: recording ? "כבר מקליט" : "לא הייתה הקלטה פעילה" };
+        toggleRecording();
+        return { ok: true, message: on ? "ההקלטה התחילה; כל נגינה נרשמת" : `ההקלטה נעצרה (${recorded.length} תווים)` };
+      },
+      "piano.downloadMidi": () => {
+        if (!recorded.length) return { ok: false, message: "אין הקלטה" };
+        downloadMidi();
+        return { ok: true, message: "קובץ ה־MIDI ירד" };
+      },
+      "piano.save": async () => {
+        if (!recorded.length) return { ok: false, message: "אין הקלטה לשמור" };
+        const saved = await saveRecording();
+        return saved ? { ok: true, message: "ההקלטה נשמרה באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "piano.read": () => ({
+        ok: true,
+        message: recorded.length ? `${recorded.length} תווים בהקלטה` : "אין הקלטה",
+        data: { recording, count: recorded.length, notes: recorded.slice(0, 200).map((note) => ({ note: scientificName(note.midi), start: Number(note.start.toFixed(2)), duration: Number(note.duration.toFixed(2)) })), octave, timbre, scale: scale.id, root: ROOT_NAMES[scaleRoot] },
+      }),
+    },
+  });
+
   const heldNames = Array.from(held)
     .sort((a, b) => a - b)
     .map((midi) => scientificName(midi));
@@ -342,7 +436,7 @@ export function PianoTool() {
         </div>
         {!recording && recorded.length > 0 && (
           <div className="tool-intro-side">
-            <SaveButton state={saving.state} onSave={saveRecording} label="שמור את ההקלטה" message={saving.message} compact />
+            <SaveButton state={saving.state} onSave={() => void saveRecording()} label="שמור את ההקלטה" message={saving.message} compact />
           </div>
         )}
       </div>

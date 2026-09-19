@@ -9,6 +9,7 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { BITRATES, SAMPLE_RATES, convertAudio, estimateBytes, type ConvertOptions, type OutputFormat } from "../lib/convert";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -77,8 +78,9 @@ export function ConvertTool({ initial = null }: Props) {
   const seconds = audio ? (trim ? trim.end - trim.start : audio.buffer.duration) : 0;
   const estimate = audio ? estimateBytes(seconds, options, audio.buffer.numberOfChannels) : 0;
 
-  const run = async () => {
-    if (!audio || busy) return;
+  /** Resolves with the converted file, or null when it failed or was cancelled. */
+  const run = async (): Promise<File | null> => {
+    if (!audio || busy) return null;
     const controller = new AbortController();
     abortRef.current = controller;
     setBusy({ message: "מתחיל…", fraction: 0 });
@@ -87,13 +89,15 @@ export function ConvertTool({ initial = null }: Props) {
       const file = await convertAudio(audio.buffer, audio.file.name, options, (message, fraction) => {
         if (!controller.signal.aborted) setBusy({ message, fraction });
       }, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       setResult((previous) => {
         if (previous) URL.revokeObjectURL(previous.url);
         return { file, url: URL.createObjectURL(file), key: settingsKey };
       });
+      return file;
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "ההמרה נכשלה.");
+      return null;
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -103,8 +107,8 @@ export function ConvertTool({ initial = null }: Props) {
   };
 
   const save = () => {
-    if (!fresh || !result || !audio) return;
-    void saving.save(
+    if (!fresh || !result || !audio) return Promise.resolve(null);
+    return saving.save(
       {
         kind: "convert",
         title: result.file.name,
@@ -115,6 +119,72 @@ export function ConvertTool({ initial = null }: Props) {
       result.file,
     );
   };
+
+  useAssistantTool("convert", {
+    state: () =>
+      `המרת פורמטים: ${audio ? `הקובץ „${audio.file.name}” (${formatTime(audio.buffer.duration)}, ${(audio.buffer.sampleRate / 1000).toFixed(1)} kHz, ${audio.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"})` : "לא נבחר קובץ (רק הגולש בוחר קובץ)"}; יעד ${format.toUpperCase()}, ${sampleRate} Hz, ערוצים ${channels === "keep" ? "כמו המקור" : channels === 1 ? "מונו" : "סטריאו"}${format === "mp3" ? `, ${kbps} kbps` : ""}, עוצמה ${gain}%${normalise ? ", נרמול" : ""}${trim ? `, קטע ${formatTime(trim.start)}–${formatTime(trim.end)}` : ""}; ${
+        busy ? `ממיר עכשיו (${Math.round(busy.fraction * 100)}%)` : fresh && result ? `יש תוצאה: ${result.file.name} (${formatBytes(result.file.size)})` : "אין תוצאה להגדרות האלה"
+      }.`,
+    handlers: {
+      "convert.read": () => ({
+        ok: true,
+        message: audio ? `${format.toUpperCase()}, ${sampleRate} Hz` : "אין קובץ",
+        data: { file: audio?.file.name ?? null, format, sampleRate, channels, kbps, gain, normalise, trim, result: fresh && result ? { name: result.file.name, bytes: result.file.size } : null, busy: Boolean(busy) },
+      }),
+      "convert.set": ({ format: nextFormat, sampleRate: nextRate, channels: nextChannels, kbps: nextKbps, gain: nextGain, normalise: nextNormalise }) => {
+        const done: string[] = [];
+        if (nextFormat === "mp3" || nextFormat === "wav") {
+          setFormat(nextFormat);
+          done.push(nextFormat.toUpperCase());
+        }
+        if (typeof nextRate === "number") {
+          const nearest = SAMPLE_RATES.reduce((best, item) => (Math.abs(item.value - nextRate) < Math.abs(best.value - nextRate) ? item : best));
+          setSampleRate(nearest.value);
+          done.push(nearest.label);
+        }
+        if (nextChannels === "keep" || nextChannels === "1" || nextChannels === "2") {
+          setChannels(nextChannels === "keep" ? "keep" : nextChannels === "1" ? 1 : 2);
+          done.push(nextChannels === "keep" ? "ערוצים כמו המקור" : nextChannels === "1" ? "מונו" : "סטריאו");
+        }
+        if (typeof nextKbps === "number") {
+          const nearest = BITRATES.reduce((best, item) => (Math.abs(item.value - nextKbps) < Math.abs(best.value - nextKbps) ? item : best));
+          setKbps(nearest.value);
+          done.push(nearest.label);
+        }
+        if (typeof nextGain === "number") {
+          const clamped = Math.max(20, Math.min(300, Math.round(nextGain)));
+          setGain(clamped);
+          done.push(`עוצמה ${clamped}%`);
+        }
+        if (typeof nextNormalise === "boolean") {
+          setNormalise(nextNormalise);
+          done.push(nextNormalise ? "נרמול פועל" : "בלי נרמול");
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "convert.run": async () => {
+        if (!audio) return { ok: false, message: "אין קובץ; הגולש צריך לבחור קובץ" };
+        if (busy) return { ok: false, message: "כבר ממיר" };
+        const file = await run();
+        return file ? { ok: true, message: `ההמרה הושלמה: ${file.name} (${formatBytes(file.size)})` } : { ok: false, message: "ההמרה נכשלה או בוטלה" };
+      },
+      "convert.download": () => {
+        if (!fresh || !result) return { ok: false, message: "אין תוצאה להגדרות האלה; convert.run ממיר" };
+        downloadFile(result.file, result.file.name, result.file.type);
+        return { ok: true, message: `${result.file.name} ירד` };
+      },
+      "convert.save": async () => {
+        if (!fresh || !result) return { ok: false, message: "אין תוצאה; convert.run ממיר" };
+        const saved = await save();
+        return saved ? { ok: true, message: "הקובץ נשמר באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "convert.sendTo": ({ tool }) => {
+        if (!fresh || !result) return { ok: false, message: "אין תוצאה; convert.run ממיר" };
+        void handOffTo(String(tool), result.file, "הקובץ המומר");
+        return { ok: true, message: `הקובץ נשלח לכלי ${String(tool)}` };
+      },
+    },
+  });
 
   return (
     <section className="tool-body convert-tool">
@@ -289,7 +359,7 @@ export function ConvertTool({ initial = null }: Props) {
                     </span>
                   </button>
                 </div>
-                <SaveButton state={saving.state} onSave={save} label="שמור את הקובץ" message={saving.message} />
+                <SaveButton state={saving.state} onSave={() => void save()} label="שמור את הקובץ" message={saving.message} />
               </div>
             )}
             {!fresh && <Transport buffer={audio.buffer} loop={trim ? { start: trim.start, end: trim.end } : null} label="השמע את המקור" />}

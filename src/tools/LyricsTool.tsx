@@ -11,6 +11,7 @@ import { downloadFile, safeFilename } from "../lib/export";
 import { applyLineEdits, buildLines, linesToLrc, linesToText, positionAt, type LyricLine } from "../lib/lyrics";
 import { CANCELLED, transcribeWindow, type SpeechWord } from "../lib/speechApi";
 import { LANGUAGES, languageLabel, segmentsToSrt, splitIntoWindows, type TranscriptSegment } from "../lib/transcript";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 
@@ -163,9 +164,9 @@ export function LyricsTool({ initial = null }: Props) {
 
   const save = () => {
     const rows = currentLines();
-    if (!rows.length) return;
+    if (!rows.length) return Promise.resolve(null);
     if (editing) setLines(rows);
-    void saving.save({
+    return saving.save({
       kind: "lyrics",
       title,
       sourceName: audio?.file.name ?? initial?.sourceName ?? null,
@@ -175,6 +176,56 @@ export function LyricsTool({ initial = null }: Props) {
   };
 
   const busy = stage !== null;
+
+  useAssistantTool("lyrics", {
+    state: () =>
+      `מילים מסונכרנות: ${audio ? `השיר „${audio.file.name}” (${formatTime(audio.buffer.duration)})` : "לא נבחר שיר (רק הגולש בוחר קובץ)"}; שפת השירה ${languageLabel(language)}; ${
+        busy ? "מזהה מילים עכשיו" : lines.length ? `${lines.length} שורות; תחילתן: „${lines.slice(0, 3).map((line) => line.text).join(" / ")}”` : "אין מילים עדיין"
+      }${editing ? "; במצב עריכה" : ""}${!user ? "; הגולש לא מחובר — הזיהוי דורש חשבון" : ""}.`,
+    handlers: {
+      "lyrics.read": () => {
+        if (!lines.length) return { ok: false, message: "אין מילים עדיין" };
+        return { ok: true, message: `${lines.length} שורות`, data: { lines: currentLines().map((line) => ({ start: Number(line.start.toFixed(2)), end: Number(line.end.toFixed(2)), text: line.text })) } };
+      },
+      "lyrics.language": ({ language: next }) => {
+        const id = next === "auto" ? null : String(next);
+        if (id !== null && !LANGUAGES.some((item) => item.id === id)) return { ok: false, message: `שפה לא מוכרת; יש: ${LANGUAGES.map((item) => item.id ?? "auto").join(", ")}` };
+        setLanguage(id);
+        return { ok: true, message: `שפת השירה: ${languageLabel(id)}` };
+      },
+      "lyrics.run": () => {
+        if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
+        if (!user) return { ok: false, message: "זיהוי המילים דורש חשבון מחובר" };
+        if (busy) return { ok: false, message: "כבר מזהה" };
+        void run();
+        return { ok: true, message: "הזיהוי התחיל ורץ ברקע; המילים יופיעו על המסך" };
+      },
+      "lyrics.stop": () => {
+        if (!busy) return { ok: false, message: "לא מזהה כרגע" };
+        stop();
+        return { ok: true, message: "הזיהוי נעצר" };
+      },
+      "lyrics.write": ({ text: next }) => {
+        if (!lines.length) return { ok: false, message: "אין מילים לערוך; קודם lyrics.run" };
+        const clean = String(next);
+        setLines((current) => applyLineEdits(current, clean));
+        setText(clean);
+        setEditing(false);
+        return { ok: true, message: "המילים עודכנו; הזמנים של השורות נשמרו" };
+      },
+      "lyrics.download": ({ format }) => {
+        const file = buildFile(format as "lrc" | "elrc" | "srt" | "txt");
+        if (!file) return { ok: false, message: "אין מילים" };
+        downloadFile(file, file.name, file.type);
+        return { ok: true, message: `${file.name} ירד` };
+      },
+      "lyrics.save": async () => {
+        if (!lines.length) return { ok: false, message: "אין מילים לשמור" };
+        const saved = await save();
+        return saved ? { ok: true, message: "המילים נשמרו באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+    },
+  });
 
   return (
     <section className="tool-body lyrics-tool">
@@ -347,7 +398,7 @@ export function LyricsTool({ initial = null }: Props) {
                 ))}
                 <ShareButton build={() => buildFile("lrc")} title={`מילים — ${title}`} />
               </div>
-              <SaveButton state={saving.state} onSave={save} label="שמור את המילים" message={saving.message} />
+              <SaveButton state={saving.state} onSave={() => void save()} label="שמור את המילים" message={saving.message} />
             </div>
           </>
         )}

@@ -6,13 +6,14 @@ import { AppNotices } from "./components/AppNotices";
 import { Hub } from "./components/Hub";
 import { SharePage } from "./components/SharePage";
 import { ToolShell } from "./components/ToolShell";
+import { useAssistantTool } from "./lib/useAssistantTool";
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
-import { useTheme } from "./lib/theme";
-import { shareTokenFromRoute } from "./lib/share";
+import { useTheme, type ThemePreference } from "./lib/theme";
+import { createShare, shareTokenFromRoute } from "./lib/share";
 import { findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
-import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
+import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
 import { ChordsTool } from "./tools/ChordsTool";
 import { ConvertTool } from "./tools/ConvertTool";
@@ -116,6 +117,85 @@ function WorkspaceApp() {
     },
     [navigate],
   );
+
+  // What the assistant may do on the site itself, from any page.
+  useAssistantTool("site", {
+    state: () =>
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
+    handlers: {
+      navigate: ({ tool: target }) => {
+        const id = String(target);
+        if (id === "home") {
+          go("home");
+          return { ok: true, message: "דף הבית נפתח" };
+        }
+        const found = findTool(id);
+        if (!found) return { ok: false, message: `אין כלי בשם ${id}` };
+        go(found.id);
+        return { ok: true, message: `${found.title} נפתח` };
+      },
+      "account.open": () => {
+        setAccountOpen(true);
+        return { ok: true, message: "האזור האישי נפתח" };
+      },
+      "account.close": () => {
+        setAccountOpen(false);
+        return { ok: true, message: "האזור האישי נסגר" };
+      },
+      "theme.set": ({ theme: choice }) => {
+        theme.setPreference(choice as ThemePreference);
+        return { ok: true, message: choice === "dark" ? "ערכת נושא כהה" : choice === "light" ? "ערכת נושא בהירה" : "ערכת נושא לפי המערכת" };
+      },
+      "works.list": async ({ kind, query, limit }) => {
+        const all = await listWorks(user?.id ?? null);
+        const needle = typeof query === "string" ? query.trim().toLowerCase() : "";
+        const items = all
+          .filter((work) => (!kind || work.kind === kind) && (!needle || `${work.title} ${work.sourceName ?? ""} ${KIND_LABELS[work.kind]}`.toLowerCase().includes(needle)))
+          .slice(0, Math.max(1, Math.min(60, Number(limit) || 25)));
+        return {
+          ok: true,
+          message: all.length ? `${items.length} מתוך ${all.length} עבודות שמורות` : "עדיין אין עבודות שמורות",
+          data: {
+            total: all.length,
+            items: items.map((work) => ({
+              id: work.id,
+              kind: work.kind,
+              kindLabel: KIND_LABELS[work.kind],
+              title: work.title,
+              description: describeWork(work),
+              createdAt: work.createdAt.slice(0, 16),
+              hasFile: Boolean(work.fileName),
+            })),
+          },
+        };
+      },
+      "works.open": async ({ id }) => {
+        const work = (await listWorks(user?.id ?? null)).find((item) => item.id === id);
+        if (!work) return { ok: false, message: "לא נמצאה עבודה עם המזהה הזה; works.list נותן את המזהים" };
+        openWork(work);
+        return { ok: true, message: `„${work.title}” נפתח ב${findTool(KIND_TOOL[work.kind])?.title ?? "כלי"}` };
+      },
+      "works.rename": async ({ id, title }) => {
+        const work = (await listWorks(user?.id ?? null)).find((item) => item.id === id);
+        if (!work) return { ok: false, message: "לא נמצאה עבודה עם המזהה הזה" };
+        await renameWork(work, String(title), user?.id ?? null);
+        return { ok: true, message: `השם שונה ל„${String(title).trim().slice(0, 120)}”` };
+      },
+      "works.delete": async ({ id }) => {
+        const work = (await listWorks(user?.id ?? null)).find((item) => item.id === id);
+        if (!work) return { ok: false, message: "לא נמצאה עבודה עם המזהה הזה" };
+        await deleteWork(work, user?.id ?? null);
+        return { ok: true, message: `„${work.title}” נמחק` };
+      },
+      "works.link": async ({ id }) => {
+        const work = (await listWorks(user?.id ?? null)).find((item) => item.id === id);
+        if (!work) return { ok: false, message: "לא נמצאה עבודה עם המזהה הזה" };
+        if (!user || work.localOnly) return { ok: false, message: "קישור ציבורי אפשרי רק לעבודה שעלתה לפרופיל של חשבון מחובר" };
+        const url = await createShare(work);
+        return { ok: true, message: "נוצר קישור ציבורי", data: { url } };
+      },
+    },
+  });
 
   const opened = pending && pending.route === route ? pending : null;
   const initialFor = (kind: SavedWork["kind"]) =>

@@ -8,6 +8,7 @@ import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { changeSpeedAndPitch, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useAssistantTool } from "../lib/useAssistantTool";
 import { useRenderedAudio } from "../lib/useRenderedAudio";
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
@@ -104,9 +105,9 @@ export function SpeedTool({ initial = null }: Props) {
 
   const saveToProfile = () => {
     const file = buildFile();
-    if (!file || !audio || !rendered) return;
+    if (!file || !audio || !rendered) return Promise.resolve(null);
     const base = audio.file.name.replace(/\.[^/.]+$/, "");
-    void saving.save(
+    return saving.save(
       {
         kind: "speed",
         title: `${base} — ${speed}%${semitones ? ` · ${semitones > 0 ? "+" : ""}${semitones}` : ""}`,
@@ -117,6 +118,55 @@ export function SpeedTool({ initial = null }: Props) {
       file,
     );
   };
+
+  useAssistantTool("speed", {
+    state: () =>
+      audio
+        ? `מאט ומאיץ: הקובץ „${audio.file.name}” (${formatTime(audio.buffer.duration)}), מהירות ${speed}%, טון ${semitones > 0 ? "+" : ""}${semitones}, ${loop ? `לולאה ${formatTime(loop.start)}–${formatTime(loop.end)}` : "בלי לולאה"}${busy ? "; מעבד את הגרסה" : ""}.`
+        : "מאט ומאיץ: לא נבחר קובץ (רק הגולש יכול לבחור קובץ מהמכשיר או להקליט).",
+    handlers: {
+      "speed.set": ({ speed: nextSpeed, semitones: nextSemitones }) => {
+        const done: string[] = [];
+        if (typeof nextSpeed === "number") {
+          const clamped = Math.max(40, Math.min(160, Math.round(nextSpeed)));
+          setSpeed(clamped);
+          done.push(`מהירות ${clamped}%`);
+        }
+        if (typeof nextSemitones === "number") {
+          const clamped = Math.max(-12, Math.min(12, Math.round(nextSemitones)));
+          setSemitones(clamped);
+          done.push(`טון ${clamped > 0 ? "+" : ""}${clamped}`);
+        }
+        return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
+      },
+      "speed.loop": ({ start, end }) => {
+        if (!audio) return { ok: false, message: "אין קובץ" };
+        if (typeof start !== "number" && typeof end !== "number") {
+          setLoop(null);
+          return { ok: true, message: "הלולאה בוטלה" };
+        }
+        const from = Math.max(0, Math.min(audio.buffer.duration, typeof start === "number" ? start : 0));
+        const to = Math.max(from + 0.2, Math.min(audio.buffer.duration, typeof end === "number" ? end : audio.buffer.duration));
+        setLoop({ start: from, end: to });
+        return { ok: true, message: `לולאה ${formatTime(from)}–${formatTime(to)}` };
+      },
+      "speed.download": () => {
+        if (!rendered || busy) return { ok: false, message: audio ? "הגרסה עדיין מתעבדת; נסה שוב בעוד רגע" : "אין קובץ" };
+        exportWav();
+        return { ok: true, message: "קובץ ה־WAV ירד" };
+      },
+      "speed.save": async () => {
+        if (!rendered || busy) return { ok: false, message: audio ? "הגרסה עדיין מתעבדת" : "אין קובץ" };
+        const saved = await saveToProfile();
+        return saved ? { ok: true, message: "הגרסה נשמרה באזור האישי" } : { ok: false, message: "השמירה נכשלה" };
+      },
+      "speed.read": () => ({
+        ok: true,
+        message: audio ? `${speed}%, ${semitones} חצאי טונים` : "אין קובץ",
+        data: { file: audio?.file.name ?? null, duration: audio ? Number(audio.buffer.duration.toFixed(1)) : null, speed, semitones, loop, ready: Boolean(rendered) && !busy },
+      }),
+    },
+  });
 
   return (
     <section className="tool-body speed-tool">
@@ -260,7 +310,7 @@ export function SpeedTool({ initial = null }: Props) {
               </div>
               <SaveButton
                 state={saving.state}
-                onSave={saveToProfile}
+                onSave={() => void saveToProfile()}
                 disabled={!rendered || busy}
                 message={saving.message}
               />
