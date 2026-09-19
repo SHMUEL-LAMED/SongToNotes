@@ -44,6 +44,9 @@ export function TtsTool({ initial = null }: Props) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ file: File; url: string; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Chrome drops an utterance it no longer sees referenced, and its `onend`
+  // with it; holding it here keeps the buttons in step with the voice.
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const saving = useSaveWork();
   const resetSave = saving.reset;
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
@@ -70,6 +73,15 @@ export function TtsTool({ initial = null }: Props) {
     if (result) URL.revokeObjectURL(result.url);
   }, [result]);
   useEffect(() => resetSave(), [resetSave, result]);
+  // Chrome on the desktop goes quiet after about fifteen seconds of a
+  // long reading with a network voice; a periodic resume keeps it going.
+  useEffect(() => {
+    if (!supported || !speaking || paused) return;
+    const keepAlive = window.setInterval(() => {
+      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.resume();
+    }, 10_000);
+    return () => window.clearInterval(keepAlive);
+  }, [supported, speaking, paused]);
 
   // Voices for the text's language first, the rest after.
   const sorted = useMemo(() => {
@@ -84,12 +96,14 @@ export function TtsTool({ initial = null }: Props) {
     if (!supported || !text.trim()) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.trim());
+    utteranceRef.current = utterance;
     if (chosen) utterance.voice = chosen;
     utterance.lang = chosen?.lang ?? (language === "he" ? "he-IL" : language === "ar" ? "ar" : "en-US");
     utterance.rate = rate;
     utterance.pitch = pitch;
     utterance.onboundary = (event) => setSpokenChars(event.charIndex);
     utterance.onend = () => {
+      if (utteranceRef.current === utterance) utteranceRef.current = null;
       setSpeaking(false);
       setPaused(false);
       setSpokenChars(0);
