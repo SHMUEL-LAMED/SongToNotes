@@ -13,6 +13,8 @@ import type { DetectedNote } from "./lib/types";
 import { KIND_TOOL, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
 import { ChordsTool } from "./tools/ChordsTool";
+import { ConvertTool } from "./tools/ConvertTool";
+import { VideoTool } from "./tools/VideoTool";
 import { SongbookTool } from "./tools/SongbookTool";
 import { EarTrainingTool } from "./tools/EarTrainingTool";
 import { MetronomeTool } from "./tools/MetronomeTool";
@@ -185,6 +187,8 @@ function WorkspaceApp() {
       {tool?.id === "analyze" && (
         <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
       )}
+      {tool?.id === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+      {tool?.id === "video" && <VideoTool />}
       {tool?.id === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
       {tool?.id === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
       {tool?.id === "transcript" && (

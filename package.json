@@ -16,6 +16,7 @@
     "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@spotify/basic-pitch": "^1.0.1",
     "@supabase/supabase-js": "2.115.0",
     "@tensorflow/tfjs": "^3.21.0",
