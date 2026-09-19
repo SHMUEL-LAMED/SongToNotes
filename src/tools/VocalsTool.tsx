@@ -20,7 +20,7 @@ import { useSaveWork } from "../lib/useSaveWork";
 import { useSeparation } from "../lib/useSeparation";
 import { encodeWav } from "../lib/wav";
 import { handOffTo } from "../lib/handoff";
-import { MixPlayer, audibleTracks, renderMix, type MixTrack } from "../lib/mixer";
+import { MixPlayer, audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
 import type { SavedWork } from "../lib/works";
 
 const STEM_NAMES: Record<string, string> = { vocals: "שירה", drums: "תופים", bass: "בס", other: "שאר הכלים", guitar: "גיטרה", piano: "פסנתר", no_vocals: "ליווי" };
@@ -326,7 +326,7 @@ export function VocalsTool({ initial = null }: Props) {
         kind: "vocals",
         title: `${audio.file.name.replace(/\.[^/.]+$/, "")} — מיקס ערוצים`,
         sourceName: audio.file.name,
-        summary: { target: "mix", usedAi: true, mode: "pro", stems: stems.tracks.length, duration: file.size / (44_100 * 4) },
+        summary: { target: "mix", usedAi: true, mode: "pro", stems: stems.tracks.length, duration: mixDuration(stems.tracks) },
         payload: { mode: "pro", usedAi: true, tracks: stems.tracks.map((track) => ({ id: track.id, gain: track.gain, pan: track.pan, muted: track.muted, solo: track.solo })) },
       },
       file,

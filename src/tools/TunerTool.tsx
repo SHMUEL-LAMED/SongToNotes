@@ -241,6 +241,9 @@ export function TunerTool({ initial = null }: Props) {
           <h1>מכוון כלים</h1>
           <p>נגן צליל ליד המיקרופון כדי לכוון את הכלי.</p>
         </div>
+        <div className="tool-intro-side">
+          <SaveButton state={saving.state} onSave={saveSetup} label="שמור את הכיוון" message={saving.message} compact />
+        </div>
       </div>
 
       <div className={`tuner-stage ${inTune ? "is-in-tune" : ""} ${display ? "has-signal" : ""}`}>
@@ -371,14 +374,6 @@ export function TunerTool({ initial = null }: Props) {
             <small>440 הוא התקן. תזמורות מסוימות מכוונות ל־442.</small>
           </label>
         </div>
-
-        <SaveButton
-          state={saving.state}
-          onSave={saveSetup}
-          label="שמור את הכיוון"
-          message={saving.message}
-          compact
-        />
 
         {preset.strings && (
           <div className="string-row" aria-label="מיתרי הכלי">

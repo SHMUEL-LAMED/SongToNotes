@@ -229,6 +229,11 @@ export function RhythmTool({ initial = null }: Props) {
           <h1>מאמן קצב</h1>
           <p>מתופפים על המקלדת או על המסך לפי תבנית, והאתר מודד את הדיוק.</p>
         </div>
+        {score && (
+          <div className="tool-intro-side">
+            <SaveButton state={saving.state} onSave={save} label="שמור את התוצאה" message={saving.message} compact />
+          </div>
+        )}
       </div>
 
       <div className="workspace-card">
@@ -362,7 +367,6 @@ export function RhythmTool({ initial = null }: Props) {
               <button type="button" className="link-button" onClick={() => setScore(null)}>
                 <RotateCcw size={14} /> נקה
               </button>
-              <SaveButton state={saving.state} onSave={save} label="שמור את התוצאה" message={saving.message} compact />
             </div>
           </div>
         )}

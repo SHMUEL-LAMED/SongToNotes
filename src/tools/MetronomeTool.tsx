@@ -343,6 +343,9 @@ export function MetronomeTool({ initial = null }: Props) {
           <h1>מטרונום</h1>
           <p>בחר קצב ולחץ על הפעל.</p>
         </div>
+        <div className="tool-intro-side">
+          <SaveButton state={saving.state} onSave={savePreset} label="שמור את הקצב" message={saving.message} compact />
+        </div>
       </div>
 
       <div className="metronome-stage" data-running={running}>
@@ -398,13 +401,6 @@ export function MetronomeTool({ initial = null }: Props) {
           <button className="secondary-button" onClick={tap} type="button">
             טאפ־טמפו{tapHint ? ` · ${tapHint}` : ""}
           </button>
-          <SaveButton
-            state={saving.state}
-            onSave={savePreset}
-            label="שמור את הקצב"
-            message={saving.message}
-            compact
-          />
         </div>
       </div>
 
