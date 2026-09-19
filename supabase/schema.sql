@@ -308,3 +308,10 @@ as $$
 $$;
 revoke all on function public.stt_set_setting(text, text) from public, anon, authenticated;
 grant execute on function public.stt_set_setting(text, text) to service_role;
+
+-- New tools bring new kinds of work; the check on works.kind grows with them.
+alter table public.works drop constraint if exists works_kind_check;
+alter table public.works add constraint works_kind_check check (
+  kind in ('notes', 'ringtone', 'vocals', 'speed', 'piano', 'analysis', 'ear', 'metronome', 'tuner', 'transcript',
+           'chords', 'song', 'convert', 'rhythm', 'mix', 'lyrics', 'tts')
+);

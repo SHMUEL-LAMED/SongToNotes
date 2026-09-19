@@ -76,7 +76,6 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 
 export type AiAction = "polish" | "summarize" | "translate" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
-export type AssistantMode = "question" | "execute";
 export type AssistantAction = { type: "navigate"; route: string };
 export type AiReply = {
   text: string;
@@ -101,17 +100,95 @@ export function transformText(
   });
 }
 
-/** The assistant's next reply to a conversation. */
-export function chat(
-  messages: ChatMessage[],
-  options: { mode?: AssistantMode; signal?: AbortSignal } = {},
-) {
-  return call<AiReply>("ai", {
+export type ChatOptions = {
+  /** The tool the visitor is looking at, so the answer can be about it. */
+  tool?: string | null;
+  detailed?: boolean;
+  signal?: AbortSignal;
+};
+
+/** The assistant's next reply to a conversation, all at once. */
+export function chat(messages: ChatMessage[], options: ChatOptions = {}) {
+  return call<AiReply & { tools?: string[] }>("ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "chat", messages, mode: options.mode ?? "question" }),
+    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false }),
     signal: options.signal,
   });
+}
+
+/**
+ * The same reply as it is written: `onDelta` gets each piece of text and
+ * the promise resolves with the whole. Falls back to one reply when the
+ * server does not stream.
+ */
+export async function chatStream(
+  messages: ChatMessage[],
+  options: ChatOptions,
+  onDelta: (piece: string) => void,
+): Promise<string> {
+  const access = await token();
+  let response: Response;
+  try {
+    response = await fetch(`${FUNCTIONS}/ai`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({
+        action: "chat",
+        messages,
+        tool: options.tool ?? undefined,
+        detailed: options.detailed ?? false,
+        stream: true,
+      }),
+      signal: options.signal,
+    });
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
+    throw new AiError("network", MESSAGES.network);
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
+    throw new AiError(code, describeAiError(code, response.status));
+  }
+  const type = response.headers.get("Content-Type") ?? "";
+  if (!type.includes("text/event-stream") || !response.body) {
+    const body = (await response.json()) as AiReply;
+    onDelta(body.text);
+    return body.text;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let whole = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] };
+        const piece = parsed.choices?.[0]?.delta?.content;
+        if (piece) {
+          whole += piece;
+          onDelta(piece);
+        }
+      } catch {
+        // A partial or keep-alive line; the next chunk completes it.
+      }
+    }
+  }
+  return whole;
 }
 
 // ---------------------------------------------------------------------------

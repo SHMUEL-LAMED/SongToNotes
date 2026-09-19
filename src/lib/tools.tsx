@@ -1,7 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  BookOpen,
   Captions,
+  Guitar,
   Ear,
   FileMusic,
   Gauge,
@@ -140,6 +142,30 @@ export const TOOLS: ToolDefinition[] = [
     hue: 210,
     category: "analyze",
     tags: ["תמלול", "טקסט", "כתוביות", "srt", "דיבור", "כתוביות לסרטון"],
+    badge: "חדש",
+  },
+  {
+    id: "chords",
+    title: "מזהה אקורדים לגיטרה",
+    tagline: "האקורדים של כל שיר",
+    description:
+      "מעלים שיר ומקבלים את האקורדים לאורך הזמן עם דיאגרמות אחיזה לגיטרה, טרנספוזיציה וקאפו — ודף אקורדים להורדה.",
+    icon: Guitar,
+    hue: 40,
+    category: "analyze",
+    tags: ["אקורדים", "גיטרה", "אחיזות", "קאפו", "טרנספוזיציה"],
+    badge: "חדש",
+  },
+  {
+    id: "songbook",
+    title: "שירון",
+    tagline: "מילים ואקורדים על הבמה",
+    description:
+      "כותבים או מדביקים מילים עם אקורדים, מזיזים לסולם נוח, גוללים אוטומטית בהופעה, מדפיסים ושומרים באזור האישי.",
+    icon: BookOpen,
+    hue: 350,
+    category: "practice",
+    tags: ["שירון", "מילים", "אקורדים", "הופעה", "הדפסה"],
     badge: "חדש",
   },
   {

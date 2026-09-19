@@ -43,6 +43,13 @@ export const WORK_KINDS = [
   "metronome",
   "tuner",
   "transcript",
+  "chords",
+  "song",
+  "convert",
+  "rhythm",
+  "mix",
+  "lyrics",
+  "tts",
 ] as const;
 
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -98,6 +105,13 @@ export const KIND_LABELS: Record<WorkKind, string> = {
   metronome: "קצב שמור",
   tuner: "כיוון כלי",
   transcript: "תמלול לטקסט",
+  chords: "אקורדים",
+  song: "שיר בשירון",
+  convert: "קובץ מומר",
+  rhythm: "אימון קצב",
+  mix: "מיקס",
+  lyrics: "מילים מסונכרנות",
+  tts: "הקראה",
 };
 
 /** Which tool opens each kind. */
@@ -112,6 +126,13 @@ export const KIND_TOOL: Record<WorkKind, string> = {
   metronome: "metronome",
   tuner: "tuner",
   transcript: "transcript",
+  chords: "chords",
+  song: "songbook",
+  convert: "convert",
+  rhythm: "rhythm",
+  mix: "mixer",
+  lyrics: "lyrics",
+  tts: "tts",
 };
 
 export function isWorkKind(value: unknown): value is WorkKind {
@@ -646,6 +667,41 @@ export function describeWork(work: SavedWork): string {
     case "transcript":
       parts.push(num("words") !== null ? `${num("words")} מילים` : null);
       parts.push(str("languageLabel"));
+      parts.push(seconds(num("duration")));
+      break;
+    case "chords":
+      parts.push(num("chordCount") !== null ? `${num("chordCount")} אקורדים` : null);
+      parts.push(str("unique"));
+      parts.push(num("capo") ? `קאפו ${num("capo")}` : null);
+      parts.push(seconds(num("duration")));
+      break;
+    case "song":
+      parts.push(num("lines") !== null ? `${num("lines")} שורות` : null);
+      parts.push(str("chords"));
+      parts.push(num("transpose") ? `טרנספוזיציה ${num("transpose")! > 0 ? "+" : ""}${num("transpose")}` : null);
+      break;
+    case "convert":
+      parts.push(str("format")?.toUpperCase() ?? null);
+      parts.push(num("sampleRate") ? `${Math.round(num("sampleRate")! / 1000)} kHz` : null);
+      parts.push(seconds(num("duration")));
+      break;
+    case "rhythm":
+      parts.push(str("levelLabel"));
+      parts.push(num("accuracy") !== null ? `${num("accuracy")}% דיוק` : null);
+      parts.push(num("bpm") ? `${num("bpm")} BPM` : null);
+      break;
+    case "mix":
+      parts.push(num("tracks") !== null ? `${num("tracks")} ערוצים` : null);
+      parts.push(seconds(num("duration")));
+      break;
+    case "lyrics":
+      parts.push(num("lines") !== null ? `${num("lines")} שורות` : null);
+      parts.push(str("languageLabel"));
+      parts.push(seconds(num("duration")));
+      break;
+    case "tts":
+      parts.push(num("characters") !== null ? `${num("characters")} תווים` : null);
+      parts.push(str("voice"));
       parts.push(seconds(num("duration")));
       break;
   }

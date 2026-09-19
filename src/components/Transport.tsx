@@ -9,9 +9,14 @@ type Props = {
   label?: string;
   /** Called every animation frame while playing, for cursors elsewhere. */
   onTime?: (time: number) => void;
+  /**
+   * A request from outside to jump: a new `key` moves playback to `time`
+   * (and starts it when `play` is set), so a chord or a lyric can be clicked.
+   */
+  seek?: { time: number; key: number; play?: boolean } | null;
 };
 
-export function Transport({ buffer, loop = null, label, onTime }: Props) {
+export function Transport({ buffer, loop = null, label, onTime, seek = null }: Props) {
   const playerRef = useRef<BufferPlayer | null>(null);
   const [rawIsPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -40,6 +45,19 @@ export function Transport({ buffer, loop = null, label, onTime }: Props) {
   useEffect(() => {
     playerRef.current?.setLoop(loop);
   }, [loop]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!seek || !player || !buffer) return;
+    player.seek(seek.time);
+    setPosition(seek.time);
+    onTimeRef.current?.(seek.time);
+    if (seek.play && !player.isPlaying) {
+      void player.play(seek.time).then((started) => setIsPlaying(started));
+    }
+    // Only a new request (a new key) should jump; the buffer is here so a
+    // request made before the buffer loaded is honoured once it has.
+  }, [seek, buffer]);
 
   useEffect(() => {
     if (!isPlaying) return;

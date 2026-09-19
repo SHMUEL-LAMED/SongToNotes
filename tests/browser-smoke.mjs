@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 10, "hub renders all 10 tool cards", `found ${cards}`);
+log(cards === 12, "hub renders all 12 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -488,6 +488,46 @@ log(await page.locator(".transcript-ai").isVisible(), "transcript: the AI card (
 log((await page.locator(".transcript-ai-actions .chip-toggle").count()) === 3, "transcript: three AI actions");
 log(/להתחבר/.test((await page.locator(".transcript-ai .ai-status").textContent().catch(() => "")) ?? ""),
   "transcript: signed out, the AI card says to sign in");
+
+// --- chords: the demo file yields a chord timeline with diagrams, and a sheet to download ---
+await page.goto(`${BASE}#/chords`, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.locator(".drop-zone input[type=file]").setInputFiles(DEMO);
+await page.waitForSelector(".chords-timeline", { timeout: 90_000 });
+const chordBlocks = await page.locator(".chords-block").count();
+log(chordBlocks > 0, "chords: the demo song yields a chord timeline", `${chordBlocks} blocks`);
+log((await page.locator(".chords-diagrams .chord-diagram").count()) > 0, "chords: each distinct chord gets a fingering diagram");
+const firstChord = (await page.locator(".chords-block span").first().textContent()) ?? "";
+await page.locator("input[aria-label='טרנספוזיציה בחצאי טונים']").fill("2");
+const movedChord = (await page.locator(".chords-block span").first().textContent()) ?? "";
+log(firstChord !== movedChord, "chords: transposing changes the chord names", `${firstChord} -> ${movedChord}`);
+await page.locator("input[aria-label='טרנספוזיציה בחצאי טונים']").fill("0");
+await page.locator("input[aria-label='מיקום הקאפו']").fill("2");
+log(/קאפו בשריג 2/.test((await page.locator(".chords-tool .table-footnote").textContent()) ?? ""), "chords: a capo is reported under the diagrams");
+const [chordSheet] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".chords-tool .download-buttons button", { hasText: "TXT" }).click(),
+]);
+const chordText = readFileSync(await chordSheet.path(), "utf8");
+log(/0:00\s+[A-G]/.test(chordText), "chords: the sheet lists chords with times", chordText.split("\n").slice(0, 3).join(" | "));
+await page.locator(".chords-tool .download-buttons button", { hasText: "לשירון" }).click();
+await page.waitForSelector(".songbook-tool", { timeout: 10_000 });
+log((await page.locator(".songbook-chord").allTextContents()).some((item) => /[A-G]/.test(item)), "chords: 'to songbook' opens the songbook showing the chords");
+await page.locator(".songbook-toolbar .segmented-control button", { hasText: "עריכה" }).click();
+
+// --- songbook: bracketed chords render above the words, transpose, and print-ready text ---
+await page.locator(".songbook-editor").fill("[Am]היה היה [G]פעם\n[C]ילד קטן");
+await page.locator(".songbook-toolbar .segmented-control button", { hasText: "תצוגה" }).click();
+await page.waitForSelector(".songbook-sheet");
+log((await page.locator(".songbook-chord").allTextContents()).filter((item) => item.trim()).join(" ") === "Am G C", "songbook: chords sit above the words");
+await page.locator("button[aria-label='חצי טון למעלה']").click();
+log((await page.locator(".songbook-chord").allTextContents()).filter((item) => item.trim()).join(" ") === "A#m G# C#", "songbook: transposing up moves every chord");
+log((await page.locator(".songbook-diagrams .chord-diagram").count()) === 3, "songbook: the song's chords get diagrams");
+await page.locator(".songbook-toolbar .segmented-control button", { hasText: "עריכה" }).click();
+await page.locator(".songbook-editor").fill("Am      G\nהיה היה פעם");
+await page.locator(".songbook-editor-tools .link-button").first().click();
+log((await page.locator(".songbook-editor").inputValue()) === "[Am]היה היה [G]פעם", "songbook: chords pasted over lyrics fold into brackets");
 
 // --- the assistant: a corner button on every page, a panel with a sign-in prompt when signed out ---
 log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launcher sits at the corner of the page");

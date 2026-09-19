@@ -3093,7 +3093,75 @@ footer .brand-mark { font-size: 19px; }
   text-align: center;
 }
 .assistant-signin p { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--text-soft); }
+.assistant-panel.is-wide { width: min(720px, calc(100vw - 36px)); height: min(820px, calc(100vh - 36px)); }
+.assistant-detailed { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); white-space: nowrap; align-self: center; }
+.assistant-detailed input { accent-color: var(--accent); }
+.assistant-markdown p { margin: 0 0 8px; }
+.assistant-markdown p:last-child { margin-bottom: 0; }
+.assistant-markdown h3, .assistant-markdown h4 { margin: 8px 0 6px; font-size: 15px; }
+.assistant-markdown ul, .assistant-markdown ol { margin: 4px 0 8px; padding-inline-start: 20px; }
+.assistant-markdown li { margin: 2px 0; }
+.assistant-markdown code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: rgba(127, 127, 127, 0.15); padding: 1px 5px; border-radius: 5px; direction: ltr; unicode-bidi: embed; }
+.assistant-markdown pre { background: rgba(127, 127, 127, 0.12); padding: 10px 12px; border-radius: 10px; overflow: auto; font-size: 13px; margin: 6px 0; }
+.assistant-markdown a { color: var(--accent-text); }
+.assistant-bubble.is-live::after { content: "▍"; animation: assistant-caret 0.9s steps(2) infinite; color: var(--accent); }
+@keyframes assistant-caret { 50% { opacity: 0; } }
+.assistant-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.assistant-open {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 999px; border: 0;
+  background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
+}
+.assistant-open:hover { filter: brightness(1.08); }
+.assistant-bubble-tools { display: flex; gap: 12px; margin-top: 8px; }
+.assistant-bubble-tools .link-button { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; }
+.assistant-suggestions.is-followups { flex-direction: row; flex-wrap: wrap; }
 @media (max-width: 640px) {
   .assistant-panel { inset-inline-start: 10px; bottom: 10px; width: calc(100vw - 20px); height: min(560px, calc(100vh - 20px)); }
   .assistant-launcher { inset-inline-start: 12px; bottom: 12px; }
+}
+
+/* --- chords --- */
+.chord-diagram { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text); }
+.chord-diagram figcaption { font-size: 13px; font-weight: 700; }
+.chord-diagram.is-active { color: var(--accent-text); }
+.chords-now { display: flex; align-items: center; gap: 18px; min-height: 96px; padding: 12px 16px; border-radius: 14px; background: var(--surface-sunken); }
+.chords-now > div { display: flex; flex-direction: column; gap: 2px; }
+.chords-now strong { font-size: 34px; line-height: 1; letter-spacing: -0.5px; }
+.chords-now span { color: var(--text-muted); font-size: 14px; }
+.chords-now small { color: var(--text-soft); font-size: 13px; margin-top: 6px; }
+.chords-now p { margin: 0; color: var(--text-muted); font-size: 14px; }
+.chords-timeline { display: flex; gap: 4px; overflow-x: auto; padding: 6px 0; }
+.chords-block {
+  flex: 1 0 auto; min-width: 54px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 6px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; font: inherit; color: var(--text);
+  background: hsl(var(--chord-hue) 70% 50% / 0.16);
+}
+.chords-block span { font-weight: 800; font-size: 15px; }
+.chords-block small { font-size: 11px; color: var(--text-muted); }
+.chords-block.is-current { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: hsl(var(--chord-hue) 70% 50% / 0.35); }
+.chords-diagrams { display: flex; flex-wrap: wrap; gap: 14px; padding: 6px 0; }
+
+/* --- songbook --- */
+.songbook-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.songbook-title { flex: 1 1 220px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 16px; font-weight: 700; }
+.songbook-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.songbook-editor { width: 100%; min-height: 260px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: 16px; line-height: 1.8; resize: vertical; }
+.songbook-editor-tools { display: flex; gap: 16px; flex-wrap: wrap; }
+.songbook-stepper { display: flex; align-items: center; gap: 8px; }
+.songbook-stepper > button:not(.link-button):not(.primary-button) { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.songbook-stepper input[type="range"] { flex: 1; }
+.songbook-sheet { max-height: 70vh; overflow: auto; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); line-height: 1.5; scroll-behavior: auto; }
+.songbook-sheet h2 { margin: 0 0 12px; font-size: 1.4em; }
+.songbook-sheet h3 { margin: 18px 0 6px; font-size: 0.9em; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.4px; }
+.songbook-sheet p { margin: 0 0 4px; white-space: pre-wrap; }
+.songbook-blank { height: 0.9em; }
+.songbook-line { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 6px; }
+.songbook-piece { display: inline-flex; flex-direction: column; white-space: pre; }
+.songbook-chord { font-weight: 800; color: var(--accent-text); font-size: 0.85em; line-height: 1.2; min-height: 1.2em; }
+.songbook-diagrams { padding: 4px 0 10px; }
+@media print {
+  .topbar, .assistant-launcher, .assistant-panel, .tool-intro, .songbook-toolbar, .songbook-controls, .downloads-card, .songbook-diagrams, footer, .skip-link { display: none !important; }
+  .songbook-sheet { max-height: none; overflow: visible; border: 0; padding: 0; }
+  .workspace-card { border: 0; box-shadow: none; padding: 0; }
 }
