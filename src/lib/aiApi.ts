@@ -76,6 +76,7 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 
 export type AiAction = "polish" | "summarize" | "translate" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type AssistantMode = "question" | "execute";
 export type AssistantAction = { type: "navigate"; route: string };
 export type AiReply = {
   text: string;
@@ -104,6 +105,7 @@ export type ChatOptions = {
   /** The tool the visitor is looking at, so the answer can be about it. */
   tool?: string | null;
   detailed?: boolean;
+  mode?: AssistantMode;
   signal?: AbortSignal;
 };
 
@@ -112,7 +114,7 @@ export function chat(messages: ChatMessage[], options: ChatOptions = {}) {
   return call<AiReply & { tools?: string[] }>("ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false }),
+    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false, mode: options.mode ?? "question" }),
     signal: options.signal,
   });
 }
@@ -142,6 +144,7 @@ export async function chatStream(
         messages,
         tool: options.tool ?? undefined,
         detailed: options.detailed ?? false,
+        mode: options.mode ?? "question",
         stream: true,
       }),
       signal: options.signal,
