@@ -351,6 +351,55 @@ on public.shares for delete to authenticated
 using ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------------------------------------
+-- The assistant's conversations. Each one is a thread the visitor can come
+-- back to, rename or delete; the messages themselves are a jsonb array, so a
+-- conversation is one row and one round trip. A conversation made without an
+-- account lives in the browser and is uploaded on the first sign-in, exactly
+-- like the works above.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.assistant_chats (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- The id the conversation got in the browser that started it.
+  client_id text not null,
+  title text not null default 'שיחה חדשה',
+  -- [{ role, content, hidden?, actions? }], oldest first.
+  messages jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, client_id)
+);
+
+create index if not exists assistant_chats_user_updated_idx
+  on public.assistant_chats (user_id, updated_at desc);
+
+alter table public.assistant_chats enable row level security;
+
+grant select, insert, update, delete on public.assistant_chats to authenticated;
+
+create policy "Users can view their own chats"
+on public.assistant_chats for select to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can insert their own chats"
+on public.assistant_chats for insert to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update their own chats"
+on public.assistant_chats for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can delete their own chats"
+on public.assistant_chats for delete to authenticated
+using ((select auth.uid()) = user_id);
+
+create trigger assistant_chats_set_updated_at
+before update on public.assistant_chats
+for each row execute function private.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- The admin area (`#/admin`). One account — the address in the `ADMIN_EMAILS`
 -- secret of `supabase/functions/admin` — sees the whole site: accounts, saved
 -- work, daily allowances, share links and the cloud folder. The site itself

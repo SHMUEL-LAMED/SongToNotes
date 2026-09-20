@@ -30,13 +30,26 @@
  *   AI_API_KEY        a key for a service not in the list (with AI_BASE_URL)
  *   AI_BASE_URL       that service's base URL
  *   AI_MODEL          the model to try first on it
- *   AI_DAILY_TOKENS   default 300000
+ *   AI_DAILY_TOKENS   default 5000000
  *   <NAME>_API_KEY    a key for one of the known providers
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "./common.ts";
 
-const DEFAULT_DAILY_TOKENS = 300_000;
-const MAX_INPUT_CHARS = 60_000;
+/**
+ * The daily allowance, in tokens. The free providers below cost nothing, so
+ * this is a guard against one account burning a shared key rather than a
+ * price: it is set high enough that ordinary use never meets it.
+ */
+const DEFAULT_DAILY_TOKENS = 5_000_000;
+const MAX_INPUT_CHARS = 200_000;
+/**
+ * How much of a conversation goes to the model. Today's models hold 128k
+ * tokens and more, so a conversation has to be very long indeed before
+ * anything is left out — and when it is, the oldest turns go and the model
+ * is told, rather than the request failing.
+ */
+const HISTORY_CHARS = 400_000;
+const MAX_TURNS = 200;
 
 type Provider = {
   id: string;
@@ -387,12 +400,31 @@ Deno.serve(async (req: Request) => {
   const language = typeof body.language === "string" ? body.language.slice(0, 40) : null;
 
   let messages: Message[] = prompts(action, language);
+  let trimmed = 0;
   if (action === "chat") {
     const history = Array.isArray(body.messages) ? body.messages : [];
-    const clean = history
+    const whole = history
       .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
-      .slice(-16)
-      .map((item) => ({ role: item.role, content: item.content.slice(0, 6000) }));
+      .slice(-MAX_TURNS)
+      .map((item) => ({ role: item.role, content: item.content }));
+    // The newest turns are the ones that matter, so the budget is filled
+    // from the end backwards; whatever did not fit is counted, not dropped
+    // silently.
+    const clean: Message[] = [];
+    let budget = HISTORY_CHARS;
+    for (let index = whole.length - 1; index >= 0; index -= 1) {
+      const turn = whole[index];
+      if (budget - turn.content.length < 0 && clean.length) {
+        trimmed = index + 1;
+        break;
+      }
+      budget -= turn.content.length;
+      clean.unshift(turn);
+    }
+    // One turn longer than the whole budget is cut rather than refused.
+    if (clean.length === 1 && clean[0].content.length > HISTORY_CHARS) {
+      clean[0] = { ...clean[0], content: clean[0].content.slice(-HISTORY_CHARS) };
+    }
     if (!clean.length) return json(400, { error: "bad_request" });
     const tool = typeof body.tool === "string" ? body.tool.replace(/[^a-z-]/g, "").slice(0, 30) : "";
     const execute = body.mode === "execute";
@@ -402,6 +434,7 @@ Deno.serve(async (req: Request) => {
       tool ? `הגולש נמצא כרגע בכלי "${tool}".` : "הגולש נמצא בדף הבית של האתר.",
       body.detailed ? "הגולש ביקש הסברים מפורטים: צעדים, דוגמה, ומה לעשות אם משהו לא עובד." : "השב בקצרה; הרחב רק אם מבקשים.",
       execute ? ACTION_PROTOCOL : QUESTION_MODE,
+      trimmed ? `\n\nהשיחה ארוכה: ${trimmed} ההודעות הראשונות הושמטו כדי שהחדשות ייכנסו. אם חסר לך משהו מתחילת השיחה, בקש מהגולש להזכיר לך.` : "",
       state ? `\n\nמצב המסך עכשיו (עדכני לרגע זה — הסתמך עליו ואל תשאל על מה שכתוב כאן):\n${state}` : "",
       catalog ? `\n\nהפעולות שאתה יכול לבצע:\n${catalog}` : "",
     ].join(" ");
@@ -425,7 +458,7 @@ Deno.serve(async (req: Request) => {
         model,
         messages,
         temperature: action === "chat" ? 0.4 : 0.2,
-        [endpoint.tokenParam]: action === "chat" ? 2000 : 2400,
+        [endpoint.tokenParam]: action === "chat" ? 4000 : 4000,
         ...(wantStream ? { stream: true } : {}),
       }),
     });
