@@ -3,11 +3,14 @@ import {
   Check,
   CircleHelp,
   Copy,
+  History,
   LoaderCircle,
   LogIn,
   Maximize2,
+  MessageSquarePlus,
   MousePointerClick,
   Minimize2,
+  Pencil,
   RefreshCw,
   SendHorizontal,
   Sparkles,
@@ -28,6 +31,17 @@ import {
   type ActionRecord,
   type ActionSpec,
 } from "../lib/assistantActions";
+import {
+  deleteChat as removeChat,
+  emptyChat,
+  listChats,
+  readLocal,
+  renameChat,
+  saveChat,
+  titleFrom,
+  type Chat,
+  type StoredMessage,
+} from "../lib/assistantChats";
 import { parseAssistantReply } from "../lib/assistantProtocol";
 import { useAuth } from "../lib/auth";
 import { renderMarkdown } from "../lib/markdown";
@@ -41,20 +55,22 @@ type Props = {
   toolTitle: string | null;
 };
 
-/** One turn of the conversation, as the panel keeps it. */
-type Message = ChatMessage & {
-  /** The site's own report of what its actions did; sent to the model, never shown. */
-  hidden?: boolean;
-  /** What the assistant did after this reply, as chips under it. */
-  actions?: ActionRecord[];
-};
+/**
+ * One turn of the conversation. The thread itself is kept and synced by
+ * {@link ../lib/assistantChats}, so this is that module's shape.
+ */
+type Message = StoredMessage;
 
-const STORAGE_KEY = "musictools.assistant.v3";
 const MODE_KEY = "musictools.assistant.mode.v1";
-const MAX_MESSAGE = 3000;
-const HISTORY = 40;
-/** Turns sent to the model with each question. */
-const WINDOW = 16;
+/**
+ * A message is capped only where a text box has to stop somewhere; the
+ * conversation itself is not trimmed here. What fits in the model's context
+ * is decided on the server, which fills its budget from the newest turn
+ * backwards and says so when something was left out.
+ */
+const MAX_MESSAGE = 32_000;
+/** How long after the last change the thread is written down. */
+const SAVE_AFTER = 700;
 /** How many times the model may act, look, and act again for one request. */
 const MAX_ROUNDS = 4;
 /** Actions run from one reply; anything past this is ignored. */
@@ -116,40 +132,6 @@ const DO_BY_TOOL: Record<string, string[]> = {
   identify: ["האזן וזהה את השיר"],
 };
 
-function validRecord(item: unknown): item is ActionRecord {
-  if (!item || typeof item !== "object") return false;
-  const record = item as ActionRecord;
-  return typeof record.id === "string" && typeof record.ok === "boolean" && typeof record.message === "string";
-}
-
-function loadHistory(storageKey: string): Message[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(storageKey) ?? sessionStorage.getItem(storageKey) ?? "null");
-    return Array.isArray(parsed)
-      ? parsed
-          .filter(
-            (item): item is Message =>
-              item !== null &&
-              typeof item === "object" &&
-              ((item as Message).role === "user" || (item as Message).role === "assistant") &&
-              typeof (item as Message).content === "string",
-          )
-          .slice(-HISTORY)
-          .map((item) => ({
-            role: item.role,
-            // A reply kept before the action protocol may still carry markers.
-            content: item.role === "assistant" ? parseAssistantReply(item.content.slice(0, 8000)).text || item.content.slice(0, 8000) : item.content.slice(0, 8000),
-            ...(item.hidden === true ? { hidden: true } : {}),
-            ...(Array.isArray(item.actions)
-              ? { actions: item.actions.filter(validRecord).slice(0, MAX_ACTIONS).map((record) => ({ id: record.id, params: record.params && typeof record.params === "object" ? record.params : {}, ok: record.ok, message: record.message, ...(record.cancelled ? { cancelled: true } : {}) })) }
-              : {}),
-          }))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
 function loadMode(): AssistantMode {
   try {
     return localStorage.getItem(MODE_KEY) === "question" ? "question" : "execute";
@@ -158,9 +140,15 @@ function loadMode(): AssistantMode {
   }
 }
 
-/** The turns as the model receives them: role and text only. */
+/** The turns as the model receives them: role and text only, all of them. */
 function toHistory(messages: Message[]): ChatMessage[] {
-  return messages.slice(-WINDOW).map(({ role, content }) => ({ role, content }));
+  return messages.map(({ role, content }) => ({ role, content }));
+}
+
+const timeFormat = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" });
+function whenLabel(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : timeFormat.format(date);
 }
 
 /**
@@ -170,21 +158,33 @@ function toHistory(messages: Message[]): ChatMessage[] {
  * is written. In "do" mode the reply can carry actions ({@link ../lib/assistantProtocol});
  * the panel runs them one by one, asks the visitor before anything that
  * cannot be undone, and — when an action brought data back or failed —
- * reports the outcome to the model so it can carry on. It needs an account,
- * like every use of the server, and each account sees only its own
- * conversation.
+ * reports the outcome to the model so it can carry on.
+ *
+ * Conversations are kept: the one on screen is written down as it grows, and
+ * the rest are a click away in the history, on this device and — with an
+ * account — on every device. It needs an account, like every use of the
+ * server, and each account sees only its own threads.
  */
 export function AiAssistant(props: Props) {
   const { user } = useAuth();
   // Remount on account changes: never show another account's conversation.
-  return <AssistantConversation key={user?.id ?? "guest"} {...props} storageKey={`${STORAGE_KEY}.${user?.id ?? "guest"}`} />;
+  return <AssistantConversation key={user?.id ?? "guest"} {...props} />;
 }
 
 type Confirmation = { call: ActionCall; spec: ActionSpec; resolve: (approved: boolean) => void };
 
-function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle, storageKey }: Props & { storageKey: string }) {
+function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle }: Props) {
   const { user, signInWithGoogle } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(() => loadHistory(storageKey));
+  const userId = user?.id ?? null;
+  // The thread on screen, and the rest of them. This device's copy is read
+  // synchronously, so a refresh comes back to the conversation rather than
+  // to an empty panel; the profile's threads arrive a moment later.
+  const [restored] = useState<Chat>(() => readLocal(userId).find((item) => item.messages.length) ?? emptyChat());
+  const [chat, setChat] = useState<Chat>(restored);
+  const [chats, setChats] = useState<Chat[] | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [messages, setMessages] = useState<Message[]>(restored.messages);
   const [draft, setDraft] = useState("");
   const [detailed, setDetailed] = useState(false);
   const [mode, setMode] = useState<AssistantMode>(loadMode);
@@ -210,13 +210,68 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     onOpenRef.current = onOpen;
   }, [onOpen]);
 
+  // The thread is written down a moment after it stops changing, so a reply
+  // streaming in token by token is one save rather than hundreds.
+  const chatRef = useRef(chat);
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(messages.slice(-HISTORY)));
-    } catch {
-      // Private browsing; the conversation lasts as long as the page.
-    }
-  }, [messages, storageKey]);
+    chatRef.current = chat;
+  }, [chat]);
+  useEffect(() => {
+    if (!messages.length) return;
+    // Opening a thread is not a change to it.
+    if (chatRef.current.messages === messages) return;
+    const timer = window.setTimeout(() => {
+      const current = chatRef.current;
+      const next: Chat = {
+        ...current,
+        messages,
+        title: current.title === "שיחה חדשה" ? titleFrom(messages) : current.title,
+      };
+      void saveChat(next, userId)
+        .then((saved) => {
+          setChat((live) => (live.id === saved.id ? { ...live, title: saved.title, updatedAt: saved.updatedAt, localOnly: saved.localOnly } : live));
+          setChats((list) => (list ? [saved, ...list.filter((item) => item.id !== saved.id)] : list));
+        })
+        .catch(() => undefined);
+    }, SAVE_AFTER);
+    return () => window.clearTimeout(timer);
+  }, [messages, userId]);
+
+  // With an account the threads made on other devices come down once, and
+  // the newest one opens when this device had nothing of its own.
+  useEffect(() => {
+    if (!userId) return;
+    let live = true;
+    void listChats(userId)
+      .then((list) => {
+        if (!live) return;
+        setChats(list);
+        const newest = list.find((item) => item.messages.length);
+        if (!newest) return;
+        setChat((current) => (current.messages.length ? current : newest));
+        setMessages((current) => (current.length ? current : newest.messages));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [userId]);
+
+  // The list is refreshed whenever the history is opened.
+  useEffect(() => {
+    if (!showHistory) return;
+    let live = true;
+    void listChats(userId)
+      .then((list) => {
+        if (live) setChats(list);
+      })
+      .catch(() => {
+        if (live) setChats([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [showHistory, userId]);
 
   useEffect(() => {
     try {
@@ -275,7 +330,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     setPartial(null);
     if (kept) {
       const { text } = parseAssistantReply(kept);
-      if (text) setMessages((previous) => [...previous, { role: "assistant" as const, content: text }].slice(-HISTORY));
+      if (text) setMessages((previous) => [...previous, { role: "assistant" as const, content: text }]);
     }
   };
 
@@ -361,13 +416,13 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       writtenRef.current = "";
       setPartial(null);
       let entry: Message = { role: "assistant", content: text, ...(actions.length ? { actions: [] } : {}) };
-      let history = [...next, entry].slice(-HISTORY);
+      let history = [...next, entry];
       setMessages(history);
       if (!actions.length) return;
 
       const records = await runActions(actions, (list) => {
         entry = { ...entry, actions: list.map(trimRecord) };
-        history = [...next, entry].slice(-HISTORY);
+        history = [...next, entry];
         setMessages(history);
       });
       if (haltRef.current) return;
@@ -377,7 +432,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       if (worthAnotherRound && round < MAX_ROUNDS) {
         abortRef.current = null;
         const report: Message = { role: "user", content: formatActionResults(records), hidden: true };
-        await converse([...history, report].slice(-HISTORY), round + 1);
+        await converse([...history, report], round + 1);
       }
     } catch (caught) {
       if (controller.signal.aborted) return;
@@ -401,7 +456,51 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       return;
     }
     setDraft("");
-    void converse([...(base ?? messages), { role: "user" as const, content: clean }].slice(-HISTORY), 0);
+    void converse([...(base ?? messages), { role: "user" as const, content: clean }], 0);
+  };
+
+  /** Puts the current thread away and starts an empty one. */
+  const startNewChat = () => {
+    stop();
+    setChat(emptyChat());
+    setMessages([]);
+    setError(null);
+    setRetry(null);
+    setPartial(null);
+    setShowHistory(false);
+    window.setTimeout(() => inputRef.current?.focus(), 60);
+  };
+
+  const openChat = (item: Chat) => {
+    stop();
+    setChat(item);
+    setMessages(item.messages);
+    setError(null);
+    setRetry(null);
+    setPartial(null);
+    setShowHistory(false);
+  };
+
+  const dropChat = (id: string) => {
+    void removeChat(id, userId).catch(() => undefined);
+    setChats((list) => (list ? list.filter((item) => item.id !== id) : list));
+    // Throwing away the thread on screen leaves an empty one in its place.
+    if (id === chat.id) {
+      stop();
+      setChat(emptyChat());
+      setMessages([]);
+    }
+  };
+
+  const commitRename = () => {
+    if (!renaming) return;
+    const title = renaming.title.trim();
+    const { id } = renaming;
+    setRenaming(null);
+    if (!title) return;
+    void renameChat(id, title, userId).catch(() => undefined);
+    setChats((list) => (list ? list.map((item) => (item.id === id ? { ...item, title } : item)) : list));
+    setChat((live) => (live.id === id ? { ...live, title } : live));
   };
 
   const regenerate = () => {
@@ -447,7 +546,10 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
         </div>
       );
     }
-    const text = live ? parseAssistantReply(message.content).text : message.content;
+    // Always parsed, not only while streaming: a reply kept from before the
+    // action protocol, or saved when the visitor pressed stop mid-block, can
+    // still carry markup, and none of it belongs on screen.
+    const text = parseAssistantReply(message.content).text || message.content;
     return (
       <div key={`a${index}`} className={`assistant-bubble is-assistant ${live ? "is-live" : ""}`} dir="auto">
         <div className="assistant-markdown">{renderMarkdown(text)}</div>
@@ -509,26 +611,22 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                     : "שאלות על הכלים ועל מוזיקה"}
               </small>
             </div>
+            <button
+              type="button"
+              className={`icon-button ${showHistory ? "is-on" : ""}`}
+              onClick={() => setShowHistory((value) => !value)}
+              aria-label="שיחות קודמות"
+              aria-pressed={showHistory}
+              title="שיחות קודמות"
+            >
+              <History size={16} />
+            </button>
+            <button type="button" className="icon-button" onClick={startNewChat} aria-label="שיחה חדשה" title="שיחה חדשה" disabled={!messages.length && !busy}>
+              <MessageSquarePlus size={16} />
+            </button>
             <button type="button" className="icon-button" onClick={() => setWide((value) => !value)} aria-label={wide ? "הקטן" : "הגדל"} title={wide ? "הקטן" : "הגדל"}>
               {wide ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
-            {messages.length > 0 && (
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => {
-                  stop();
-                  setMessages([]);
-                  setError(null);
-                  setRetry(null);
-                  setPartial(null);
-                }}
-                aria-label="נקה את השיחה"
-                title="נקה את השיחה"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
             <button type="button" className="icon-button" onClick={onClose} aria-label="סגור את העוזר">
               <X size={18} />
             </button>
@@ -542,6 +640,71 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
               <CircleHelp size={15} /> מצב שאלה
             </button>
           </div>
+
+          {showHistory && (
+            <div className="assistant-history">
+              <div className="assistant-history-head">
+                <strong>שיחות קודמות</strong>
+                <button type="button" className="link-button" onClick={startNewChat}>
+                  <MessageSquarePlus size={14} /> שיחה חדשה
+                </button>
+              </div>
+              {chats === null ? (
+                <p className="table-footnote">טוען…</p>
+              ) : chats.filter((item) => item.messages.length).length === 0 ? (
+                <p className="table-footnote">
+                  עדיין אין שיחות שמורות. כל שיחה נשמרת מעצמה{user ? " ומסונכרנת לחשבון" : " במכשיר הזה; התחברות תסנכרן אותה לכל המכשירים"}.
+                </p>
+              ) : (
+                <ul className="assistant-history-list">
+                  {chats
+                    .filter((item) => item.messages.length)
+                    .map((item) => (
+                      <li key={item.id} className={item.id === chat.id ? "is-current" : ""}>
+                        {renaming?.id === item.id ? (
+                          <form
+                            className="assistant-history-rename"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              commitRename();
+                            }}
+                          >
+                            <input
+                              autoFocus
+                              value={renaming.title}
+                              maxLength={80}
+                              aria-label="שם השיחה"
+                              onChange={(event) => setRenaming({ id: item.id, title: event.target.value })}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") setRenaming(null);
+                              }}
+                            />
+                            <button type="submit" className="icon-button" aria-label="שמור שם">
+                              <Check size={15} />
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            <button type="button" className="assistant-history-open" onClick={() => openChat(item)}>
+                              <span>{item.title}</span>
+                              <small>
+                                {whenLabel(item.updatedAt)} · {item.messages.filter((message) => !message.hidden).length} הודעות
+                              </small>
+                            </button>
+                            <button type="button" className="icon-button" onClick={() => setRenaming({ id: item.id, title: item.title })} aria-label={`שנה שם ל${item.title}`}>
+                              <Pencil size={14} />
+                            </button>
+                            <button type="button" className="icon-button is-danger" onClick={() => dropChat(item.id)} aria-label={`מחק את ${item.title}`}>
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="assistant-messages" ref={listRef} aria-live="polite">
             {shown.length === 0 && !busy && (
