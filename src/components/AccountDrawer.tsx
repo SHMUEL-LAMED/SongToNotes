@@ -17,6 +17,7 @@ import {
   Search,
   Link2,
   Share2,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   Trash2,
@@ -50,6 +51,8 @@ type Props = {
   onClose: () => void;
   /** Opens a saved work in the tool that made it. */
   onOpenWork: (work: SavedWork) => void;
+  /** Opens the admin area — given only to the account that owns the site. */
+  onOpenAdmin?: (() => void) | null;
   onSignInError: (message: string) => void;
 };
 
@@ -110,7 +113,7 @@ function groupByDay(items: SavedWork[]) {
  * how the ear training is going over time. Without an account it still lists
  * what this device made and says what signing in would add.
  */
-export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Props) {
+export function AccountDrawer({ open, onClose, onOpenWork, onOpenAdmin, onSignInError }: Props) {
   const { user, profile, updateName, signOut, signInWithGoogle } = useAuth();
 
   const [works, setWorks] = useState<SavedWork[] | null>(null);
@@ -787,6 +790,23 @@ export function AccountDrawer({ open, onClose, onOpenWork, onSignInError }: Prop
 
         {/* ---- the side ---- */}
         <aside className="me-side">
+          {/* Only the owner's account is given this, and the server checks
+              the address again on every request the area makes. */}
+          {onOpenAdmin && (
+            <section className="me-card me-admin-card">
+              <h3>
+                <ShieldCheck size={17} /> אזור ניהול
+              </h3>
+              <p className="me-card-note">
+                כל האתר במקום אחד: חשבונות, מה שנשמר בכל הכלים, המכסות היומיות, הקישורים
+                הציבוריים והמפתחות של השרת.
+              </p>
+              <button type="button" className="primary-button compact" onClick={onOpenAdmin}>
+                <ShieldCheck size={16} /> כניסה לאזור הניהול
+              </button>
+            </section>
+          )}
+
           {user && (
             <section className="me-card">
               <h3>

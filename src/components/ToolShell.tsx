@@ -7,6 +7,8 @@ import { ThemeToggle } from "./ThemeToggle";
 
 type Props = PropsWithChildren<{
   tool: ToolDefinition | null;
+  /** The name of a page that is not a tool — the admin area. */
+  pageTitle?: string | null;
   /** True while the personal area is open over the page. */
   account?: boolean;
   themePreference: ThemePreference;
@@ -22,6 +24,7 @@ type Props = PropsWithChildren<{
  */
 export function ToolShell({
   tool,
+  pageTitle = null,
   account = false,
   themePreference,
   onCycleTheme,
@@ -33,10 +36,11 @@ export function ToolShell({
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = tool
-      ? `${tool.title} — כלי מוזיקה`
+    const name = tool?.title ?? pageTitle;
+    document.title = name
+      ? `${name} — כלי מוזיקה`
       : "כלי מוזיקה — שיר לתווים, צלצולים, מטרונום, טיונר ועוד";
-  }, [tool]);
+  }, [pageTitle, tool]);
 
   return (
     <main
@@ -123,7 +127,7 @@ export function ToolShell({
       {/* Moving between tools changes the hash, not the document, so a screen
           reader is told nothing on its own. This says where we landed. */}
       <p className="sr-only" role="status" aria-live="polite">
-        {tool ? `${tool.title} — ${tool.tagline}` : "כל הכלים"}
+        {tool ? `${tool.title} — ${tool.tagline}` : (pageTitle ?? "כל הכלים")}
       </p>
       <div className="page-content" ref={contentRef} tabIndex={-1}>
         {children}

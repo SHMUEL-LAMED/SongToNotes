@@ -349,3 +349,63 @@ using ((select auth.uid()) = user_id);
 create policy "Users can revoke their own share links"
 on public.shares for delete to authenticated
 using ((select auth.uid()) = user_id);
+
+-- ---------------------------------------------------------------------------
+-- The admin area (`#/admin`). One account — the address in the `ADMIN_EMAILS`
+-- secret of `supabase/functions/admin` — sees the whole site: accounts, saved
+-- work, daily allowances, share links and the cloud folder. The site itself
+-- never gets that reach: every figure comes from the admin function with the
+-- service role, after it has checked the caller's verified address, so the
+-- policies above keep holding for everybody, the admin included.
+--
+-- Nothing here is readable through the API. The two functions and the log are
+-- granted to the service role alone.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.admin_audit (
+  id bigint generated always as identity primary key,
+  actor_email text not null,
+  action text not null,
+  target text,
+  detail jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_audit enable row level security;
+-- No policy on purpose: with RLS on and nothing granted, only the service
+-- role — that is, the admin function — writes and reads the log.
+revoke all on public.admin_audit from anon, authenticated;
+
+create index if not exists admin_audit_created_idx on public.admin_audit (created_at desc);
+
+-- How much room each account takes in the private bucket. Listing the bucket
+-- folder by folder would be one request per account; this is one query.
+create or replace function public.admin_storage_usage()
+returns table (user_id text, files bigint, bytes bigint)
+language sql
+security definer
+set search_path = ''
+as $$
+  select
+    (storage.foldername(o.name))[1] as user_id,
+    count(*)::bigint as files,
+    coalesce(sum(coalesce((o.metadata ->> 'size')::bigint, 0)), 0)::bigint as bytes
+  from storage.objects o
+  where o.bucket_id = 'works'
+  group by 1;
+$$;
+revoke all on function public.admin_storage_usage() from public, anon, authenticated;
+grant execute on function public.admin_storage_usage() to service_role;
+
+-- The counterpart of stt_set_setting: the admin area can clear a setting it
+-- put in, so a key that was replaced does not linger in the database.
+create or replace function public.stt_delete_setting(setting_key text)
+returns void
+language sql
+security definer
+set search_path = private
+as $$
+  delete from private.stt_settings where key = setting_key;
+$$;
+revoke all on function public.stt_delete_setting(text) from public, anon, authenticated;
+grant execute on function public.stt_delete_setting(text) to service_role;
