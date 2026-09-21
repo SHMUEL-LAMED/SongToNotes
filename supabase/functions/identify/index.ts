@@ -11,6 +11,8 @@ import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } fr
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_DAILY = 30;
+const DEMO_DAILY = 10;
+const DEMO_TOKEN = "test";
 const AUDD = "https://api.audd.io/";
 
 Deno.serve(async (req: Request) => {
@@ -18,13 +20,17 @@ Deno.serve(async (req: Request) => {
 
   const admin = adminClient();
   const setting = await settings(admin);
-  const apiKey = setting("IDENTIFY_API_KEY");
+  const configuredKey = setting("IDENTIFY_API_KEY");
+  // AudD documents a public demo token for the standard endpoint. It keeps
+  // the tool useful on a free installation; a private key, when configured,
+  // automatically takes precedence and restores the site's normal allowance.
+  const apiKey = configuredKey || DEMO_TOKEN;
+  const demo = !configuredKey;
   if (req.method === "GET" && new URL(req.url).searchParams.get("availability")) {
-    return json(200, { configured: Boolean(apiKey) });
+    return json(200, { configured: true, demo });
   }
   if (req.method !== "POST") return json(405, { error: "method" });
-  if (!apiKey) return json(503, { error: "not_configured" });
-  const limit = Number(setting("IDENTIFY_DAILY")) || DEFAULT_DAILY;
+  const limit = Number(setting("IDENTIFY_DAILY")) || (demo ? DEMO_DAILY : DEFAULT_DAILY);
 
   const user = await visitor(req);
   if (!user) return json(401, { error: "signed_out" });
@@ -72,6 +78,7 @@ Deno.serve(async (req: Request) => {
   if (!parsed || parsed.status !== "success") {
     console.error("recognition refused", response.status, JSON.stringify(parsed).slice(0, 300));
     const code = parsed?.error?.error_code;
+    if (demo && (code === 900 || code === 901)) return json(429, { error: "demo_quota" });
     if (code === 900 || code === 901) return json(502, { error: "provider_key" });
     return json(502, { error: "provider_error", status: response.status });
   }
