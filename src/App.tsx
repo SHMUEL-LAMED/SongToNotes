@@ -7,6 +7,7 @@ import { Hub } from "./components/Hub";
 import { SharePage } from "./components/SharePage";
 import { ToolShell } from "./components/ToolShell";
 import { useAssistantTool } from "./lib/useAssistantTool";
+import { isAdmin } from "./lib/admin";
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
 import { useTheme, type ThemePreference } from "./lib/theme";
@@ -39,6 +40,12 @@ import { VocalsTool } from "./tools/VocalsTool";
 // open for someone who never asks for sheet music.
 const TranscriberTool = lazy(() =>
   import("./tools/TranscriberTool").then((module) => ({ default: module.TranscriberTool })),
+);
+
+// The admin area is a page one account ever opens; splitting it out keeps it
+// out of everybody else's download.
+const AdminPanel = lazy(() =>
+  import("./components/AdminPanel").then((module) => ({ default: module.AdminPanel })),
 );
 
 /**
@@ -82,12 +89,15 @@ function WorkspaceApp() {
 
   const tool = findTool(route);
   const shareToken = shareTokenFromRoute(route);
+  // The admin area is not a tool: it never appears in the hub, and the page
+  // behind the route refuses anybody but the owner — as does the server.
+  const admin = route === "admin";
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
   // than an empty page.
   useEffect(() => {
-    if (route !== "home" && !tool && !shareToken) navigate("home");
-  }, [navigate, route, shareToken, tool]);
+    if (route !== "home" && !tool && !shareToken && !admin) navigate("home");
+  }, [admin, navigate, route, shareToken, tool]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -207,6 +217,7 @@ function WorkspaceApp() {
   return (
     <ToolShell
       tool={tool}
+      pageTitle={admin ? "אזור ניהול" : null}
       account={accountOpen}
       themePreference={theme.preference}
       onCycleTheme={theme.cycle}
@@ -217,6 +228,10 @@ function WorkspaceApp() {
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
         onOpenWork={openWork}
+        onOpenAdmin={isAdmin(user) ? () => {
+          setAccountOpen(false);
+          go("admin");
+        } : null}
         onSignInError={setShellError}
       />
 
@@ -240,7 +255,21 @@ function WorkspaceApp() {
       )}
 
       {shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
-      {!tool && !shareToken && <Hub onOpen={go} />}
+      {admin && (
+        <Suspense
+          fallback={
+            <div className="tool-loading" role="status">
+              <span className="brand-mark">
+                <Music2 size={20} />
+              </span>
+              טוען את אזור הניהול…
+            </div>
+          }
+        >
+          <AdminPanel onHome={() => go("home")} />
+        </Suspense>
+      )}
+      {!tool && !shareToken && !admin && <Hub onOpen={go} />}
       {tool?.id === "notes" && (
         <Suspense
           fallback={
