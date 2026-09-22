@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trackError, trackResult } from "./analytics";
 import { useAuth } from "./auth";
+import { currentRoute } from "./router";
 import { saveWork, type NewWork, type SavedWork } from "./works";
 
 export type SaveState = "idle" | "saving" | "saved" | "failed";
@@ -35,6 +37,8 @@ export function useSaveWork() {
       setMessage(null);
       try {
         const saved = await saveWork(input, user?.id ?? null, file);
+        // A save is the clearest sign a tool delivered; the tool is the route.
+        trackResult(currentRoute());
         setLast(saved);
         setState("saved");
         setMessage(
@@ -55,6 +59,7 @@ export function useSaveWork() {
         timerRef.current = window.setTimeout(() => setState("idle"), SAVED_FOR);
         return saved;
       } catch {
+        trackError(currentRoute(), "save_failed");
         setState("failed");
         setMessage("לא הצלחנו לשמור. נסה שוב.");
         return null;

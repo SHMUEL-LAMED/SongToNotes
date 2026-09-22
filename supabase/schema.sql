@@ -336,9 +336,14 @@ create table if not exists public.shares (
   file_name text,
   views integer not null default 0,
   created_at timestamptz not null default now(),
+  -- When set, the link stops working on its own; the owner chooses this in
+  -- the personal area and can move it or take it away again.
+  expires_at timestamptz,
   revoked_at timestamptz,
   unique (user_id, origin, work_id)
 );
+
+alter table public.shares add column if not exists expires_at timestamptz;
 
 alter table public.shares enable row level security;
 

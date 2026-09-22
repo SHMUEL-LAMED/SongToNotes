@@ -1,3 +1,5 @@
+import { trackError, trackResult } from "./analytics";
+import { currentRoute } from "./router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   SeparateRequest,
@@ -57,6 +59,7 @@ export function useSeparation(context: AudioContext | null) {
       return;
     }
     if (message.type === "done") {
+      trackResult(currentRoute());
       setState({ isRunning: false, progress: 100, error: null });
       const audioContext = contextRef.current;
       if (audioContext) {
@@ -81,6 +84,7 @@ export function useSeparation(context: AudioContext | null) {
       pendingRef.current = null;
       return;
     }
+    trackError(currentRoute(), "separation_failed");
     setState({ isRunning: false, progress: 0, error: message.message });
     pendingRef.current?.reject(new Error(message.message));
     pendingRef.current = null;

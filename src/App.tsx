@@ -1,18 +1,22 @@
-import { Music2 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { CircleSlash, Info, Music2, PowerOff, Sparkles, UserRound, Wrench } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
+import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { Hub } from "./components/Hub";
 import { SharePage } from "./components/SharePage";
 import { ToolShell } from "./components/ToolShell";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
+import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
+import { useSiteControl } from "./lib/siteControl";
+import { useCommandKey } from "./lib/useCommandKey";
 import { useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
-import { findTool } from "./lib/tools";
+import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
@@ -46,6 +50,12 @@ const TranscriberTool = lazy(() =>
 // out of everybody else's download.
 const AdminPanel = lazy(() =>
   import("./components/AdminPanel").then((module) => ({ default: module.AdminPanel })),
+);
+
+// The personal area's full page carries the gallery, the charts and the ZIP
+// writer; the drawer is enough for a quick look, so the page loads on demand.
+const MePage = lazy(() =>
+  import("./components/MePage").then((module) => ({ default: module.MePage })),
 );
 
 /**
@@ -86,22 +96,55 @@ function WorkspaceApp() {
   const [shellError, setShellError] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
+  const control = useSiteControl();
+  const owner = isAdmin(user);
 
   const tool = findTool(route);
   const shareToken = shareTokenFromRoute(route);
   // The admin area is not a tool: it never appears in the hub, and the page
   // behind the route refuses anybody but the owner — as does the server.
   const admin = route === "admin";
+  // `#/me` and `#/me/links`: the personal area, opened on one of its tabs.
+  const me = route === "me" || route.startsWith("me/");
+  const meTab = me ? route.slice(3) || null : null;
+  // A tool the admin switched off is shown as such, not opened; the owner
+  // still gets in, to see that it is really off.
+  const toolOff = Boolean(tool && control.disabledTools.includes(tool.id) && !owner);
+  // Maintenance closes everything but the door the owner uses to reopen it.
+  const closed = control.maintenance && !owner && !admin;
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
   // than an empty page.
   useEffect(() => {
-    if (route !== "home" && !tool && !shareToken && !admin) navigate("home");
-  }, [admin, navigate, route, shareToken, tool]);
+    if (route !== "home" && !tool && !shareToken && !admin && !me) navigate("home");
+  }, [admin, me, navigate, route, shareToken, tool]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [route]);
+
+  // What the site counts about itself: which page was opened and for how
+  // long. The route is all it is told — never what was done there.
+  useEffect(() => startAnalytics(), []);
+  useEffect(() => {
+    setSignedIn(Boolean(user));
+  }, [user]);
+  useEffect(() => {
+    const page = shareToken ? "share" : route;
+    trackView(page);
+    const opened = Date.now();
+    return () => trackLeave(page, (Date.now() - opened) / 1000);
+  }, [route, shareToken]);
+
+  const openPalette = useCallback(() => {
+    setPaletteOpen(true);
+    void listWorks(user?.id ?? null)
+      .then((list) => setPaletteWorks(list.slice(0, 60)))
+      .catch(() => setPaletteWorks([]));
+  }, [user]);
+  useCommandKey(openPalette);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -207,6 +250,39 @@ function WorkspaceApp() {
     },
   });
 
+  const commands = useMemo<CommandItem[]>(() => {
+    const items: CommandItem[] = [
+      { id: "page:home", label: "דף הבית", group: "דפים", icon: <Music2 size={15} />, run: () => go("home") },
+      { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
+    ];
+    if (owner) {
+      items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
+    }
+    for (const item of TOOLS) {
+      const Icon = item.icon;
+      items.push({
+        id: `tool:${item.id}`,
+        label: item.title,
+        hint: item.tagline,
+        group: "כלים",
+        icon: <Icon size={15} />,
+        keywords: item.tags.join(" "),
+        run: () => go(item.id),
+      });
+    }
+    for (const work of paletteWorks) {
+      items.push({
+        id: `work:${work.id}`,
+        label: work.title,
+        hint: `${KIND_LABELS[work.kind]} · ${describeWork(work)}`,
+        group: "מה ששמרת",
+        icon: <Sparkles size={15} />,
+        run: () => openWork(work),
+      });
+    }
+    return items;
+  }, [go, openWork, owner, paletteWorks]);
+
   const opened = pending && pending.route === route ? pending : null;
   const initialFor = (kind: SavedWork["kind"]) =>
     opened && opened.work.kind === kind ? opened.work : null;
@@ -217,7 +293,7 @@ function WorkspaceApp() {
   return (
     <ToolShell
       tool={tool}
-      pageTitle={admin ? "אזור ניהול" : null}
+      pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : null}
       account={accountOpen}
       themePreference={theme.preference}
       onCycleTheme={theme.cycle}
@@ -228,12 +304,24 @@ function WorkspaceApp() {
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
         onOpenWork={openWork}
-        onOpenAdmin={isAdmin(user) ? () => {
+        onOpenPage={() => {
+          setAccountOpen(false);
+          go("me");
+        }}
+        onOpenAdmin={owner ? () => {
           setAccountOpen(false);
           go("admin");
         } : null}
         onSignInError={setShellError}
       />
+
+      <CommandPalette open={paletteOpen} items={commands} onClose={() => setPaletteOpen(false)} />
+
+      {control.banner && !closed && (
+        <p className={`site-banner is-${control.bannerKind}`} role="status">
+          <Info size={16} aria-hidden="true" /> {control.banner}
+        </p>
+      )}
 
       <AiAssistant
         open={assistantOpen}
@@ -254,7 +342,48 @@ function WorkspaceApp() {
         </div>
       )}
 
-      {shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
+      {closed ? (
+        <div className="site-closed" role="status">
+          <span className="brand-mark">
+            <PowerOff size={22} />
+          </span>
+          <h1>האתר בתחזוקה</h1>
+          <p>{control.maintenanceMessage ?? "חוזרים בעוד כמה דקות. תודה על הסבלנות."}</p>
+        </div>
+      ) : null}
+      {!closed && shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
+      {!closed && me && (
+        <Suspense
+          fallback={
+            <div className="tool-loading" role="status">
+              <span className="brand-mark">
+                <Music2 size={20} />
+              </span>
+              טוען את האזור האישי…
+            </div>
+          }
+        >
+          <MePage
+            onOpenWork={openWork}
+            onOpenAdmin={owner ? () => go("admin") : null}
+            onHome={() => go("home")}
+            onSignInError={setShellError}
+            initialTab={meTab}
+          />
+        </Suspense>
+      )}
+      {toolOff && tool && (
+        <div className="site-closed is-tool" role="status">
+          <span className="brand-mark">
+            <CircleSlash size={22} />
+          </span>
+          <h1>{tool.title} מכובה זמנית</h1>
+          <p>הכלי הזה כבוי כרגע — בדרך כלל כי שירות שהוא נשען עליו לא זמין. שאר הכלים פתוחים.</p>
+          <button type="button" className="secondary-button" onClick={() => go("home")}>
+            לכל הכלים
+          </button>
+        </div>
+      )}
       {admin && (
         <Suspense
           fallback={
@@ -269,7 +398,9 @@ function WorkspaceApp() {
           <AdminPanel onHome={() => go("home")} />
         </Suspense>
       )}
-      {!tool && !shareToken && !admin && <Hub onOpen={go} />}
+      {!closed && !tool && !shareToken && !admin && !me && (
+        <Hub onOpen={go} disabledTools={control.disabledTools} />
+      )}
       {tool?.id === "notes" && (
         <Suspense
           fallback={

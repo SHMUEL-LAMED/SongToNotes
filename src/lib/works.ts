@@ -591,6 +591,37 @@ export async function deleteWork(work: SavedWork, userId?: string | null): Promi
   if (error) throw error;
 }
 
+/**
+ * Puts a deleted entry back, under its own id, as a plain work. The audio it
+ * had is gone with the delete — the recycle bin keeps the record, not the
+ * file — so the restored work opens from its payload and says so.
+ */
+export async function restoreWork(work: SavedWork, userId?: string | null): Promise<SavedWork> {
+  const summary = { ...work.summary };
+  delete summary.fileBytes;
+  delete summary.fileTooLarge;
+  const entry: SavedWork = {
+    ...work,
+    summary,
+    fileName: null,
+    deviceId: null,
+    filePath: null,
+    updatedAt: new Date().toISOString(),
+    origin: "works",
+    rowId: null,
+    localOnly: true,
+  };
+  writeLocalWorks([entry, ...listLocalWorks().filter((item) => item.id !== entry.id)]);
+  if (!userId) return entry;
+  const { error } = await supabase
+    .from("works")
+    .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
+  if (error) return entry;
+  const synced = { ...entry, localOnly: false };
+  writeLocalWorks(listLocalWorks().map((item) => (item.id === entry.id ? synced : item)));
+  return synced;
+}
+
 /** The ids of works whose result file is on this device. */
 export async function localFileIds(): Promise<Set<string>> {
   return new Set((await listFiles()).map((item) => item.id));
