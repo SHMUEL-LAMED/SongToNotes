@@ -1,8 +1,12 @@
 /**
  * Public share links for a saved work.
  *
- * POST  {origin, workId}   (signed in) makes or returns the link for a work
+ * POST  {origin, workId, expiresInDays?}
+ *                          (signed in) makes or returns the link for a work
  *                          the caller owns: a snapshot of it under a token.
+ * POST  {token, expiresInDays}
+ *                          (signed in) moves or removes the expiry of one of
+ *                          the caller's links; null keeps it open.
  * DELETE ?token=           (signed in) revokes one of the caller's links.
  * GET   ?token=            (anyone) the snapshot, with a signed URL for its
  *                          file that lasts an hour; counts a view.
@@ -26,6 +30,9 @@ Deno.serve(async (req: Request) => {
     if (!key) return json(400, { error: "bad_request" });
     const { data: share } = await admin.from("shares").select("*").eq("token", key).is("revoked_at", null).maybeSingle();
     if (!share) return json(404, { error: "not_found" });
+    if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) {
+      return json(404, { error: "not_found" });
+    }
     let fileUrl: string | null = null;
     if (share.file_path) {
       const signed = await admin.storage.from(BUCKET).createSignedUrl(share.file_path, 3600);
@@ -55,12 +62,28 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") return json(405, { error: "method" });
-  let body: { origin?: string; workId?: string };
+  let body: { origin?: string; workId?: string; token?: string; expiresInDays?: number | null };
   try {
     body = await req.json();
   } catch {
     return json(400, { error: "bad_request" });
   }
+
+  // A number of days from now, or nothing at all: a link that never expires.
+  const expiresAt = (() => {
+    const days = body.expiresInDays;
+    if (typeof days !== "number" || !Number.isFinite(days) || days <= 0) return null;
+    return new Date(Date.now() + Math.min(365, days) * 86_400_000).toISOString();
+  })();
+
+  if (typeof body.token === "string") {
+    const key = body.token.replace(/[^a-f0-9]/g, "").slice(0, 32);
+    if (!key) return json(400, { error: "bad_request" });
+    const { error } = await admin.from("shares").update({ expires_at: expiresAt }).eq("token", key).eq("user_id", user.id);
+    if (error) return json(502, { error: "storage" });
+    return json(200, { token: key, expiresAt });
+  }
+
   const origin = body.origin === "ringtones" || body.origin === "transcriptions" ? body.origin : "works";
   const workId = typeof body.workId === "string" ? body.workId.slice(0, 80) : "";
   if (!workId) return json(400, { error: "bad_request" });
@@ -95,6 +118,7 @@ Deno.serve(async (req: Request) => {
     payload: snapshot.payload ?? {},
     file_path: snapshot.file_path,
     file_name: snapshot.file_name,
+    expires_at: expiresAt,
     revoked_at: null,
   };
   const { error } = existing

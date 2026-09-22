@@ -1,3 +1,5 @@
+import { trackError, trackResult } from "./analytics";
+import { currentRoute } from "./router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   NoteEngineId,
@@ -71,6 +73,8 @@ export function useTranscriber() {
   useEffect(() => teardown, [teardown]);
 
   const fail = useCallback((message: string) => {
+    // The kind of failure, never the message: a message may carry a file name.
+    trackError(currentRoute(), /memory|זיכרון/i.test(message) ? "out_of_memory" : "transcribe_failed");
     progressRef.current = 0;
     setState((previous) => ({
       ...previous,
@@ -120,6 +124,7 @@ export function useTranscriber() {
           elapsed: Date.now() - started,
           onMainThread: true,
         });
+        trackResult(currentRoute(), (Date.now() - started) / 1000);
         pendingRef.current?.resolve(notes);
         pendingRef.current = null;
       } catch (error) {
@@ -145,6 +150,7 @@ export function useTranscriber() {
         return;
       }
       if (message.type === "done") {
+        trackResult(currentRoute(), message.elapsed / 1000);
         setState((previous) => ({
           ...previous,
           isRunning: false,

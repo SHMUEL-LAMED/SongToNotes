@@ -1,18 +1,19 @@
 /**
  * The admin area's side of the site.
  *
- * Everything here is either a question put to `supabase/functions/admin` —
- * the only place that may look across accounts — or a pure reading of the
+ * Everything here is a question put to `supabase/functions/admin` — the only
+ * place allowed to look at the site as a whole — or a pure reading of the
  * answer. The function checks the caller's verified address itself, so the
- * gate below is only there to keep the door out of sight: hiding a button
- * is not a permission, and the server never takes the browser's word for it.
+ * gate below is only there to keep the door out of sight: hiding a button is
+ * not a permission, and the server never takes the browser's word for it.
  *
- * The overview arrives as rows rather than finished figures, so every cut the
- * dashboard offers — a day, a tool, one account, a shorter range — is a
- * matter of counting what is already here instead of another round trip.
+ * The answer says what happened on the *site*: which tools were opened, when,
+ * how long they held somebody, what finished and what failed. It carries no
+ * account, no title and no file name, because the rows it is counted from
+ * never had any. Nothing here can be turned back into a person, by design.
  */
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
-import { KIND_LABELS, type WorkKind } from "./works";
+import { TOOLS } from "./tools";
 
 const ADMIN_URL = `${SUPABASE_URL}/functions/v1/admin`;
 
@@ -45,58 +46,83 @@ export function isAdmin(user: { email?: string | null } | null | undefined) {
    What the server sends
    ------------------------------------------------------------------------- */
 
-export type AdminUser = {
-  id: string;
-  email: string | null;
-  name: string | null;
-  avatar: string | null;
-  provider: string | null;
-  createdAt: string;
-  lastSignInAt: string | null;
-  bannedUntil: string | null;
-};
-
-export type WorkOrigin = "works" | "transcriptions" | "ringtones";
-
-export type AdminWork = {
-  id: string;
-  origin: WorkOrigin;
-  userId: string;
-  kind: string;
-  title: string;
-  source: string | null;
-  createdAt: string;
-  hasFile: boolean;
-};
-
-export type AdminUsage = { userId: string; day: string; kind: string; amount: number };
-export type AdminStorage = { userId: string; files: number; bytes: number };
-
-export type AdminShare = {
-  token: string;
-  userId: string;
-  origin: string;
-  workId: string;
-  kind: string;
-  title: string;
+export type DailyRow = {
+  day: string;
   views: number;
-  createdAt: string;
-  revokedAt: string | null;
+  results: number;
+  errors: number;
+  visitors: number;
+};
+
+export type ToolRow = {
+  tool: string;
+  views: number;
+  inputs: number;
+  results: number;
+  errors: number;
+  visitors: number;
+  /** Average time a visit to the tool lasted. */
+  dwellSeconds: number;
+  /** Average time the tool itself took to produce something. */
+  workSeconds: number;
+};
+
+export type Tally = { key: string; value: number };
+
+export type Failure = { tool: string; code: string; count: number; last: string };
+
+export type AdminStats = {
+  daily: DailyRow[];
+  tools: ToolRow[];
+  /** Seven rows of twenty-four: views by weekday and hour. */
+  hours: number[][];
+  devices: Tally[];
+  browsers: Tally[];
+  systems: Tally[];
+  languages: Tally[];
+  referrers: Tally[];
+  failures: Failure[];
+  /** Anonymous visitors seen in the last five minutes. */
+  live: number;
+  visitors: { total: number; returning: number; fresh: number };
+  views: number;
+  /** Share of views made while somebody was signed in, as a percentage. */
+  signedInShare: number;
+  events: number;
+};
+
+export type AdminTotals = {
+  accounts: number;
+  works: number;
+  files: number;
+  bytes: number;
+  shares: number;
+  shareViews: number;
+  liveShares: number;
+};
+
+export type QuotaRow = { kind: string; today: number; range: number };
+
+export type Alert = { kind: "warn" | "bad" | "info"; text: string };
+
+export type ControlState = {
+  maintenance: boolean;
+  maintenanceMessage: string | null;
+  banner: string | null;
+  bannerKind: "info" | "warn" | "good";
+  disabledTools: string[];
 };
 
 export type AdminSnapshot = {
   generatedAt: string;
   days: number;
-  truncated: { works: boolean; users: boolean };
-  totals: { users: number; works: number; shares: number };
-  users: AdminUser[];
-  works: AdminWork[];
-  /** Language-model and separation tallies; `kind` says which. */
-  ai: AdminUsage[];
-  /** Speech-to-text seconds. */
-  stt: AdminUsage[];
-  shares: AdminShare[];
-  storage: AdminStorage[];
+  /** The range held more events than the server reads in one go. */
+  truncated: boolean;
+  stats: AdminStats;
+  totals: AdminTotals;
+  quotas: QuotaRow[];
+  alerts: Alert[];
+  control: ControlState;
 };
 
 export type AdminSetting = {
@@ -105,6 +131,14 @@ export type AdminSetting = {
   source: "secret" | "table" | null;
   editable: boolean;
   preview: string | null;
+};
+
+export type HealthCheck = {
+  service: string;
+  label: string;
+  state: "good" | "bad" | "off";
+  note: string;
+  ms: number;
 };
 
 export type AdminAuditEntry = {
@@ -127,8 +161,8 @@ export class AdminError extends Error {
 const MESSAGES: Record<string, string> = {
   signed_out: "צריך להתחבר לחשבון כדי לפתוח את אזור הניהול.",
   forbidden: "החשבון הזה אינו מנהל האתר.",
-  self: "אי אפשר לחסום או למחוק את חשבון הניהול עצמו.",
   secret_wins: "המפתח הזה מוגדר כסוד של הפונקציה, ולכן אי אפשר לשנות אותו מכאן.",
+  bad_request: "הבקשה חסרה פרטים.",
   unknown_action: "הפעולה אינה מוכרת.",
   storage: "השרת לא הצליח לבצע את הפעולה. נסה שוב.",
   network: "החיבור לשרת נכשל. בדוק את האינטרנט ונסה שוב.",
@@ -166,62 +200,132 @@ async function call<T>(query: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-type RawUsage = { user_id: string; day: string; kind?: string; amount?: number; seconds?: number };
-type RawShare = {
-  token: string;
-  user_id: string;
-  origin: string;
-  work_id: string;
-  kind: string;
-  title: string;
-  views: number;
-  created_at: string;
-  revoked_at: string | null;
+const num = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
-type RawStorage = { user_id: string; files: number; bytes: number };
 
-/** The server's rows, in the shape the rest of the site speaks. */
+function tallies(raw: unknown): Tally[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => ({ key: String((row as Tally)?.key ?? ""), value: num((row as Tally)?.value) }))
+    .filter((row) => row.key !== "");
+}
+
+/** Seven rows of twenty-four, whatever the server managed to send. */
+export function normalizeHours(raw: unknown): number[][] {
+  const rows = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: 7 }, (_unused, weekday) => {
+    const row = Array.isArray(rows[weekday]) ? (rows[weekday] as unknown[]) : [];
+    return Array.from({ length: 24 }, (_cell, hour) => num(row[hour]));
+  });
+}
+
+/** What the site looks like when nothing is switched on. */
+export const OPEN_CONTROL: ControlState = {
+  maintenance: false,
+  maintenanceMessage: null,
+  banner: null,
+  bannerKind: "info",
+  disabledTools: [],
+};
+
+export function normalizeControlState(raw: unknown): ControlState {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const kind = row.banner_kind ?? row.bannerKind;
+  const text = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null;
+  const tools = row.disabled_tools ?? row.disabledTools;
+  return {
+    maintenance: Boolean(row.maintenance),
+    maintenanceMessage: text(row.maintenance_message ?? row.maintenanceMessage),
+    banner: text(row.banner),
+    bannerKind: kind === "warn" || kind === "good" ? kind : "info",
+    disabledTools: Array.isArray(tools) ? tools.map(String).filter(Boolean) : [],
+  };
+}
+
+/** The server's reply, in the shape the dashboard draws from. */
 export function normalizeSnapshot(raw: Record<string, unknown>): AdminSnapshot {
-  const usage = (rows: unknown, field: "amount" | "seconds", fallbackKind: string) =>
-    ((rows as RawUsage[]) ?? []).map((row) => ({
-      userId: row.user_id,
-      day: String(row.day).slice(0, 10),
-      kind: row.kind ?? fallbackKind,
-      amount: Number(row[field] ?? 0),
-    }));
+  const stats = (raw.stats ?? {}) as Record<string, unknown>;
+  const totals = (raw.totals ?? {}) as Record<string, unknown>;
+  const visitors = (stats.visitors ?? {}) as Record<string, unknown>;
 
   return {
-    generatedAt: String(raw.generatedAt ?? new Date().toISOString()),
-    days: Number(raw.days ?? 30),
-    truncated: {
-      works: Boolean((raw.truncated as { works?: boolean })?.works),
-      users: Boolean((raw.truncated as { users?: boolean })?.users),
+    generatedAt: String(raw.generatedAt ?? new Date(0).toISOString()),
+    days: num(raw.days, 30),
+    truncated: Boolean(raw.truncated),
+    stats: {
+      daily: (Array.isArray(stats.daily) ? stats.daily : []).map((row) => {
+        const day = row as Record<string, unknown>;
+        return {
+          day: String(day.day ?? "").slice(0, 10),
+          views: num(day.views),
+          results: num(day.results),
+          errors: num(day.errors),
+          visitors: num(day.visitors),
+        };
+      }),
+      tools: (Array.isArray(stats.tools) ? stats.tools : []).map((row) => {
+        const tool = row as Record<string, unknown>;
+        return {
+          tool: String(tool.tool ?? ""),
+          views: num(tool.views),
+          inputs: num(tool.inputs),
+          results: num(tool.results),
+          errors: num(tool.errors),
+          visitors: num(tool.visitors),
+          dwellSeconds: num(tool.dwellSeconds),
+          workSeconds: num(tool.workSeconds),
+        };
+      }),
+      hours: normalizeHours(stats.hours),
+      devices: tallies(stats.devices),
+      browsers: tallies(stats.browsers),
+      systems: tallies(stats.systems),
+      languages: tallies(stats.languages),
+      referrers: tallies(stats.referrers),
+      failures: (Array.isArray(stats.failures) ? stats.failures : []).map((row) => {
+        const failure = row as Record<string, unknown>;
+        return {
+          tool: String(failure.tool ?? ""),
+          code: String(failure.code ?? ""),
+          count: num(failure.count),
+          last: String(failure.last ?? ""),
+        };
+      }),
+      live: num(stats.live),
+      visitors: {
+        total: num(visitors.total),
+        returning: num(visitors.returning),
+        fresh: num(visitors.fresh),
+      },
+      views: num(stats.views),
+      signedInShare: num(stats.signedInShare),
+      events: num(stats.events),
     },
     totals: {
-      users: Number((raw.totals as { users?: number })?.users ?? 0),
-      works: Number((raw.totals as { works?: number })?.works ?? 0),
-      shares: Number((raw.totals as { shares?: number })?.shares ?? 0),
+      accounts: num(totals.accounts),
+      works: num(totals.works),
+      files: num(totals.files),
+      bytes: num(totals.bytes),
+      shares: num(totals.shares),
+      shareViews: num(totals.shareViews),
+      liveShares: num(totals.liveShares),
     },
-    users: (raw.users as AdminUser[]) ?? [],
-    works: (raw.works as AdminWork[]) ?? [],
-    ai: usage(raw.ai, "amount", "ai"),
-    stt: usage(raw.stt, "seconds", "stt"),
-    shares: ((raw.shares as RawShare[]) ?? []).map((row) => ({
-      token: row.token,
-      userId: row.user_id,
-      origin: row.origin,
-      workId: row.work_id,
-      kind: row.kind,
-      title: row.title,
-      views: Number(row.views ?? 0),
-      createdAt: row.created_at,
-      revokedAt: row.revoked_at,
-    })),
-    storage: ((raw.storage as RawStorage[]) ?? []).map((row) => ({
-      userId: row.user_id,
-      files: Number(row.files ?? 0),
-      bytes: Number(row.bytes ?? 0),
-    })),
+    quotas: (Array.isArray(raw.quotas) ? raw.quotas : []).map((row) => {
+      const quota = row as Record<string, unknown>;
+      return { kind: String(quota.kind ?? ""), today: num(quota.today), range: num(quota.range) };
+    }),
+    alerts: (Array.isArray(raw.alerts) ? raw.alerts : []).map((row) => {
+      const alert = row as Record<string, unknown>;
+      const kind = alert.kind;
+      return {
+        kind: kind === "bad" || kind === "warn" ? kind : "info",
+        text: String(alert.text ?? ""),
+      };
+    }),
+    control: normalizeControlState(raw.control),
   };
 }
 
@@ -234,7 +338,8 @@ export async function fetchSettings() {
   return body.keys ?? [];
 }
 
-export async function fetchAudit(): Promise<AdminAuditEntry[]> {
+export async function fetchAudit(query = ""): Promise<AdminAuditEntry[]> {
+  const search = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
   const body = await call<{
     entries: {
       id: number;
@@ -244,7 +349,7 @@ export async function fetchAudit(): Promise<AdminAuditEntry[]> {
       detail: Record<string, unknown>;
       created_at: string;
     }[];
-  }>("?view=audit");
+  }>(`?view=audit${search}`);
   return (body.entries ?? []).map((row) => ({
     id: row.id,
     actorEmail: row.actor_email,
@@ -256,21 +361,34 @@ export async function fetchAudit(): Promise<AdminAuditEntry[]> {
 }
 
 export type AdminAction =
-  | "work.delete"
-  | "share.revoke"
-  | "usage.reset"
-  | "user.ban"
-  | "user.unban"
-  | "user.delete"
+  | "control.set"
   | "setting.set"
-  | "setting.delete";
+  | "setting.delete"
+  | "health.check"
+  | "files.scan"
+  | "files.clean"
+  | "events.prune";
 
-export async function runAdminAction(action: AdminAction, payload: Record<string, unknown> = {}) {
-  await call<{ ok: boolean }>("", { method: "POST", body: JSON.stringify({ action, ...payload }) });
+export type AdminResult = {
+  ok: boolean;
+  control?: unknown;
+  checks?: HealthCheck[];
+  orphans?: { count: number; bytes: number };
+  removed?: number;
+};
+
+export async function runAdminAction(
+  action: AdminAction,
+  payload: Record<string, unknown> = {},
+): Promise<AdminResult> {
+  return call<AdminResult>("", {
+    method: "POST",
+    body: JSON.stringify({ action, ...payload }),
+  });
 }
 
 /* -------------------------------------------------------------------------
-   Reading the rows — pure, so the dashboard's figures are testable
+   Reading the numbers — pure, so every figure on the page is testable
    ------------------------------------------------------------------------- */
 
 /** The calendar day a timestamp falls on, where the reader is standing. */
@@ -281,7 +399,7 @@ export function dayKey(value: string | Date) {
   return local.toISOString().slice(0, 10);
 }
 
-/** The last `days` day keys, oldest first, ending today. */
+/** The last `days` day keys, oldest first, ending on `end`. */
 export function dayRange(days: number, end: Date = new Date()) {
   const out: string[] = [];
   for (let back = days - 1; back >= 0; back -= 1) {
@@ -292,39 +410,9 @@ export function dayRange(days: number, end: Date = new Date()) {
 
 export type Point = { day: string; value: number };
 
-/** One point per day in the range — including the days nothing happened. */
-export function seriesByDay<T>(
-  items: readonly T[],
-  pickDay: (item: T) => string,
-  days: string[],
-  weigh: (item: T) => number = () => 1,
-) {
-  const table = new Map(days.map((day) => [day, 0]));
-  for (const item of items) {
-    const day = pickDay(item);
-    const current = table.get(day);
-    if (current !== undefined) table.set(day, current + weigh(item));
-  }
-  return days.map((day) => ({ day, value: table.get(day) ?? 0 }));
-}
-
-export type Tally = { key: string; value: number };
-
-/** How many of each, biggest first. */
-export function tally<T>(
-  items: readonly T[],
-  pick: (item: T) => string,
-  weigh: (item: T) => number = () => 1,
-): Tally[] {
-  const table = new Map<string, number>();
-  for (const item of items) {
-    const key = pick(item);
-    if (!key) continue;
-    table.set(key, (table.get(key) ?? 0) + weigh(item));
-  }
-  return [...table.entries()]
-    .map(([key, value]) => ({ key, value }))
-    .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
+/** One measure of the daily rows, as points a chart can take. */
+export function series(daily: readonly DailyRow[], field: keyof Omit<DailyRow, "day">): Point[] {
+  return daily.map((row) => ({ day: row.day, value: row[field] }));
 }
 
 export function sumSeries(points: readonly Point[]) {
@@ -345,78 +433,97 @@ export function changeOverRange(points: readonly Point[]) {
   return Math.round(((after - before) / before) * 100);
 }
 
-/** The accounts that saved something within the last `days` days. */
-export function activeUsers(works: readonly AdminWork[], days: number, end: Date = new Date()) {
-  const from = end.getTime() - days * 86_400_000;
-  const seen = new Set<string>();
-  for (const work of works) {
-    if (new Date(work.createdAt).getTime() >= from) seen.add(work.userId);
-  }
-  return seen;
+/**
+ * How many of those who opened a tool got something out of it, as a
+ * percentage. A tool nobody opened has no rate — zero would read like failure.
+ */
+export function successRate(tool: Pick<ToolRow, "views" | "results">) {
+  if (!tool.views) return null;
+  return Math.min(100, Math.round((tool.results / tool.views) * 100));
 }
 
-/** Seven rows of twenty-four cells: when, in the week, the site is used. */
-export function weekHeatmap(works: readonly AdminWork[]) {
-  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0) as number[]);
-  for (const work of works) {
-    const date = new Date(work.createdAt);
-    if (Number.isNaN(date.getTime())) continue;
-    grid[date.getDay()][date.getHours()] += 1;
-  }
-  return grid;
+/** Opened → handed something → got a result, as three counts and two drops. */
+export type FunnelStep = { label: string; value: number; share: number };
+
+export function funnel(tool: Pick<ToolRow, "views" | "inputs" | "results">): FunnelStep[] {
+  const top = Math.max(tool.views, tool.inputs, tool.results, 1);
+  return [
+    { label: "נכנסו", value: tool.views, share: Math.round((tool.views / top) * 100) },
+    { label: "התחילו", value: tool.inputs, share: Math.round((tool.inputs / top) * 100) },
+    { label: "קיבלו תוצאה", value: tool.results, share: Math.round((tool.results / top) * 100) },
+  ];
 }
 
-/** Everything known about one account, gathered from the separate lists. */
-export type UserDigest = AdminUser & {
-  works: number;
-  lastWorkAt: string | null;
-  files: number;
-  bytes: number;
-  aiAmount: number;
-  sttSeconds: number;
-  shares: number;
-  shareViews: number;
-  banned: boolean;
+/** The busiest cell of the week, for the sentence above the heatmap. */
+export function busiestHour(hours: readonly number[][]) {
+  let best = { weekday: 0, hour: 0, value: 0 };
+  hours.forEach((row, weekday) => {
+    row.forEach((value, hour) => {
+      if (value > best.value) best = { weekday, hour, value };
+    });
+  });
+  return best.value ? best : null;
+}
+
+export const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
+export function weekdayLabel(weekday: number) {
+  return WEEKDAYS[weekday] ?? "";
+}
+
+/** "14:00–15:00", the way an hour column reads out loud. */
+export function hourLabel(hour: number) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+const TOOL_TITLES = new Map(TOOLS.map((tool) => [tool.id, tool.title]));
+const TOOL_HUES = new Map(TOOLS.map((tool) => [tool.id, tool.hue]));
+
+const EXTRA_TITLES: Record<string, string> = {
+  home: "דף הבית",
+  me: "האזור האישי",
+  admin: "אזור הניהול",
+  share: "דף שיתוף",
+  saved: "העבודות שלי",
 };
 
-export function digestUsers(snapshot: AdminSnapshot, now: Date = new Date()): UserDigest[] {
-  const works = new Map<string, { count: number; last: string | null }>();
-  for (const work of snapshot.works) {
-    const entry = works.get(work.userId) ?? { count: 0, last: null };
-    entry.count += 1;
-    if (!entry.last || work.createdAt > entry.last) entry.last = work.createdAt;
-    works.set(work.userId, entry);
-  }
-  const storage = new Map(snapshot.storage.map((row) => [row.userId, row]));
-  const ai = new Map<string, number>();
-  for (const row of snapshot.ai) ai.set(row.userId, (ai.get(row.userId) ?? 0) + row.amount);
-  const stt = new Map<string, number>();
-  for (const row of snapshot.stt) stt.set(row.userId, (stt.get(row.userId) ?? 0) + row.amount);
-  const shares = new Map<string, { count: number; views: number }>();
-  for (const row of snapshot.shares) {
-    const entry = shares.get(row.userId) ?? { count: 0, views: 0 };
-    entry.count += 1;
-    entry.views += row.views;
-    shares.set(row.userId, entry);
-  }
+/** The Hebrew name of whatever the events call a tool. */
+export function toolLabel(id: string) {
+  return TOOL_TITLES.get(id) ?? EXTRA_TITLES[id] ?? id;
+}
 
-  return snapshot.users.map((user) => {
-    const work = works.get(user.id);
-    const files = storage.get(user.id);
-    const share = shares.get(user.id);
-    return {
-      ...user,
-      works: work?.count ?? 0,
-      lastWorkAt: work?.last ?? null,
-      files: files?.files ?? 0,
-      bytes: files?.bytes ?? 0,
-      aiAmount: ai.get(user.id) ?? 0,
-      sttSeconds: stt.get(user.id) ?? 0,
-      shares: share?.count ?? 0,
-      shareViews: share?.views ?? 0,
-      banned: Boolean(user.bannedUntil && new Date(user.bannedUntil).getTime() > now.getTime()),
-    };
-  });
+/** The tool's own colour, so a chart of tools is not one flat blue. */
+export function toolHue(id: string) {
+  const hue = TOOL_HUES.get(id);
+  if (hue !== undefined) return hue;
+  // A stable colour for the pages that are not tools, from the name itself.
+  let sum = 0;
+  for (let index = 0; index < id.length; index += 1) sum = (sum * 31 + id.charCodeAt(index)) % 360;
+  return sum;
+}
+
+const QUOTA_LABELS: Record<string, string> = {
+  ai: "מודל שפה (טוקנים)",
+  tts: "הקראה (תווים)",
+  separation: "הפרדת שירה (קבצים)",
+  identify: "זיהוי שירים",
+  stt: "תמלול (שניות)",
+};
+
+export function quotaLabel(kind: string) {
+  return QUOTA_LABELS[kind] ?? kind;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  "control.set": "שינוי הגדרות אתר",
+  "setting.set": "עדכון מפתח",
+  "setting.delete": "מחיקת מפתח",
+  "files.clean": "ניקוי קבצים יתומים",
+  "events.prune": "מחיקת מדידות ישנות",
+};
+
+export function actionLabel(action: string) {
+  return ACTION_LABELS[action] ?? action;
 }
 
 /* ---- writing numbers for people ---- */
@@ -444,6 +551,7 @@ export function formatBytes(bytes: number) {
 }
 
 export function formatDuration(seconds: number) {
+  if (!seconds) return "—";
   if (seconds < 60) return `${Math.round(seconds)} שנ׳`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} דק׳`;
   return `${(seconds / 3600).toFixed(1)} שע׳`;
@@ -466,9 +574,11 @@ export function timeAgo(value: string | null | undefined, now: Date = new Date()
   return `לפני ${Math.round(months / 12)} שנים`;
 }
 
-/** The tool's Hebrew name, for a kind that may have arrived from the server. */
-export function kindLabel(kind: string) {
-  return KIND_LABELS[kind as WorkKind] ?? kind;
+/** The short day a chart's axis shows: "14.3". */
+export function shortDay(day: string) {
+  const parts = day.split("-");
+  if (parts.length !== 3) return day;
+  return `${Number(parts[2])}.${Number(parts[1])}`;
 }
 
 /** A list of rows as a spreadsheet, so a number can leave the dashboard. */

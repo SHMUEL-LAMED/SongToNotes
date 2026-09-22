@@ -1,291 +1,242 @@
 import { describe, expect, it } from "vitest";
 import {
-  activeUsers,
+  busiestHour,
   changeOverRange,
   compactNumber,
   dayKey,
   dayRange,
-  digestUsers,
   formatBytes,
+  formatDuration,
+  funnel,
+  hourLabel,
   isAdminEmail,
+  normalizeControlState,
+  normalizeHours,
   normalizeSnapshot,
-  seriesByDay,
-  tally,
+  series,
+  shortDay,
+  successRate,
+  sumSeries,
   timeAgo,
   toCsv,
-  weekHeatmap,
-  type AdminSnapshot,
-  type AdminWork,
+  toolHue,
+  toolLabel,
+  weekdayLabel,
 } from "./admin";
 
-function work(overrides: Partial<AdminWork> = {}): AdminWork {
-  return {
-    id: "w1",
-    origin: "works",
-    userId: "u1",
-    kind: "vocals",
-    title: "שיר",
-    source: null,
-    createdAt: "2026-03-10T09:00:00.000Z",
-    hasFile: true,
-    ...overrides,
-  };
-}
-
-describe("the admin gate", () => {
-  it("knows the owner in either spelling of the address", () => {
+describe("who may open the admin area", () => {
+  it("accepts the owner in both spellings of the address", () => {
     expect(isAdminEmail("0534169095@xn--4dbjbascrao3i.com")).toBe(true);
     expect(isAdminEmail("0534169095@שמואלליווי.com")).toBe(true);
-    expect(isAdminEmail(" 0534169095@XN--4DBJBASCRAO3I.COM ")).toBe(true);
+    expect(isAdminEmail("  0534169095@XN--4DBJBASCRAO3I.COM ")).toBe(true);
   });
 
-  it("lets nobody else through", () => {
-    expect(isAdminEmail("someone@gmail.com")).toBe(false);
-    expect(isAdminEmail("0534169095@gmail.com")).toBe(false);
+  it("turns everybody else away", () => {
+    expect(isAdminEmail("someone@example.com")).toBe(false);
     expect(isAdminEmail("")).toBe(false);
     expect(isAdminEmail(null)).toBe(false);
-    // A lookalike address that merely ends with the owner's is not the owner.
-    expect(isAdminEmail("x0534169095@xn--4dbjbascrao3i.com")).toBe(false);
   });
 });
 
-describe("the server's reply", () => {
-  it("becomes one shape, whichever column a tally came from", () => {
+describe("reading the server's reply", () => {
+  it("fills in every field a missing reply left out", () => {
+    const snapshot = normalizeSnapshot({});
+    expect(snapshot.stats.daily).toEqual([]);
+    expect(snapshot.stats.tools).toEqual([]);
+    expect(snapshot.stats.hours).toHaveLength(7);
+    expect(snapshot.stats.hours[0]).toHaveLength(24);
+    expect(snapshot.totals.accounts).toBe(0);
+    expect(snapshot.control.maintenance).toBe(false);
+    expect(snapshot.days).toBe(30);
+  });
+
+  it("keeps the numbers it was given", () => {
     const snapshot = normalizeSnapshot({
-      generatedAt: "2026-03-10T10:00:00.000Z",
-      days: 30,
-      totals: { users: 4, works: 9, shares: 2 },
-      users: [],
-      works: [],
-      ai: [{ user_id: "u1", day: "2026-03-10", kind: "ai", amount: 1200 }],
-      stt: [{ user_id: "u1", day: "2026-03-10", seconds: 90 }],
-      shares: [
-        {
-          token: "abc",
-          user_id: "u1",
-          origin: "works",
-          work_id: "w1",
-          kind: "vocals",
-          title: "שיר",
-          views: 7,
-          created_at: "2026-03-01T00:00:00.000Z",
-          revoked_at: null,
-        },
-      ],
-      storage: [{ user_id: "u1", files: 3, bytes: 2048 }],
+      generatedAt: "2026-03-01T10:00:00.000Z",
+      days: 7,
+      truncated: true,
+      stats: {
+        daily: [{ day: "2026-02-28", views: 4, results: 2, errors: 1, visitors: 3 }],
+        tools: [{ tool: "notes", views: 10, inputs: 6, results: 4, errors: 1, visitors: 7, dwellSeconds: 42, workSeconds: 8 }],
+        devices: [{ key: "phone", value: 9 }, { key: "", value: 3 }],
+        visitors: { total: 12, returning: 5, fresh: 7 },
+        live: 2,
+        views: 10,
+        signedInShare: 40,
+        events: 33,
+        failures: [{ tool: "notes", code: "timeout", count: 2, last: "2026-02-28T09:00:00.000Z" }],
+      },
+      totals: { accounts: 5, works: 9, files: 4, bytes: 2048, shares: 3, shareViews: 12, liveShares: 2 },
+      quotas: [{ kind: "stt", today: 60, range: 600 }],
+      alerts: [{ kind: "bad", text: "יותר מדי שגיאות" }, { kind: "nonsense", text: "?" }],
+      control: { maintenance: true, banner_kind: "warn", banner: " שימו לב ", disabled_tools: ["tts"] },
     });
 
-    expect(snapshot.ai[0]).toEqual({ userId: "u1", day: "2026-03-10", kind: "ai", amount: 1200 });
-    expect(snapshot.stt[0]).toEqual({ userId: "u1", day: "2026-03-10", kind: "stt", amount: 90 });
-    expect(snapshot.shares[0].views).toBe(7);
-    expect(snapshot.storage[0].bytes).toBe(2048);
-    expect(snapshot.truncated).toEqual({ works: false, users: false });
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.stats.daily[0].visitors).toBe(3);
+    expect(snapshot.stats.tools[0].dwellSeconds).toBe(42);
+    // A tally without a name is noise, not a category.
+    expect(snapshot.stats.devices).toEqual([{ key: "phone", value: 9 }]);
+    expect(snapshot.stats.visitors).toEqual({ total: 12, returning: 5, fresh: 7 });
+    expect(snapshot.totals.bytes).toBe(2048);
+    expect(snapshot.quotas[0]).toEqual({ kind: "stt", today: 60, range: 600 });
+    expect(snapshot.alerts.map((alert) => alert.kind)).toEqual(["bad", "info"]);
+    expect(snapshot.control).toEqual({
+      maintenance: true,
+      maintenanceMessage: null,
+      banner: "שימו לב",
+      bannerKind: "warn",
+      disabledTools: ["tts"],
+    });
   });
 
-  it("survives a reply with nothing in it", () => {
-    const snapshot = normalizeSnapshot({});
-    expect(snapshot.users).toEqual([]);
-    expect(snapshot.totals.works).toBe(0);
-  });
-});
-
-describe("counting by day", () => {
-  it("keeps a point for every day, including the quiet ones", () => {
-    const days = dayRange(3, new Date("2026-03-10T12:00:00"));
-    const points = seriesByDay(
-      [
-        work({ createdAt: "2026-03-10T09:00:00" }),
-        work({ createdAt: "2026-03-10T11:00:00" }),
-        work({ createdAt: "2026-03-08T11:00:00" }),
-      ],
-      (item) => dayKey(item.createdAt),
-      days,
-    );
-    expect(points.map((point) => point.value)).toEqual([1, 0, 2]);
-  });
-
-  it("weighs a point when the rows carry an amount", () => {
-    const days = dayRange(2, new Date("2026-03-10T12:00:00"));
-    const points = seriesByDay(
-      [
-        { day: "2026-03-10", amount: 500 },
-        { day: "2026-03-10", amount: 250 },
-      ],
-      (item) => item.day,
-      days,
-      (item) => item.amount,
-    );
-    expect(points[1].value).toBe(750);
-  });
-
-  it("ignores what falls outside the range", () => {
-    const days = dayRange(2, new Date("2026-03-10T12:00:00"));
-    const points = seriesByDay([work({ createdAt: "2025-01-01T00:00:00" })], (item) => dayKey(item.createdAt), days);
-    expect(points.every((point) => point.value === 0)).toBe(true);
+  it("carries no field that could name a person", () => {
+    const snapshot = normalizeSnapshot({ stats: {}, totals: {} }) as unknown as Record<string, unknown>;
+    const text = JSON.stringify(snapshot);
+    expect(text).not.toContain("user");
+    expect(text).not.toContain("email");
+    expect(Object.keys(snapshot.stats as object)).not.toContain("users");
   });
 });
 
-describe("the change across a range", () => {
-  it("compares the second half with the first", () => {
-    expect(changeOverRange([{ day: "a", value: 10 }, { day: "b", value: 10 }, { day: "c", value: 15 }, { day: "d", value: 15 }])).toBe(50);
+describe("normalizing the odd corners", () => {
+  it("repairs a half-sent heatmap", () => {
+    const hours = normalizeHours([[1, 2], "not a row"]);
+    expect(hours).toHaveLength(7);
+    expect(hours[0][1]).toBe(2);
+    expect(hours[0][5]).toBe(0);
+    expect(hours[1].every((cell) => cell === 0)).toBe(true);
   });
 
-  it("says nothing rather than „+100%” when there is no before", () => {
-    expect(changeOverRange([{ day: "a", value: 0 }, { day: "b", value: 0 }, { day: "c", value: 4 }, { day: "d", value: 4 }])).toBeNull();
-    expect(changeOverRange([{ day: "a", value: 1 }])).toBeNull();
-  });
-
-  it("is zero when nothing happened at all", () => {
-    expect(changeOverRange([{ day: "a", value: 0 }, { day: "b", value: 0 }, { day: "c", value: 0 }, { day: "d", value: 0 }])).toBe(0);
+  it("reads the control row in either spelling", () => {
+    expect(normalizeControlState({ maintenanceMessage: "חוזרים בקרוב" }).maintenanceMessage).toBe("חוזרים בקרוב");
+    expect(normalizeControlState({ maintenance_message: "חוזרים בקרוב" }).maintenanceMessage).toBe("חוזרים בקרוב");
+    expect(normalizeControlState(null).bannerKind).toBe("info");
   });
 });
 
-describe("tallies", () => {
-  it("counts by key, biggest first", () => {
-    const result = tally(
-      [work({ kind: "vocals" }), work({ kind: "notes" }), work({ kind: "vocals" })],
-      (item) => item.kind,
-    );
-    expect(result).toEqual([
-      { key: "vocals", value: 2 },
-      { key: "notes", value: 1 },
+describe("days", () => {
+  it("names the day a moment belongs to", () => {
+    expect(dayKey(new Date(2026, 2, 14, 23, 30))).toBe("2026-03-14");
+    expect(dayKey("not a date")).toBe("");
+  });
+
+  it("lists a range oldest first", () => {
+    const range = dayRange(3, new Date(2026, 2, 14, 12));
+    expect(range).toEqual(["2026-03-12", "2026-03-13", "2026-03-14"]);
+  });
+
+  it("shortens a day for an axis", () => {
+    expect(shortDay("2026-03-04")).toBe("4.3");
+    expect(shortDay("nope")).toBe("nope");
+  });
+});
+
+describe("the figures a tile shows", () => {
+  const daily = [
+    { day: "2026-03-01", views: 2, results: 1, errors: 0, visitors: 2 },
+    { day: "2026-03-02", views: 2, results: 1, errors: 0, visitors: 2 },
+    { day: "2026-03-03", views: 4, results: 2, errors: 1, visitors: 3 },
+    { day: "2026-03-04", views: 4, results: 2, errors: 0, visitors: 3 },
+  ];
+
+  it("pulls one measure out of the daily rows", () => {
+    expect(series(daily, "views")).toEqual([
+      { day: "2026-03-01", value: 2 },
+      { day: "2026-03-02", value: 2 },
+      { day: "2026-03-03", value: 4 },
+      { day: "2026-03-04", value: 4 },
+    ]);
+    expect(sumSeries(series(daily, "errors"))).toBe(1);
+  });
+
+  it("compares the second half of a range with the first", () => {
+    expect(changeOverRange(series(daily, "views"))).toBe(100);
+    expect(changeOverRange(series(daily.slice(0, 2), "views"))).toBeNull();
+  });
+
+  it("refuses to invent growth out of nothing", () => {
+    const empty = [
+      { day: "a", value: 0 },
+      { day: "b", value: 0 },
+      { day: "c", value: 3 },
+      { day: "d", value: 3 },
+    ];
+    expect(changeOverRange(empty)).toBeNull();
+    expect(changeOverRange(empty.map((point) => ({ ...point, value: 0 })))).toBe(0);
+  });
+});
+
+describe("how a tool did", () => {
+  it("gives a success rate only where somebody came", () => {
+    expect(successRate({ views: 10, results: 4 })).toBe(40);
+    expect(successRate({ views: 0, results: 0 })).toBeNull();
+    // More results than views (a visit spanning midnight) still reads as full.
+    expect(successRate({ views: 2, results: 5 })).toBe(100);
+  });
+
+  it("describes the three steps as shares of the widest one", () => {
+    expect(funnel({ views: 10, inputs: 5, results: 2 })).toEqual([
+      { label: "נכנסו", value: 10, share: 100 },
+      { label: "התחילו", value: 5, share: 50 },
+      { label: "קיבלו תוצאה", value: 2, share: 20 },
     ]);
   });
-});
 
-describe("who is active", () => {
-  it("counts an account once, and only inside the window", () => {
-    const now = new Date("2026-03-10T12:00:00");
-    const seen = activeUsers(
-      [
-        work({ userId: "u1", createdAt: "2026-03-09T12:00:00" }),
-        work({ userId: "u1", createdAt: "2026-03-08T12:00:00" }),
-        work({ userId: "u2", createdAt: "2026-01-01T12:00:00" }),
-      ],
-      7,
-      now,
-    );
-    expect([...seen]).toEqual(["u1"]);
+  it("finds the busiest cell of the week", () => {
+    const hours = normalizeHours([]);
+    expect(busiestHour(hours)).toBeNull();
+    hours[3][14] = 9;
+    expect(busiestHour(hours)).toEqual({ weekday: 3, hour: 14, value: 9 });
+    expect(weekdayLabel(3)).toBe("רביעי");
+    expect(hourLabel(9)).toBe("09:00");
   });
 });
 
-describe("the week heatmap", () => {
-  it("is seven rows of twenty-four", () => {
-    const grid = weekHeatmap([work({ createdAt: "2026-03-10T09:30:00" })]);
-    expect(grid).toHaveLength(7);
-    expect(grid[0]).toHaveLength(24);
-    const date = new Date("2026-03-10T09:30:00");
-    expect(grid[date.getDay()][date.getHours()]).toBe(1);
-  });
-});
-
-describe("the per-account digest", () => {
-  const snapshot: AdminSnapshot = {
-    generatedAt: "2026-03-10T10:00:00.000Z",
-    days: 30,
-    truncated: { works: false, users: false },
-    totals: { users: 2, works: 3, shares: 1 },
-    users: [
-      {
-        id: "u1",
-        email: "a@example.com",
-        name: "א",
-        avatar: null,
-        provider: "google",
-        createdAt: "2026-01-01T00:00:00.000Z",
-        lastSignInAt: "2026-03-10T08:00:00.000Z",
-        bannedUntil: null,
-      },
-      {
-        id: "u2",
-        email: "b@example.com",
-        name: null,
-        avatar: null,
-        provider: "google",
-        createdAt: "2026-02-01T00:00:00.000Z",
-        lastSignInAt: null,
-        bannedUntil: "2030-01-01T00:00:00.000Z",
-      },
-    ],
-    works: [
-      work({ userId: "u1", createdAt: "2026-03-01T00:00:00.000Z" }),
-      work({ userId: "u1", createdAt: "2026-03-09T00:00:00.000Z" }),
-      work({ userId: "u2", createdAt: "2026-02-20T00:00:00.000Z" }),
-    ],
-    ai: [
-      { userId: "u1", day: "2026-03-09", kind: "ai", amount: 1000 },
-      { userId: "u1", day: "2026-03-10", kind: "separation", amount: 2 },
-    ],
-    stt: [{ userId: "u2", day: "2026-03-09", kind: "stt", amount: 120 }],
-    shares: [
-      {
-        token: "t",
-        userId: "u1",
-        origin: "works",
-        workId: "w1",
-        kind: "vocals",
-        title: "שיר",
-        views: 5,
-        createdAt: "2026-03-02T00:00:00.000Z",
-        revokedAt: null,
-      },
-    ],
-    storage: [{ userId: "u1", files: 2, bytes: 4096 }],
-  };
-
-  it("gathers every list onto its account", () => {
-    const [first, second] = digestUsers(snapshot, new Date("2026-03-10T12:00:00.000Z"));
-    expect(first.works).toBe(2);
-    expect(first.lastWorkAt).toBe("2026-03-09T00:00:00.000Z");
-    expect(first.bytes).toBe(4096);
-    expect(first.aiAmount).toBe(1002);
-    expect(first.shareViews).toBe(5);
-    expect(first.banned).toBe(false);
-    expect(second.sttSeconds).toBe(120);
-    expect(second.banned).toBe(true);
+describe("naming a tool", () => {
+  it("uses the tool's own Hebrew name and colour", () => {
+    expect(toolLabel("notes")).toBe("שיר לתווים");
+    expect(toolHue("notes")).toBe(258);
   });
 
-  it("leaves an account with nothing saved at zero, not undefined", () => {
-    const empty = digestUsers({ ...snapshot, works: [], storage: [], ai: [], stt: [], shares: [] });
-    expect(empty[0].works).toBe(0);
-    expect(empty[0].bytes).toBe(0);
-    expect(empty[0].lastWorkAt).toBeNull();
-  });
-
-  it("stops counting a block once it has run out", () => {
-    const [, second] = digestUsers(snapshot, new Date("2031-01-01T00:00:00.000Z"));
-    expect(second.banned).toBe(false);
+  it("still names the pages that are not tools", () => {
+    expect(toolLabel("home")).toBe("דף הבית");
+    expect(toolLabel("whatever")).toBe("whatever");
+    const hue = toolHue("whatever");
+    expect(hue).toBeGreaterThanOrEqual(0);
+    expect(hue).toBeLessThan(360);
+    expect(toolHue("whatever")).toBe(hue);
   });
 });
 
 describe("writing numbers for people", () => {
-  it("keeps small numbers whole and shortens big ones", () => {
+  it("keeps a tile short", () => {
     expect(compactNumber(842)).toBe("842");
     expect(compactNumber(12_900)).toBe("12.9K");
     expect(compactNumber(3_100_000)).toBe("3.1M");
   });
 
-  it("scales bytes", () => {
+  it("says how big and how long", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(2048)).toBe("2 KB");
     expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+    expect(formatDuration(0)).toBe("—");
+    expect(formatDuration(45)).toBe("45 שנ׳");
+    expect(formatDuration(600)).toBe("10 דק׳");
   });
 
-  it("says how long ago something was", () => {
-    const now = new Date("2026-03-10T12:00:00.000Z");
-    expect(timeAgo("2026-03-10T11:30:00.000Z", now)).toBe("לפני 30 דק׳");
+  it("says how long ago", () => {
+    const now = new Date("2026-03-14T12:00:00.000Z");
+    expect(timeAgo("2026-03-14T11:59:50.000Z", now)).toBe("עכשיו");
+    expect(timeAgo("2026-03-14T09:00:00.000Z", now)).toBe("לפני 3 שע׳");
     expect(timeAgo(null, now)).toBe("—");
-  });
-});
-
-describe("the CSV export", () => {
-  it("quotes what would otherwise break a column", () => {
-    const csv = toCsv([{ title: 'a,"b"', count: 2 }]);
-    expect(csv.split("\n")[0]).toBe("title,count");
-    expect(csv.split("\n")[1]).toBe('"a,""b""",2');
+    expect(timeAgo("nonsense", now)).toBe("—");
   });
 
-  it("is empty for an empty list", () => {
+  it("writes a table a spreadsheet can open", () => {
     expect(toCsv([])).toBe("");
+    expect(toCsv([{ tool: "notes", views: 3 }, { tool: 'a,"b', views: 1 }])).toBe(
+      'tool,views\nnotes,3\n"a,""b",1',
+    );
   });
 });

@@ -17,6 +17,8 @@ const BAR_HEIGHTS = [18, 34, 55, 78, 46, 92, 64, 40, 72, 100, 68, 48, 82, 57, 29
 
 type Props = {
   onOpen: (id: string) => void;
+  /** Tools the admin area switched off; shown, but not openable. */
+  disabledTools?: string[];
 };
 
 const FILTERS: { id: ToolCategory | "all"; label: string }[] = [
@@ -26,7 +28,7 @@ const FILTERS: { id: ToolCategory | "all"; label: string }[] = [
   { id: "analyze", label: CATEGORY_LABELS.analyze },
 ];
 
-export function Hub({ onOpen }: Props) {
+export function Hub({ onOpen, disabledTools = [] }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ToolCategory | "all">("all");
 
@@ -105,10 +107,13 @@ export function Hub({ onOpen }: Props) {
       <section className="tool-grid" aria-label="הכלים">
         {visible.map((tool, index) => {
           const Icon = tool.icon;
+          const off = disabledTools.includes(tool.id);
           return (
             <button
               key={tool.id}
-              className={`tool-card ${tool.id === "notes" ? "is-featured" : ""}`}
+              className={`tool-card ${tool.id === "notes" ? "is-featured" : ""} ${off ? "is-off" : ""}`}
+              disabled={off}
+              aria-disabled={off}
               style={
                 {
                   "--accent-hue": tool.hue,
@@ -125,10 +130,14 @@ export function Hub({ onOpen }: Props) {
                 <span className="tool-card-category">
                   {CATEGORY_LABELS[tool.category]}
                 </span>
-                {tool.badge && (
-                  <span className="tool-card-badge">
-                    <BadgeCheck size={13} /> {tool.badge}
-                  </span>
+                {off ? (
+                  <span className="tool-card-badge is-off">מכובה זמנית</span>
+                ) : (
+                  tool.badge && (
+                    <span className="tool-card-badge">
+                      <BadgeCheck size={13} /> {tool.badge}
+                    </span>
+                  )
                 )}
               </span>
               <strong>{tool.title}</strong>

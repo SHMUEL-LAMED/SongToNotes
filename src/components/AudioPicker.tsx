@@ -1,3 +1,5 @@
+import { trackInput } from "../lib/analytics";
+import { currentRoute } from "../lib/router";
 import { FileAudio, Mic, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decodeAudioFile, formatTime } from "../lib/audio";
@@ -235,12 +237,18 @@ export function AudioPicker({
   const [micLevel, setMicLevel] = useState(0);
   const [recordError, setRecordError] = useState<string | null>(null);
 
+  // The tool hears about the file; the site only hears that one arrived.
+  const pick = (file: File | null | undefined, how: string) => {
+    if (file) trackInput(currentRoute(), how);
+    onPick(file);
+  };
+
   const pickFromInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     // Clear first so choosing the same file again still fires change in every
     // browser, including Chrome/Android and Safari/iOS.
     event.currentTarget.value = "";
-    if (file) onPick(file);
+    if (file) pick(file, "file");
   };
 
   useEffect(() => () => recorder.cancel(), [recorder]);
@@ -278,7 +286,7 @@ export function AudioPicker({
         setRecordError("ההקלטה קצרה מדי. נסה שוב.");
         return;
       }
-      onPick(new File([blob], `הקלטה.${recordingExtension(blob)}`, { type: blob.type }));
+      pick(new File([blob], `הקלטה.${recordingExtension(blob)}`, { type: blob.type }), "recording");
     } catch {
       setIsRecording(false);
       setRecordError("ההקלטה נכשלה.");
@@ -375,7 +383,7 @@ export function AudioPicker({
                 file.name.split(".").pop()?.toLowerCase() ?? "",
               ),
           );
-          onPick(audioish ?? dropped[0]);
+          pick(audioish ?? dropped[0], "drop");
         }}
         aria-disabled={isLoading}
       >

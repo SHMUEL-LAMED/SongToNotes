@@ -68,6 +68,57 @@ export async function createShare(work: Pick<SavedWork, "id" | "origin" | "rowId
   return shareLink(body.token);
 }
 
+/** One of the visitor's own links, as the personal area lists it. */
+export type MyShare = {
+  token: string;
+  origin: WorkOrigin;
+  workId: string;
+  kind: WorkKind;
+  title: string;
+  views: number;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+};
+
+/** Every link the visitor made, newest first — through RLS, so only theirs. */
+export async function listShares(): Promise<MyShare[]> {
+  const { data, error } = await supabase
+    .from("shares")
+    .select("token, origin, work_id, kind, title, views, created_at, expires_at, revoked_at")
+    .order("created_at", { ascending: false });
+  if (error) throw new ShareError("network", MESSAGES.network);
+  return (data ?? []).map((row) => ({
+    token: row.token,
+    origin: row.origin as WorkOrigin,
+    workId: row.work_id,
+    kind: row.kind as WorkKind,
+    title: row.title,
+    views: Number(row.views ?? 0),
+    createdAt: row.created_at,
+    expiresAt: row.expires_at ?? null,
+    revokedAt: row.revoked_at ?? null,
+  }));
+}
+
+/** Moves the link's expiry `days` from now, or removes it with `null`. */
+export async function setShareExpiry(token: string, days: number | null) {
+  const headers = await authed();
+  let response: Response;
+  try {
+    response = await fetch(SHARE_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ token, expiresInDays: days }),
+    });
+  } catch {
+    throw new ShareError("network", MESSAGES.network);
+  }
+  const body = (await response.json().catch(() => null)) as { expiresAt?: string | null; error?: string } | null;
+  if (!response.ok || !body) throw new ShareError(body?.error ?? "http", describe(body?.error ?? "http"));
+  return body.expiresAt ?? null;
+}
+
 export async function revokeShare(token: string) {
   const headers = await authed();
   let response: Response;
