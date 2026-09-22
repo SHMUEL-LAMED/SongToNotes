@@ -1,15 +1,23 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { compactNumber, formatNumber, type Point } from "../lib/admin";
 
 /**
- * The dashboard's charts, drawn as SVG against the site's own tokens so they
- * follow the theme instead of carrying colours of their own.
+ * The site's charts, drawn as SVG against its own tokens so they follow the
+ * theme instead of carrying colours of their own. Both the admin area and the
+ * personal area draw from here, so a figure looks the same wherever it is read.
  *
- * Three rules hold across all of them. Every chart shows one measure, so
- * there is never a second scale to misread. Magnitude is one hue, light to
- * dark — identity lives in the labels, not in a ring of colours. And the text
- * wears text tokens: the mark beside a label carries the colour, never the
- * label itself.
+ * Three rules hold across all of them. Every chart shows one measure, so there
+ * is never a second scale to misread. Magnitude is one hue, light to dark —
+ * identity lives in the labels, not in a ring of colours. And the text wears
+ * text tokens: the mark beside a label carries the colour, never the label.
  *
  * The page reads right to left, and so do the charts: the oldest day sits on
  * the right and time runs towards the left, which is how the eye moves here.
@@ -49,18 +57,20 @@ function niceTicks(max: number, count = 3) {
   if (max <= 0) return [0];
   const raw = max / count;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((value) => value >= raw) ?? magnitude * 10;
+  const step =
+    [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((value) => value >= raw) ??
+    magnitude * 10;
   const ticks: number[] = [];
   for (let value = 0; value <= max + step / 2; value += step) ticks.push(value);
   return ticks;
 }
 
+const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
 function dayLabel(day: string) {
   const [, month, date] = day.split("-");
   return `${Number(date)}.${Number(month)}`;
 }
-
-const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 function fullDayLabel(day: string) {
   const date = new Date(`${day}T12:00:00`);
@@ -70,7 +80,7 @@ function fullDayLabel(day: string) {
 
 type TimeChartProps = {
   points: Point[];
-  /** What one point is — "עבודות", "טוקנים"; used in the tooltip. */
+  /** What one point is — "כניסות", "עבודות"; used in the read-out. */
   unit: string;
   /** How a value is written out, when a plain number is not the whole story. */
   format?: (value: number) => string;
@@ -83,7 +93,13 @@ type TimeChartProps = {
  * line: these are counts of separate days, not a continuous quantity, and a
  * line between two days implies values in between that were never measured.
  */
-export function TimeChart({ points, unit, format = formatNumber, height = 210, label }: TimeChartProps) {
+export function TimeChart({
+  points,
+  unit,
+  format = formatNumber,
+  height = 210,
+  label,
+}: TimeChartProps) {
   const { ref, width } = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
 
@@ -123,7 +139,12 @@ export function TimeChart({ points, unit, format = formatNumber, height = 210, l
                 y2={y(tick)}
                 className="chart-grid"
               />
-              <text x={padding.left + plotWidth + 8} y={y(tick) + 4} className="chart-tick" textAnchor="start">
+              <text
+                x={padding.left + plotWidth + 8}
+                y={y(tick) + 4}
+                className="chart-tick"
+                textAnchor="start"
+              >
                 {compactNumber(tick)}
               </text>
             </g>
@@ -211,12 +232,20 @@ export function Sparkline({ points, label }: { points: Point[]; label: string })
   );
 }
 
-export type BarRow = { key: string; label: string; value: number; hint?: string; icon?: React.ReactNode };
+export type BarRow = {
+  key: string;
+  label: string;
+  value: number;
+  hint?: string;
+  icon?: ReactNode;
+  /** The row's own hue, where the rows are tools and the colour names one. */
+  hue?: number;
+};
 
 /**
- * A ranked list as bars. The name is the identity, so the bars are one hue
- * with the value at the tip — a colour per row would say something the data
- * does not.
+ * A ranked list as bars. Where the rows are plain categories the bars are one
+ * hue with the value at the tip; where a row *is* a tool, it wears that tool's
+ * own colour, because the site already taught that colour as its name.
  */
 export function BarList({
   rows,
@@ -237,6 +266,10 @@ export function BarList({
   return (
     <ul className="bar-list">
       {rows.map((row) => {
+        const style = {
+          "--fill": `${(row.value / max) * 100}%`,
+          ...(row.hue === undefined ? {} : { "--accent-hue": String(row.hue) }),
+        } as CSSProperties;
         const content = (
           <>
             <span className="bar-list-name">
@@ -247,7 +280,7 @@ export function BarList({
               </span>
             </span>
             <span className="bar-list-track">
-              <span className="bar-list-fill" style={{ "--fill": `${(row.value / max) * 100}%` } as CSSProperties} />
+              <span className="bar-list-fill" />
             </span>
             <b className="bar-list-value">
               {format(row.value)}
@@ -256,7 +289,7 @@ export function BarList({
           </>
         );
         return (
-          <li key={row.key}>
+          <li key={row.key} style={style}>
             {onSelect ? (
               <button type="button" className="bar-list-row is-button" onClick={() => onSelect(row.key)}>
                 {content}
@@ -276,13 +309,18 @@ export function BarList({
  * hue, stepped by how busy the hour is — the scale is magnitude, so the
  * colour is a single ramp rather than a spectrum.
  */
-export function WeekHeatmap({ grid }: { grid: number[][] }) {
+export function WeekHeatmap({ grid, unit = "כניסות" }: { grid: number[][]; unit?: string }) {
   const max = Math.max(1, ...grid.flat());
-  const busiest = grid.flatMap((row, day) => row.map((value, hour) => ({ value, day, hour })))
+  const busiest = grid
+    .flatMap((row, day) => row.map((value, hour) => ({ value, day, hour })))
     .reduce((best, cell) => (cell.value > best.value ? cell : best), { value: 0, day: 0, hour: 0 });
 
   return (
-    <div className="heatmap" role="img" aria-label={`שעות הפעילות בשבוע; הכי עמוס ביום ${WEEKDAYS[busiest.day]} בשעה ${busiest.hour}:00`}>
+    <div
+      className="heatmap"
+      role="img"
+      aria-label={`שעות הפעילות בשבוע; הכי עמוס ביום ${WEEKDAYS[busiest.day]} בשעה ${busiest.hour}:00`}
+    >
       <div className="heatmap-hours" aria-hidden="true">
         <span>00:00</span>
         <span>06:00</span>
@@ -299,7 +337,7 @@ export function WeekHeatmap({ grid }: { grid: number[][] }) {
                 key={hour}
                 className={`heatmap-cell ${value > 0 ? "has-value" : ""}`}
                 style={{ "--weight": value === 0 ? 0 : 0.18 + (value / max) * 0.82 } as CSSProperties}
-                title={`יום ${WEEKDAYS[day]}, ${String(hour).padStart(2, "0")}:00 — ${value} פריטים`}
+                title={`יום ${WEEKDAYS[day]}, ${String(hour).padStart(2, "0")}:00 — ${value} ${unit}`}
               />
             ))}
           </span>
@@ -315,6 +353,166 @@ export function WeekHeatmap({ grid }: { grid: number[][] }) {
 }
 
 /**
+ * One quantity against its ceiling. The bar turns from accent to warning as it
+ * fills, because a meter's whole job is to say "how close".
+ */
+export function Meter({
+  value,
+  max,
+  label,
+  note,
+  format = formatNumber,
+}: {
+  value: number;
+  max: number;
+  label: string;
+  note?: string;
+  format?: (value: number) => string;
+}) {
+  const share = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  const state = share >= 90 ? "is-full" : share >= 70 ? "is-high" : "";
+
+  return (
+    <div className="meter">
+      <div className="meter-head">
+        <span className="meter-label">{label}</span>
+        <b className="meter-value">
+          {format(value)}
+          {max > 0 && <small> / {format(max)}</small>}
+        </b>
+      </div>
+      <div
+        className={`meter-track ${state}`}
+        role="meter"
+        aria-valuenow={value}
+        aria-valuemin={0}
+        aria-valuemax={max || value || 1}
+        aria-label={label}
+      >
+        <span className="meter-fill" style={{ "--fill": `${share}%` } as CSSProperties} />
+      </div>
+      {note && <p className="meter-note">{note}</p>}
+    </div>
+  );
+}
+
+export type FunnelRow = { label: string; value: number; share: number };
+
+/**
+ * Opened → started → finished. Each step is as wide as its share of the first,
+ * and the drop between two steps is written out, because the gap is the point.
+ */
+export function Funnel({ steps, unit = "" }: { steps: FunnelRow[]; unit?: string }) {
+  return (
+    <ol className="funnel">
+      {steps.map((step, index) => {
+        const previous = index > 0 ? steps[index - 1].value : 0;
+        const lost = index > 0 && previous > 0 ? previous - step.value : 0;
+        return (
+          <li key={step.label} className="funnel-step">
+            <div className="funnel-head">
+              <span>{step.label}</span>
+              <b>
+                {formatNumber(step.value)}
+                {unit && <small> {unit}</small>}
+              </b>
+            </div>
+            <div className="funnel-track">
+              <span className="funnel-fill" style={{ "--fill": `${step.share}%` } as CSSProperties} />
+            </div>
+            {lost > 0 && (
+              <p className="funnel-drop">
+                נשרו {formatNumber(lost)} ({Math.round((lost / previous) * 100)}%)
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Two halves of one whole — new against returning — as a single bar. */
+export function SplitBar({
+  parts,
+  label,
+}: {
+  parts: { key: string; label: string; value: number }[];
+  label: string;
+}) {
+  const total = parts.reduce((sum, part) => sum + part.value, 0);
+  if (!total) return <p className="admin-empty">אין עדיין נתונים</p>;
+
+  return (
+    <div className="split" role="img" aria-label={`${label}: ${parts.map((part) => `${part.label} ${part.value}`).join(", ")}`}>
+      <div className="split-track">
+        {parts.map((part, index) => (
+          <span
+            key={part.key}
+            className={`split-part split-part-${index + 1}`}
+            style={{ "--share": `${(part.value / total) * 100}%` } as CSSProperties}
+          />
+        ))}
+      </div>
+      <ul className="split-legend">
+        {parts.map((part, index) => (
+          <li key={part.key}>
+            <i className={`split-dot split-part-${index + 1}`} aria-hidden="true" />
+            <span>{part.label}</span>
+            <b>{Math.round((part.value / total) * 100)}%</b>
+            <small>{formatNumber(part.value)}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * A figure with its name, and whatever context fits beside it: a trend, a
+ * sparkline, a note. The trend is a plain percentage, never a colour alone.
+ */
+export function StatTile({
+  label,
+  value,
+  note,
+  trend,
+  icon,
+  children,
+  hue,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  trend?: number | null;
+  icon?: ReactNode;
+  children?: ReactNode;
+  hue?: number;
+}) {
+  const style = hue === undefined ? undefined : ({ "--accent-hue": String(hue) } as CSSProperties);
+  const tone = trend == null ? "" : trend > 0 ? "is-up" : trend < 0 ? "is-down" : "is-flat";
+
+  return (
+    <article className="stat-tile" style={style}>
+      <header className="stat-tile-head">
+        {icon && <span className="stat-tile-icon">{icon}</span>}
+        <span className="stat-tile-label">{label}</span>
+      </header>
+      <strong className="stat-tile-value">{value}</strong>
+      <div className="stat-tile-foot">
+        {trend != null && (
+          <span className={`stat-trend ${tone}`}>
+            {trend > 0 ? "▲" : trend < 0 ? "▼" : "■"} {Math.abs(trend)}%
+          </span>
+        )}
+        {note && <span className="stat-tile-note">{note}</span>}
+      </div>
+      {children}
+    </article>
+  );
+}
+
+/**
  * A destructive button that asks first: the first press arms it, the second
  * carries it out, and walking away disarms it a few seconds later.
  */
@@ -325,7 +523,7 @@ export function ConfirmButton({
   className = "admin-danger-button",
   disabled,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
   className?: string;
@@ -349,7 +547,12 @@ export function ConfirmButton({
   }, [armed, onConfirm]);
 
   return (
-    <button type="button" className={`${className} ${armed ? "is-armed" : ""}`} onClick={press} disabled={disabled}>
+    <button
+      type="button"
+      className={`${className} ${armed ? "is-armed" : ""}`}
+      onClick={press}
+      disabled={disabled}
+    >
       {armed ? confirmLabel : children}
     </button>
   );

@@ -458,3 +458,110 @@ as $$
 $$;
 revoke all on function public.stt_delete_setting(text) from public, anon, authenticated;
 grant execute on function public.stt_delete_setting(text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- What the site measures about itself — and what it refuses to measure.
+--
+-- A row says that some browser opened a tool, how long it stayed, whether the
+-- work finished or failed, and on what kind of device. It does NOT say who:
+-- there is no user id here, no title, no file name, no text. `visitor` is a
+-- random number the browser keeps for a month so "new or returning" can be
+-- counted; it points at nothing and nobody, and the visitor can switch it off
+-- entirely from the personal area.
+--
+-- Anyone may insert (that is the whole point — the site writes as it is used),
+-- and nobody may read: there is no select policy, so only the admin function,
+-- with the service role, ever sees it.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.site_events (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  -- The day and hour as the visitor experienced them, so "when do people work"
+  -- is answered in their time, not the server's.
+  day date not null,
+  hour smallint not null check (hour between 0 and 23),
+  weekday smallint not null check (weekday between 0 and 6),
+  -- view: the tool was opened · input: something was fed to it · result: it
+  -- produced something · error: it failed · leave: how long the visit lasted.
+  kind text not null check (kind in ('view', 'input', 'result', 'error', 'leave')),
+  tool text not null,
+  -- Seconds on the tool (leave) or seconds the work took (result).
+  seconds integer not null default 0 check (seconds >= 0),
+  -- A short label: an error code, a provider name. Never anything a person typed.
+  detail text,
+  device text check (device in ('phone', 'tablet', 'desktop')),
+  browser text,
+  os text,
+  language text,
+  -- The host a visitor arrived from, never the full address.
+  referrer text,
+  visitor text,
+  signed_in boolean not null default false
+);
+
+create index if not exists site_events_at_idx on public.site_events (at desc);
+create index if not exists site_events_day_idx on public.site_events (day, tool);
+
+alter table public.site_events enable row level security;
+
+grant insert on public.site_events to anon, authenticated;
+
+create policy "Anyone may record an anonymous event"
+on public.site_events for insert to anon, authenticated
+with check (
+  kind in ('view', 'input', 'result', 'error', 'leave')
+  and length(tool) <= 40
+  and seconds between 0 and 86400
+  and (detail is null or length(detail) <= 60)
+  and (visitor is null or length(visitor) <= 24)
+);
+-- No select, update or delete policy on purpose: the rows go in and only the
+-- admin function, with the service role, ever reads them.
+
+-- Old rows are of no use to anybody; the admin area clears them on request.
+create or replace function public.admin_prune_events(older_than_days integer)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  removed bigint;
+begin
+  delete from public.site_events
+  where at < now() - make_interval(days => greatest(30, older_than_days));
+  get diagnostics removed = row_count;
+  return removed;
+end;
+$$;
+revoke all on function public.admin_prune_events(integer) from public, anon, authenticated;
+grant execute on function public.admin_prune_events(integer) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- The switches the admin area throws: a notice for everybody, a closed sign,
+-- and the ability to turn one tool off when its service is broken. One row,
+-- readable by the whole site (it is public by nature) and writable only by
+-- the admin function.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.site_control (
+  id boolean primary key default true check (id),
+  maintenance boolean not null default false,
+  maintenance_message text,
+  banner text,
+  banner_kind text not null default 'info' check (banner_kind in ('info', 'warn', 'good')),
+  disabled_tools text[] not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+insert into public.site_control (id) values (true) on conflict (id) do nothing;
+
+alter table public.site_control enable row level security;
+
+grant select on public.site_control to anon, authenticated;
+
+create policy "Everybody reads the site's notices"
+on public.site_control for select to anon, authenticated
+using (true);
+-- Writing is the service role's alone, through the admin function.

@@ -1,40 +1,33 @@
 /**
  * The admin area's server side.
  *
- * One address — `ADMIN_EMAILS`, the site owner — may call this; everybody
- * else gets 403, signed in or not. The check is on the verified address in
- * the caller's own token, so nothing in the browser can grant it: the site
- * ships with the same publishable key for everyone, and the row policies in
- * `schema.sql` still hide every account from every other account. Only this
- * function, with the service role, sees across them.
+ * One address — `ADMIN_EMAILS`, the site owner — may call this; everybody else
+ * gets 403, signed in or not. The check is on the verified address in the
+ * caller's own token, so nothing in the browser can grant it.
+ *
+ * What it answers with is deliberately narrow. It reports how the *site* is
+ * used — which tools were opened, for how long, what worked and what failed,
+ * on what kind of device — and never who did any of it. The rows it reads for
+ * that (`site_events`) carry no account, no title and no file name to begin
+ * with; the per-account tables are touched only for totals nobody can be
+ * picked out of.
  *
  * GET  ?view=overview&days=30  everything the dashboard draws, in one reply
  * GET  ?view=settings          which server keys are set (never their values)
  * GET  ?view=audit             the log of what the admin area did
- * POST {action, …}             one change: delete a work, revoke a link,
- *                              block or remove an account, set a key, clear
- *                              today's allowance
- *
- * The overview sends rows rather than finished figures — capped, trimmed and
- * without any payload — so the dashboard can slice by day, tool, account and
- * range without asking again. Totals come from exact counts, so they stay
- * right even when the rows were capped.
+ * POST {action, …}             one change: a notice, maintenance, a tool off,
+ *                              a key, a health check, a clean-up
  */
 import { CORS, adminClient, json, visitor } from "../_shared/common.ts";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 
 const BUCKET = "works";
-
-/** The owner of this site, unless `ADMIN_EMAILS` says otherwise. */
 const DEFAULT_ADMINS = ["0534169095@xn--4dbjbascrao3i.com", "0534169095@שמואלליווי.com"];
+const PAGE = 1000;
+/** Enough for a year of a busy site; the reply says when it was reached. */
+const MAX_EVENTS = 60_000;
+const PREVIEW = { ...CORS, "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 
-/** Enough for a site of this size; the reply says when a list was cut. */
-const CAPS = { works: 4000, users: 2000, shares: 1000, usage: 20_000 };
-
-const PREVIEW_METHODS = { ...CORS, "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
-
-/** Lower case, trimmed, and one Unicode spelling — the address may be typed
- *  either in Hebrew letters or in the punycode the browser sends. */
 function normalize(email: string) {
   return email.trim().toLowerCase().normalize("NFC");
 }
@@ -47,10 +40,7 @@ function admins() {
   return new Set((configured.length ? configured : DEFAULT_ADMINS).map(normalize));
 }
 
-/**
- * The caller, when they are the admin. An unverified address never counts:
- * otherwise anyone could sign up with the owner's address and be believed.
- */
+/** An unverified address never counts: anybody may type the owner's address. */
 function isAdmin(user: User | null) {
   if (!user?.email) return false;
   const verified =
@@ -60,331 +50,493 @@ function isAdmin(user: User | null) {
 
 type Row = Record<string, unknown>;
 
-/** One saved work, whichever of the three tables it lives in. */
-type WorkRow = {
-  id: string;
-  origin: "works" | "transcriptions" | "ringtones";
-  userId: string;
-  kind: string;
-  title: string;
-  source: string | null;
-  createdAt: string;
-  hasFile: boolean;
+type EventRow = {
+  at: string;
+  day: string;
+  hour: number;
+  weekday: number;
+  kind: "view" | "input" | "result" | "error" | "leave";
+  tool: string;
+  seconds: number;
+  detail: string | null;
+  device: string | null;
+  browser: string | null;
+  os: string | null;
+  language: string | null;
+  referrer: string | null;
+  visitor: string | null;
+  signed_in: boolean;
 };
 
-function text(value: unknown, max = 120) {
-  return typeof value === "string" ? value.slice(0, max) : "";
+/* ---------------------------------------------------------------- reading */
+
+async function readEvents(admin: SupabaseClient, sinceIso: string) {
+  const out: EventRow[] = [];
+  for (let from = 0; from < MAX_EVENTS; from += PAGE) {
+    const { data, error } = await admin
+      .from("site_events")
+      .select("at, day, hour, weekday, kind, tool, seconds, detail, device, browser, os, language, referrer, visitor, signed_in")
+      .gte("at", sinceIso)
+      .order("at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as EventRow[];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
 }
+
+function bump(table: Map<string, number>, key: string | null | undefined, by = 1) {
+  const name = (key ?? "").trim() || "לא ידוע";
+  table.set(name, (table.get(name) ?? 0) + by);
+}
+
+function toList(table: Map<string, number>, limit = 12) {
+  return [...table.entries()]
+    .map(([key, value]) => ({ key, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+}
+
+function average(values: number[]) {
+  const real = values.filter((value) => value > 0);
+  if (!real.length) return 0;
+  return Math.round((real.reduce((sum, value) => sum + value, 0) / real.length) * 10) / 10;
+}
+
+/** Everything the dashboard draws, counted once over the rows. */
+function aggregate(events: EventRow[], days: string[], now: number) {
+  const daily = new Map(
+    days.map((day) => [
+      day,
+      { day, views: 0, results: 0, errors: 0, visitors: new Set<string>() },
+    ]),
+  );
+  const tools = new Map<
+    string,
+    {
+      tool: string;
+      views: number;
+      inputs: number;
+      results: number;
+      errors: number;
+      dwell: number[];
+      work: number[];
+      visitors: Set<string>;
+    }
+  >();
+  const hours = Array.from({ length: 7 }, () => new Array(24).fill(0) as number[]);
+  const devices = new Map<string, number>();
+  const browsers = new Map<string, number>();
+  const systems = new Map<string, number>();
+  const languages = new Map<string, number>();
+  const referrers = new Map<string, number>();
+  const failures = new Map<string, { tool: string; code: string; count: number; last: string }>();
+  const seenDays = new Map<string, Set<string>>();
+  const live = new Set<string>();
+  let signedInViews = 0;
+  let views = 0;
+
+  for (const event of events) {
+    const day = daily.get(event.day);
+    const tool =
+      tools.get(event.tool) ??
+      {
+        tool: event.tool,
+        views: 0,
+        inputs: 0,
+        results: 0,
+        errors: 0,
+        dwell: [],
+        work: [],
+        visitors: new Set<string>(),
+      };
+    tools.set(event.tool, tool);
+    if (event.visitor) {
+      tool.visitors.add(event.visitor);
+      const seen = seenDays.get(event.visitor) ?? new Set<string>();
+      seen.add(event.day);
+      seenDays.set(event.visitor, seen);
+      day?.visitors.add(event.visitor);
+      if (now - new Date(event.at).getTime() <= 5 * 60_000) live.add(event.visitor);
+    }
+
+    switch (event.kind) {
+      case "view":
+        views += 1;
+        tool.views += 1;
+        if (day) day.views += 1;
+        if (event.signed_in) signedInViews += 1;
+        hours[Math.min(6, Math.max(0, event.weekday))][Math.min(23, Math.max(0, event.hour))] += 1;
+        bump(devices, event.device);
+        bump(browsers, event.browser);
+        bump(systems, event.os);
+        bump(languages, event.language);
+        if (event.referrer) bump(referrers, event.referrer);
+        break;
+      case "input":
+        tool.inputs += 1;
+        break;
+      case "result":
+        tool.results += 1;
+        if (day) day.results += 1;
+        if (event.seconds > 0) tool.work.push(event.seconds);
+        break;
+      case "error": {
+        tool.errors += 1;
+        if (day) day.errors += 1;
+        const code = (event.detail ?? "שגיאה").slice(0, 60);
+        const key = `${event.tool}|${code}`;
+        const hit = failures.get(key) ?? { tool: event.tool, code, count: 0, last: event.at };
+        hit.count += 1;
+        if (event.at > hit.last) hit.last = event.at;
+        failures.set(key, hit);
+        break;
+      }
+      case "leave":
+        if (event.seconds > 0) tool.dwell.push(event.seconds);
+        break;
+    }
+  }
+
+  let returning = 0;
+  for (const seen of seenDays.values()) if (seen.size > 1) returning += 1;
+
+  return {
+    daily: days.map((day) => {
+      const row = daily.get(day)!;
+      return { day, views: row.views, results: row.results, errors: row.errors, visitors: row.visitors.size };
+    }),
+    tools: [...tools.values()]
+      .map((tool) => ({
+        tool: tool.tool,
+        views: tool.views,
+        inputs: tool.inputs,
+        results: tool.results,
+        errors: tool.errors,
+        visitors: tool.visitors.size,
+        dwellSeconds: average(tool.dwell),
+        workSeconds: average(tool.work),
+      }))
+      .sort((a, b) => b.views - a.views),
+    hours,
+    devices: toList(devices),
+    browsers: toList(browsers),
+    systems: toList(systems),
+    languages: toList(languages),
+    referrers: toList(referrers),
+    failures: [...failures.values()].sort((a, b) => b.count - a.count).slice(0, 20),
+    live: live.size,
+    visitors: { total: seenDays.size, returning, fresh: seenDays.size - returning },
+    views,
+    signedInShare: views ? Math.round((signedInViews / views) * 100) : 0,
+    events: events.length,
+  };
+}
+
+/* -------------------------------------------------------------- the reply */
 
 async function exactCount(admin: SupabaseClient, table: string) {
   const { count } = await admin.from(table).select("*", { count: "exact", head: true });
   return count ?? 0;
 }
 
-/** Every account, with the name and picture the profile keeps. */
-async function accounts(admin: SupabaseClient) {
-  const out: Row[] = [];
-  for (let page = 1; out.length < CAPS.users; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw error;
-    const batch = data?.users ?? [];
-    for (const user of batch) {
-      out.push({
-        id: user.id,
-        email: user.email ?? null,
-        name:
-          (user.user_metadata?.full_name as string | undefined) ??
-          (user.user_metadata?.name as string | undefined) ??
-          null,
-        avatar: (user.user_metadata?.avatar_url as string | undefined) ?? null,
-        provider: user.app_metadata?.provider ?? null,
-        createdAt: user.created_at,
-        lastSignInAt: user.last_sign_in_at ?? null,
-        bannedUntil: (user as { banned_until?: string | null }).banned_until ?? null,
-      });
+const KNOWN_KEYS = [
+  "STT_API_KEY", "STT_BASE_URL", "STT_MODEL", "STT_DAILY_SECONDS",
+  "AI_API_KEY", "AI_BASE_URL", "AI_MODEL", "AI_PROVIDERS", "AI_DAILY_TOKENS",
+  "GROQ_API_KEY", "CEREBRAS_API_KEY", "GEMINI_API_KEY", "GITHUB_TOKEN",
+  "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "SAMBANOVA_API_KEY", "NVIDIA_API_KEY",
+  "HF_TOKEN", "TOGETHER_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY",
+  "SEPARATION_API_KEY", "SEPARATION_MODEL", "SEPARATION_INPUT", "SEPARATION_STEMS_INPUT", "SEPARATION_DAILY",
+  "TTS_API_KEY", "TTS_BASE_URL", "TTS_MODEL", "TTS_VOICE", "TTS_DAILY_CHARS",
+  "IDENTIFY_API_KEY", "ADMIN_EMAILS", "STORAGE_SOFT_GB",
+];
+
+const OPEN_KEYS = new Set(KNOWN_KEYS.filter((key) => !/KEY|TOKEN|SECRET|PASSWORD/.test(key)));
+
+function mask(value: string) {
+  const clean = value.trim();
+  return clean.length <= 4 ? "••••" : `${"•".repeat(Math.min(12, clean.length - 4))}${clean.slice(-4)}`;
+}
+
+/** A setting, wherever it lives: a function secret wins over the table. */
+async function settingsMap(admin: SupabaseClient) {
+  const { data } = await admin.rpc("stt_settings");
+  const stored = new Map(
+    ((data ?? []) as { key: string; value: string }[]).map((row) => [row.key, row.value]),
+  );
+  const read = (key: string) => Deno.env.get(key)?.trim() || stored.get(key)?.trim() || "";
+  return { stored, read };
+}
+
+async function control(admin: SupabaseClient) {
+  const { data } = await admin.from("site_control").select("*").maybeSingle();
+  return (
+    data ?? {
+      maintenance: false,
+      maintenance_message: null,
+      banner: null,
+      banner_kind: "info",
+      disabled_tools: [],
     }
-    if (batch.length < 200) break;
+  );
+}
+
+function dayRange(days: number, end: Date) {
+  const out: string[] = [];
+  for (let back = days - 1; back >= 0; back -= 1) {
+    const day = new Date(end.getTime() - back * 86_400_000);
+    out.push(new Date(day.getTime() - day.getTimezoneOffset() * 60_000).toISOString().slice(0, 10));
   }
   return out;
 }
 
 async function overview(admin: SupabaseClient, days: number) {
-  const since = new Date(Date.now() - days * 86_400_000);
-  const sinceIso = since.toISOString();
+  const now = new Date();
+  const sinceIso = new Date(now.getTime() - days * 86_400_000).toISOString();
   const sinceDay = sinceIso.slice(0, 10);
 
-  const [
-    users,
-    works,
-    transcriptions,
-    ringtones,
-    shares,
-    ai,
-    stt,
-    storage,
-    profiles,
-    totalWorks,
-    totalTranscriptions,
-    totalRingtones,
-    totalShares,
-  ] = await Promise.all([
-    accounts(admin),
-    admin
-      .from("works")
-      .select("client_id, user_id, kind, title, source_name, file_name, file_path, created_at")
-      .order("created_at", { ascending: false })
-      .limit(CAPS.works),
-    admin
-      .from("transcriptions")
-      .select("id, user_id, title, source_name, note_count, created_at")
-      .order("created_at", { ascending: false })
-      .limit(CAPS.works),
-    admin
-      .from("ringtones")
-      .select("client_id, user_id, title, source_name, file_path, created_at")
-      .order("created_at", { ascending: false })
-      .limit(CAPS.works),
-    admin
-      .from("shares")
-      .select("token, user_id, origin, work_id, kind, title, views, created_at, revoked_at")
-      .order("created_at", { ascending: false })
-      .limit(CAPS.shares),
-    admin.from("ai_usage").select("user_id, day, kind, amount").gte("day", sinceDay).limit(CAPS.usage),
-    admin.from("stt_usage").select("user_id, day, seconds").gte("day", sinceDay).limit(CAPS.usage),
-    admin.rpc("admin_storage_usage"),
-    admin.from("profiles").select("id, full_name, avatar_url").limit(CAPS.users),
-    exactCount(admin, "works"),
-    exactCount(admin, "transcriptions"),
-    exactCount(admin, "ringtones"),
-    exactCount(admin, "shares"),
-  ]);
+  const [events, accounts, works, transcriptions, ringtones, storage, shares, ai, stt, settings, notices] =
+    await Promise.all([
+      readEvents(admin, sinceIso),
+      exactCount(admin, "profiles"),
+      exactCount(admin, "works"),
+      exactCount(admin, "transcriptions"),
+      exactCount(admin, "ringtones"),
+      admin.rpc("admin_storage_usage"),
+      admin.from("shares").select("views, revoked_at"),
+      admin.from("ai_usage").select("day, kind, amount").gte("day", sinceDay),
+      admin.from("stt_usage").select("day, seconds").gte("day", sinceDay),
+      settingsMap(admin),
+      control(admin),
+    ]);
 
-  const named = new Map(
-    (profiles.data ?? []).map((row: Row) => [
-      row.id as string,
-      { name: row.full_name as string | null, avatar: row.avatar_url as string | null },
-    ]),
+  const stats = aggregate(events, dayRange(days, now), now.getTime());
+
+  const files = (storage.data ?? []) as { files: number; bytes: number }[];
+  const cloud = files.reduce(
+    (totals, row) => ({ files: totals.files + Number(row.files ?? 0), bytes: totals.bytes + Number(row.bytes ?? 0) }),
+    { files: 0, bytes: 0 },
   );
-  for (const user of users) {
-    const profile = named.get(user.id as string);
-    if (profile?.name) user.name = profile.name;
-    if (profile?.avatar) user.avatar ??= profile.avatar;
-  }
 
-  const rows: WorkRow[] = [
-    ...(works.data ?? []).map((row: Row) => ({
-      id: text(row.client_id, 80),
-      origin: "works" as const,
-      userId: row.user_id as string,
-      kind: text(row.kind, 24) || "notes",
-      title: text(row.title),
-      source: row.source_name ? text(row.source_name) : null,
-      createdAt: row.created_at as string,
-      hasFile: Boolean(row.file_path || row.file_name),
+  const shareRows = (shares.data ?? []) as { views: number; revoked_at: string | null }[];
+  const today = new Date().toISOString().slice(0, 10);
+  const usage = new Map<string, { day: string; kind: string; amount: number }[]>();
+  for (const row of (ai.data ?? []) as { day: string; kind: string; amount: number }[]) {
+    usage.set(row.kind, [...(usage.get(row.kind) ?? []), row]);
+  }
+  const sttRows = (stt.data ?? []) as { day: string; seconds: number }[];
+
+  const quotas = [
+    ...[...usage.entries()].map(([kind, rows]) => ({
+      kind,
+      today: rows.filter((row) => row.day === today).reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
+      range: rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
     })),
-    ...(transcriptions.data ?? []).map((row: Row) => ({
-      id: text(row.id, 80),
-      origin: "transcriptions" as const,
-      userId: row.user_id as string,
-      kind: "notes",
-      title: text(row.title),
-      source: row.source_name ? text(row.source_name) : null,
-      createdAt: row.created_at as string,
-      hasFile: false,
-    })),
-    ...(ringtones.data ?? []).map((row: Row) => ({
-      id: text(row.client_id, 80),
-      origin: "ringtones" as const,
-      userId: row.user_id as string,
-      kind: "ringtone",
-      title: text(row.title),
-      source: row.source_name ? text(row.source_name) : null,
-      createdAt: row.created_at as string,
-      hasFile: Boolean(row.file_path),
-    })),
-  ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    {
+      kind: "stt",
+      today: sttRows.filter((row) => row.day === today).reduce((sum, row) => sum + Number(row.seconds ?? 0), 0),
+      range: sttRows.reduce((sum, row) => sum + Number(row.seconds ?? 0), 0),
+    },
+  ];
+
+  // What deserves a line at the top of the page, and nothing that does not.
+  const alerts: { kind: "warn" | "bad" | "info"; text: string }[] = [];
+  const errorsToday = stats.daily.at(-1)?.errors ?? 0;
+  const earlier = stats.daily.slice(0, -1);
+  const usual = earlier.length
+    ? earlier.reduce((sum, row) => sum + row.errors, 0) / earlier.length
+    : 0;
+  if (errorsToday > 5 && errorsToday > usual * 2) {
+    alerts.push({ kind: "bad", text: `${errorsToday} שגיאות היום — יותר מפי שניים מהרגיל` });
+  }
+  const softGb = Number(settings.read("STORAGE_SOFT_GB") || "2");
+  if (cloud.bytes > softGb * 1024 ** 3 * 0.8) {
+    alerts.push({ kind: "warn", text: `האחסון בענן מתקרב לתקרה שהגדרת (${softGb}GB)` });
+  }
+  if (notices.maintenance) alerts.push({ kind: "info", text: "האתר במצב תחזוקה — הגולשים רואים הודעה בלבד" });
+  const off = (notices.disabled_tools ?? []) as string[];
+  if (off.length) alerts.push({ kind: "info", text: `${off.length} כלים מכובים כרגע` });
+  if (!settings.read("STT_API_KEY")) alerts.push({ kind: "warn", text: "אין מפתח לתמלול — הכלי לא יעבוד" });
+  if (!stats.events) alerts.push({ kind: "info", text: "עדיין לא נאספו מדידות — הן מתחילות להיכנס ברגע שגולשים נכנסים" });
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: now.toISOString(),
     days,
-    truncated: {
-      works: (works.data?.length ?? 0) >= CAPS.works,
-      users: users.length >= CAPS.users,
-    },
+    truncated: events.length >= MAX_EVENTS,
+    stats,
     totals: {
-      users: users.length,
-      works: totalWorks + totalTranscriptions + totalRingtones,
-      shares: totalShares,
+      accounts,
+      works: works + transcriptions + ringtones,
+      files: cloud.files,
+      bytes: cloud.bytes,
+      shares: shareRows.length,
+      shareViews: shareRows.reduce((sum, row) => sum + Number(row.views ?? 0), 0),
+      liveShares: shareRows.filter((row) => !row.revoked_at).length,
     },
-    users,
-    works: rows,
-    ai: ai.data ?? [],
-    stt: stt.data ?? [],
-    shares: shares.data ?? [],
-    storage: storage.data ?? [],
+    quotas,
+    alerts,
+    control: notices,
   };
 }
 
-/** The names of the server keys and what is set — never a value. */
-const KNOWN_KEYS = [
-  "STT_API_KEY",
-  "STT_BASE_URL",
-  "STT_MODEL",
-  "STT_DAILY_SECONDS",
-  "AI_API_KEY",
-  "AI_BASE_URL",
-  "AI_MODEL",
-  "AI_PROVIDERS",
-  "AI_DAILY_TOKENS",
-  "GROQ_API_KEY",
-  "CEREBRAS_API_KEY",
-  "GEMINI_API_KEY",
-  "GITHUB_TOKEN",
-  "OPENROUTER_API_KEY",
-  "MISTRAL_API_KEY",
-  "SAMBANOVA_API_KEY",
-  "NVIDIA_API_KEY",
-  "HF_TOKEN",
-  "TOGETHER_API_KEY",
-  "DEEPSEEK_API_KEY",
-  "OPENAI_API_KEY",
-  "SEPARATION_API_KEY",
-  "SEPARATION_MODEL",
-  "SEPARATION_INPUT",
-  "SEPARATION_STEMS_INPUT",
-  "SEPARATION_DAILY",
-  "TTS_API_KEY",
-  "TTS_BASE_URL",
-  "TTS_MODEL",
-  "TTS_VOICE",
-  "TTS_DAILY_CHARS",
-  "IDENTIFY_API_KEY",
-  "ADMIN_EMAILS",
+/* ------------------------------------------------------------- the checks */
+
+const PING: Record<string, { key: string; url: (base: string) => string; base: string; auth: (token: string) => Record<string, string> }> = {
+  stt: {
+    key: "STT_API_KEY",
+    base: "https://api.openai.com/v1",
+    url: (base) => `${base}/models`,
+    auth: (token) => ({ Authorization: `Bearer ${token}` }),
+  },
+  tts: {
+    key: "TTS_API_KEY",
+    base: "https://api.openai.com/v1",
+    url: (base) => `${base}/models`,
+    auth: (token) => ({ Authorization: `Bearer ${token}` }),
+  },
+  separation: {
+    key: "SEPARATION_API_KEY",
+    base: "https://api.replicate.com/v1",
+    url: (base) => `${base}/account`,
+    auth: (token) => ({ Authorization: `Token ${token}` }),
+  },
+};
+
+const AI_PROVIDERS: { key: string; name: string; base: string }[] = [
+  { key: "GROQ_API_KEY", name: "Groq", base: "https://api.groq.com/openai/v1" },
+  { key: "CEREBRAS_API_KEY", name: "Cerebras", base: "https://api.cerebras.ai/v1" },
+  { key: "OPENROUTER_API_KEY", name: "OpenRouter", base: "https://openrouter.ai/api/v1" },
+  { key: "MISTRAL_API_KEY", name: "Mistral", base: "https://api.mistral.ai/v1" },
+  { key: "TOGETHER_API_KEY", name: "Together", base: "https://api.together.xyz/v1" },
+  { key: "DEEPSEEK_API_KEY", name: "DeepSeek", base: "https://api.deepseek.com/v1" },
+  { key: "OPENAI_API_KEY", name: "OpenAI", base: "https://api.openai.com/v1" },
 ];
 
-/** A name that only ever says which service it is may be shown in full. */
-const OPEN_KEYS = new Set(
-  KNOWN_KEYS.filter((key) => !/KEY|TOKEN|SECRET|PASSWORD/.test(key)),
-);
-
-function mask(value: string) {
-  const clean = value.trim();
-  if (clean.length <= 4) return "••••";
-  return `${"•".repeat(Math.min(12, clean.length - 4))}${clean.slice(-4)}`;
+async function ping(url: string, headers: Record<string, string>) {
+  const started = Date.now();
+  try {
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(7000) });
+    return { ok: response.ok, status: response.status, ms: Date.now() - started };
+  } catch {
+    return { ok: false, status: 0, ms: Date.now() - started };
+  }
 }
 
-async function settingsView(admin: SupabaseClient) {
-  const { data } = await admin.rpc("stt_settings");
-  const stored = new Map(
-    ((data ?? []) as { key: string; value: string }[]).map((row) => [row.key, row.value]),
-  );
-  const names = [...new Set([...KNOWN_KEYS, ...stored.keys()])].sort();
-  return {
-    keys: names.map((key) => {
-      const secret = Deno.env.get(key)?.trim() ?? "";
-      const row = stored.get(key)?.trim() ?? "";
-      const value = secret || row;
-      return {
-        key,
-        set: Boolean(value),
-        // A secret set on the function itself wins over the table, and the
-        // admin area cannot change it from here — only the table row.
-        source: secret ? "secret" : row ? "table" : null,
-        editable: !secret,
-        preview: value ? (OPEN_KEYS.has(key) ? value.slice(0, 80) : mask(value)) : null,
-      };
-    }),
-  };
+async function health(admin: SupabaseClient) {
+  const { read } = await settingsMap(admin);
+  const checks: { service: string; label: string; state: "good" | "bad" | "off"; note: string; ms: number }[] = [];
+
+  for (const [service, spec] of Object.entries(PING)) {
+    const token = read(spec.key);
+    const label = service === "stt" ? "תמלול דיבור" : service === "tts" ? "הקראה" : "הפרדת שירה";
+    if (!token) {
+      checks.push({ service, label, state: "off", note: `אין ${spec.key}`, ms: 0 });
+      continue;
+    }
+    const base = read(`${service.toUpperCase()}_BASE_URL`) || spec.base;
+    const result = await ping(spec.url(base), spec.auth(token));
+    checks.push({
+      service,
+      label,
+      state: result.ok ? "good" : "bad",
+      note: result.ok ? "עונה" : result.status ? `השירות החזיר ${result.status}` : "לא נענה",
+      ms: result.ms,
+    });
+  }
+
+  const provider = AI_PROVIDERS.find((item) => read(item.key));
+  if (!provider) {
+    const custom = read("AI_API_KEY");
+    checks.push({
+      service: "ai",
+      label: "מודל שפה",
+      state: custom ? "good" : "off",
+      note: custom ? "מוגדר דרך AI_API_KEY" : "אין מפתח לאף ספק",
+      ms: 0,
+    });
+  } else {
+    const result = await ping(`${provider.base}/models`, { Authorization: `Bearer ${read(provider.key)}` });
+    checks.push({
+      service: "ai",
+      label: `מודל שפה (${provider.name})`,
+      state: result.ok ? "good" : "bad",
+      note: result.ok ? "עונה" : result.status ? `השירות החזיר ${result.status}` : "לא נענה",
+      ms: result.ms,
+    });
+  }
+
+  const identify = read("IDENTIFY_API_KEY");
+  checks.push({
+    service: "identify",
+    label: "זיהוי שירים",
+    state: identify ? "good" : "off",
+    note: identify ? "מפתח מוגדר" : "אין IDENTIFY_API_KEY",
+    ms: 0,
+  });
+
+  return checks;
 }
 
-async function log(
-  admin: SupabaseClient,
-  actor: string,
-  action: string,
-  target: string | null,
-  detail: Row = {},
-) {
+/** Files in the bucket that no row points at any more. */
+async function orphans(admin: SupabaseClient, remove: boolean) {
+  const referenced = new Set<string>();
+  for (const table of ["works", "ringtones", "shares"]) {
+    const { data } = await admin.from(table).select("file_path").not("file_path", "is", null);
+    for (const row of (data ?? []) as { file_path: string }[]) referenced.add(row.file_path);
+  }
+
+  const { data: folders } = await admin.storage.from(BUCKET).list("", { limit: 1000 });
+  const stale: { path: string; bytes: number }[] = [];
+  for (const folder of folders ?? []) {
+    if (!folder.name) continue;
+    const { data: files } = await admin.storage.from(BUCKET).list(folder.name, { limit: 1000 });
+    for (const file of files ?? []) {
+      const path = `${folder.name}/${file.name}`;
+      if (!referenced.has(path)) {
+        stale.push({ path, bytes: (file.metadata as { size?: number } | null)?.size ?? 0 });
+      }
+    }
+  }
+
+  if (remove && stale.length) {
+    await admin.storage.from(BUCKET).remove(stale.map((item) => item.path));
+  }
+  return { count: stale.length, bytes: stale.reduce((sum, item) => sum + item.bytes, 0) };
+}
+
+async function log(admin: SupabaseClient, actor: string, action: string, target: string | null, detail: Row = {}) {
   await admin.from("admin_audit").insert({ actor_email: actor, action, target, detail });
 }
 
-/** Removes a work from whichever table holds it, with its file in the cloud. */
-async function deleteWork(admin: SupabaseClient, origin: string, userId: string, id: string) {
-  if (origin === "transcriptions") {
-    const { error } = await admin.from("transcriptions").delete().eq("user_id", userId).eq("id", id);
-    return error;
-  }
-  const table = origin === "ringtones" ? "ringtones" : "works";
-  const { data } = await admin
-    .from(table)
-    .select("file_path")
-    .eq("user_id", userId)
-    .eq("client_id", id)
-    .maybeSingle();
-  const { error } = await admin.from(table).delete().eq("user_id", userId).eq("client_id", id);
-  if (!error && data?.file_path) {
-    await admin.storage.from(BUCKET).remove([data.file_path as string]);
-  }
-  return error;
-}
-
-/** Everything one account put in the private bucket. */
-async function removeFiles(admin: SupabaseClient, userId: string) {
-  const { data } = await admin.storage.from(BUCKET).list(userId, { limit: 1000 });
-  const paths = (data ?? []).map((file) => `${userId}/${file.name}`);
-  if (paths.length) await admin.storage.from(BUCKET).remove(paths);
-  return paths.length;
+function text(value: unknown, max = 200) {
+  return typeof value === "string" ? value.slice(0, max) : "";
 }
 
 async function act(admin: SupabaseClient, user: User, body: Row) {
   const action = text(body.action, 40);
-  const userId = text(body.userId, 40);
   const actor = user.email ?? user.id;
-  const today = new Date().toISOString().slice(0, 10);
 
   switch (action) {
-    case "work.delete": {
-      const id = text(body.id, 80);
-      const origin = text(body.origin, 20) || "works";
-      if (!userId || !id) return json(400, { error: "bad_request" });
-      const error = await deleteWork(admin, origin, userId, id);
+    case "control.set": {
+      const patch: Row = { updated_at: new Date().toISOString() };
+      if ("maintenance" in body) patch.maintenance = Boolean(body.maintenance);
+      if ("maintenanceMessage" in body) patch.maintenance_message = text(body.maintenanceMessage, 300) || null;
+      if ("banner" in body) patch.banner = text(body.banner, 300) || null;
+      if ("bannerKind" in body) {
+        const kind = text(body.bannerKind, 10);
+        patch.banner_kind = kind === "warn" || kind === "good" ? kind : "info";
+      }
+      if ("disabledTools" in body) {
+        patch.disabled_tools = Array.isArray(body.disabledTools)
+          ? (body.disabledTools as unknown[]).map((tool) => text(tool, 40)).filter(Boolean).slice(0, 40)
+          : [];
+      }
+      const { error } = await admin.from("site_control").update(patch).eq("id", true);
       if (error) return json(502, { error: "storage" });
-      await log(admin, actor, action, id, { origin, userId });
-      return json(200, { ok: true });
-    }
-    case "share.revoke": {
-      const token = text(body.token, 40).replace(/[^a-f0-9]/g, "");
-      if (!token) return json(400, { error: "bad_request" });
-      await admin.from("shares").update({ revoked_at: new Date().toISOString() }).eq("token", token);
-      await log(admin, actor, action, token, {});
-      return json(200, { ok: true });
-    }
-    case "usage.reset": {
-      if (!userId) return json(400, { error: "bad_request" });
-      await admin.from("ai_usage").delete().eq("user_id", userId).eq("day", today);
-      await admin.from("stt_usage").delete().eq("user_id", userId).eq("day", today);
-      await log(admin, actor, action, userId, { day: today });
-      return json(200, { ok: true });
-    }
-    case "user.ban":
-    case "user.unban": {
-      if (!userId) return json(400, { error: "bad_request" });
-      if (userId === user.id) return json(400, { error: "self" });
-      const hours = Math.max(1, Math.min(8760, Number(body.hours) || 720));
-      const { error } = await admin.auth.admin.updateUserById(userId, {
-        ban_duration: action === "user.ban" ? `${hours}h` : "none",
-      } as { ban_duration: string });
-      if (error) return json(502, { error: "storage" });
-      await log(admin, actor, action, userId, { hours });
-      return json(200, { ok: true });
-    }
-    case "user.delete": {
-      if (!userId) return json(400, { error: "bad_request" });
-      if (userId === user.id) return json(400, { error: "self" });
-      const files = await removeFiles(admin, userId);
-      const { error } = await admin.auth.admin.deleteUser(userId);
-      if (error) return json(502, { error: "storage" });
-      await log(admin, actor, action, userId, { files });
-      return json(200, { ok: true });
+      await log(admin, actor, action, null, patch);
+      return json(200, { ok: true, control: await control(admin) });
     }
     case "setting.set": {
       const key = text(body.key, 60).toUpperCase().replace(/[^A-Z0-9_]/g, "");
@@ -393,7 +545,6 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       if (Deno.env.get(key)) return json(409, { error: "secret_wins" });
       const { error } = await admin.rpc("stt_set_setting", { setting_key: key, setting_value: value });
       if (error) return json(502, { error: "storage" });
-      // The value itself never reaches the log.
       await log(admin, actor, action, key, {});
       return json(200, { ok: true });
     }
@@ -405,13 +556,31 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       await log(admin, actor, action, key, {});
       return json(200, { ok: true });
     }
+    case "health.check": {
+      const checks = await health(admin);
+      return json(200, { ok: true, checks });
+    }
+    case "files.scan":
+      return json(200, { ok: true, orphans: await orphans(admin, false) });
+    case "files.clean": {
+      const result = await orphans(admin, true);
+      await log(admin, actor, action, null, result);
+      return json(200, { ok: true, orphans: result });
+    }
+    case "events.prune": {
+      const days = Math.max(30, Math.min(3650, Number(body.days) || 365));
+      const { data, error } = await admin.rpc("admin_prune_events", { older_than_days: days });
+      if (error) return json(502, { error: "storage" });
+      await log(admin, actor, action, String(days), { removed: data });
+      return json(200, { ok: true, removed: Number(data ?? 0) });
+    }
     default:
       return json(400, { error: "unknown_action" });
   }
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: PREVIEW_METHODS });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: PREVIEW });
 
   const user = await visitor(req);
   if (!user) return json(401, { error: "signed_out" });
@@ -423,16 +592,36 @@ Deno.serve(async (req: Request) => {
   try {
     if (req.method === "GET") {
       const view = url.searchParams.get("view") ?? "overview";
-      if (view === "settings") return json(200, await settingsView(admin));
+      if (view === "settings") {
+        const { stored } = await settingsMap(admin);
+        const names = [...new Set([...KNOWN_KEYS, ...stored.keys()])].sort();
+        return json(200, {
+          keys: names.map((key) => {
+            const secret = Deno.env.get(key)?.trim() ?? "";
+            const row = stored.get(key)?.trim() ?? "";
+            const value = secret || row;
+            return {
+              key,
+              set: Boolean(value),
+              source: secret ? "secret" : row ? "table" : null,
+              editable: !secret,
+              preview: value ? (OPEN_KEYS.has(key) ? value.slice(0, 80) : mask(value)) : null,
+            };
+          }),
+        });
+      }
       if (view === "audit") {
-        const { data } = await admin
+        const query = (url.searchParams.get("q") ?? "").slice(0, 60);
+        let request = admin
           .from("admin_audit")
           .select("id, actor_email, action, target, detail, created_at")
           .order("created_at", { ascending: false })
           .limit(200);
+        if (query) request = request.or(`action.ilike.%${query}%,target.ilike.%${query}%`);
+        const { data } = await request;
         return json(200, { entries: data ?? [] });
       }
-      const days = Math.max(7, Math.min(365, Number(url.searchParams.get("days")) || 30));
+      const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 30));
       return json(200, await overview(admin, days));
     }
 
