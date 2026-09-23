@@ -24,28 +24,31 @@ import { createShare, shareTokenFromRoute } from "./lib/share";
 import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
-import { AnalyzeTool } from "./tools/AnalyzeTool";
-import { BeatMakerTool } from "./tools/BeatMakerTool";
-import { ChordsTool } from "./tools/ChordsTool";
-import { ConvertTool } from "./tools/ConvertTool";
-import { IdentifyTool } from "./tools/IdentifyTool";
-import { TtsTool } from "./tools/TtsTool";
-import { LyricsTool } from "./tools/LyricsTool";
-import { MixerTool } from "./tools/MixerTool";
-import { PadTool } from "./tools/PadTool";
-import { RhythmTool } from "./tools/RhythmTool";
-import { VideoTool } from "./tools/VideoTool";
-import { SongbookTool } from "./tools/SongbookTool";
-import { EarTrainingTool } from "./tools/EarTrainingTool";
-import { MetronomeTool } from "./tools/MetronomeTool";
-import { PianoTool } from "./tools/PianoTool";
-import { RingtoneTool } from "./tools/RingtoneTool";
-import { SpeedTool } from "./tools/SpeedTool";
-import { TheoryTool } from "./tools/TheoryTool";
-import { TranscriptTool } from "./tools/TranscriptTool";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
-import { TunerTool } from "./tools/TunerTool";
-import { VocalsTool } from "./tools/VocalsTool";
+
+// Every tool is its own chunk: the hub downloads only the shell, and a
+// tool's code arrives the first time somebody opens it.
+const AnalyzeTool = lazy(() => import("./tools/AnalyzeTool").then((module) => ({ default: module.AnalyzeTool })));
+const BeatMakerTool = lazy(() => import("./tools/BeatMakerTool").then((module) => ({ default: module.BeatMakerTool })));
+const ChordsTool = lazy(() => import("./tools/ChordsTool").then((module) => ({ default: module.ChordsTool })));
+const ConvertTool = lazy(() => import("./tools/ConvertTool").then((module) => ({ default: module.ConvertTool })));
+const IdentifyTool = lazy(() => import("./tools/IdentifyTool").then((module) => ({ default: module.IdentifyTool })));
+const TtsTool = lazy(() => import("./tools/TtsTool").then((module) => ({ default: module.TtsTool })));
+const LyricsTool = lazy(() => import("./tools/LyricsTool").then((module) => ({ default: module.LyricsTool })));
+const MixerTool = lazy(() => import("./tools/MixerTool").then((module) => ({ default: module.MixerTool })));
+const PadTool = lazy(() => import("./tools/PadTool").then((module) => ({ default: module.PadTool })));
+const RhythmTool = lazy(() => import("./tools/RhythmTool").then((module) => ({ default: module.RhythmTool })));
+const VideoTool = lazy(() => import("./tools/VideoTool").then((module) => ({ default: module.VideoTool })));
+const SongbookTool = lazy(() => import("./tools/SongbookTool").then((module) => ({ default: module.SongbookTool })));
+const EarTrainingTool = lazy(() => import("./tools/EarTrainingTool").then((module) => ({ default: module.EarTrainingTool })));
+const MetronomeTool = lazy(() => import("./tools/MetronomeTool").then((module) => ({ default: module.MetronomeTool })));
+const PianoTool = lazy(() => import("./tools/PianoTool").then((module) => ({ default: module.PianoTool })));
+const RingtoneTool = lazy(() => import("./tools/RingtoneTool").then((module) => ({ default: module.RingtoneTool })));
+const SpeedTool = lazy(() => import("./tools/SpeedTool").then((module) => ({ default: module.SpeedTool })));
+const TheoryTool = lazy(() => import("./tools/TheoryTool").then((module) => ({ default: module.TheoryTool })));
+const TranscriptTool = lazy(() => import("./tools/TranscriptTool").then((module) => ({ default: module.TranscriptTool })));
+const TunerTool = lazy(() => import("./tools/TunerTool").then((module) => ({ default: module.TunerTool })));
+const VocalsTool = lazy(() => import("./tools/VocalsTool").then((module) => ({ default: module.VocalsTool })));
 
 // The transcriber pulls in the engraver and, through it, the biggest slice of
 // the bundle. Splitting it out keeps the hub and the lighter tools quick to
@@ -468,27 +471,29 @@ function WorkspaceApp() {
           />
         </Suspense>
       )}
-      {shown === "ringtone" && <RingtoneTool />}
-      {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
-      {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
-      {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
-      {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
-      {shown === "piano" && <PianoTool />}
-      {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
-      {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
-      {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-      {shown === "identify" && <IdentifyTool />}
-      {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
-      {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
-      {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
-      {shown === "pads" && <PadTool />}
-      {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
-      {shown === "video" && <VideoTool />}
-      {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
-      {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
-      {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
-      {shown === "beats" && <BeatMakerTool />}
-      {shown === "theory" && <TheoryTool />}
+      <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
+        {shown === "ringtone" && <RingtoneTool />}
+        {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
+        {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+        {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
+        {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
+        {shown === "piano" && <PianoTool />}
+        {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+        {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
+        {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
+        {shown === "identify" && <IdentifyTool />}
+        {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
+        {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+        {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+        {shown === "pads" && <PadTool />}
+        {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+        {shown === "video" && <VideoTool />}
+        {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+        {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
+        {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
+        {shown === "beats" && <BeatMakerTool />}
+        {shown === "theory" && <TheoryTool />}
+      </Suspense>
 
       {tool && (
         <>

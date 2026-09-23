@@ -487,7 +487,8 @@ function currentToolRoute() {
 
 /** The notes engine is a separate chunk, so its page takes longer to appear. */
 function mountWait(tool: string) {
-  return tool === "notes" ? 15_000 : 6_000;
+  // Tools load on first use, so a slow connection needs a moment to fetch one.
+  return tool === "notes" ? 15_000 : 10_000;
 }
 
 /**
