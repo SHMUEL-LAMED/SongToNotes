@@ -11,7 +11,7 @@
  * GET   ?token=            (anyone) the snapshot, with a signed URL for its
  *                          file that lasts an hour; counts a view.
  */
-import { CORS, adminClient, json, visitor } from "./common.ts";
+import { CORS, adminClient, json, visitor } from "../_shared/common.ts";
 
 const BUCKET = "works";
 
