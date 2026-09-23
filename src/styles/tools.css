@@ -491,7 +491,7 @@
 .songbook-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .songbook-editor { width: 100%; min-height: 280px; padding: 14px 16px; font-size: 16px; line-height: 1.85; resize: vertical; }
 .songbook-editor-tools { display: flex; gap: 16px; flex-wrap: wrap; }
-.songbook-stepper { display: flex; align-items: center; gap: 8px; }
+.songbook-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .songbook-stepper > button:not(.link-button):not(.primary-button) {
   width: 36px;
   height: 36px;
@@ -522,6 +522,12 @@
 .songbook-line { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 6px; }
 .songbook-piece { display: inline-flex; flex-direction: column; white-space: pre; }
 .songbook-piece.is-bare { margin-inline-end: 1.4em; }
+.songbook-sheet p[data-sung] { border-radius: 8px; padding-inline: 6px; margin-inline: -6px; transition: background 0.2s var(--ease), opacity 0.2s var(--ease); }
+.songbook-sheet.is-prompting p[data-sung]:not([data-now]) { opacity: 0.45; }
+.songbook-sheet p[data-now] { background: var(--accent-tint); }
+.songbook-stepper select { min-height: 36px; }
+.songbook-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.songbook-tempo input { inline-size: 72px; min-height: 36px; }
 .songbook-chord { font-weight: 800; color: var(--accent-text); font-size: 0.85em; line-height: 1.2; min-height: 1.2em; }
 .songbook-diagrams { padding: 4px 0 10px; }
 

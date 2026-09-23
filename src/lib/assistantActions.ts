@@ -113,7 +113,7 @@ export const ACTIONS: ActionSpec[] = [
   define("songbook", "write", "songbook.append", "הוספה לשירון", "מוסיף שורות בסוף הטקסט בשירון, באותו פורמט.", ["body"]),
   define("songbook", "read", "songbook.read", "קריאת השירון", "הכותרת, הטקסט, הטרנספוזיציה והאקורדים שבשירון."),
   define("songbook", "write", "songbook.set", "הגדרות השירון", "טרנספוזיציה בחצאי טונים (-11..11), גודל טקסט (14..32), שמות עם במול, הצגת אחיזות, ומעבר בין עריכה לתצוגה.", ["transpose?:number", "fontSize?:number", "flats?:boolean", "diagrams?:boolean", "view?:edit|view"]),
-  define("songbook", "write", "songbook.scroll", "גלילה אוטומטית", "מפעיל או עוצר גלילה אוטומטית להופעה; speed בפיקסלים לשנייה (5..120).", ["on:boolean", "speed?:number"]),
+  define("songbook", "write", "songbook.scroll", "גלילה אוטומטית", "מפעיל או עוצר גלילה אוטומטית להופעה; speed בפיקסלים לשנייה (5..120), או bpm (40..220) ו־beatsPerLine (2, 4, 8, 12, 16) לגלילה לפי קצב, שורה אחרי שורה.", ["on:boolean", "speed?:number", "bpm?:number", "beatsPerLine?:number"]),
   define("songbook", "write", "songbook.save", "שמירת השיר", "שומר את השיר באזור האישי."),
   define("songbook", "write", "songbook.download", "הורדת השיר", "מוריד את השיר כקובץ טקסט עם האקורדים מעל המילים."),
   define("songbook", "write", "songbook.print", "הדפסה", "פותח את חלון ההדפסה של הדף."),

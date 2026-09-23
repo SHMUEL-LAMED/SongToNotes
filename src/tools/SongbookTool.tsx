@@ -47,6 +47,13 @@ export function SongbookTool({ initial = null }: Props) {
   const [editing, setEditing] = useState(!restored?.body);
   const [scrolling, setScrolling] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(30);
+  // "tempo" moves line by line to the song's beat, the way a teleprompter
+  // follows a band; "free" is the steady crawl.
+  const [scrollMode, setScrollMode] = useState<"free" | "tempo">("free");
+  const [bpm, setBpm] = useState(90);
+  const [beatsPerLine, setBeatsPerLine] = useState(8);
+  const [clickOn, setClickOn] = useState(false);
+  const [currentLine, setCurrentLine] = useState(-1);
   const [showDiagrams, setShowDiagrams] = useState(true);
   const [copied, setCopied] = useState(false);
   const [songs, setSongs] = useState<SavedWork[] | null>(null);
@@ -61,10 +68,18 @@ export function SongbookTool({ initial = null }: Props) {
   const shown = useMemo(() => transposeSong(body, transpose, flats), [body, flats, transpose]);
   const lines = useMemo(() => parseSong(shown), [shown]);
   const chords = useMemo(() => songChords(shown), [shown]);
+  // Each sung line's place in the order the teleprompter walks through.
+  const sungIndexes = useMemo(() => {
+    const map = new Map<number, number>();
+    lines.forEach((line, index) => {
+      if (line.kind === "line") map.set(index, map.size);
+    });
+    return map;
+  }, [lines]);
 
   // Autoscroll for the stage: a slow, steady crawl the singer sets the pace of.
   useEffect(() => {
-    if (!scrolling) return;
+    if (!scrolling || scrollMode !== "free") return;
     let frame = 0;
     let last = performance.now();
     const step = (now: number) => {
@@ -78,7 +93,73 @@ export function SongbookTool({ initial = null }: Props) {
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [scrollSpeed, scrolling]);
+  }, [scrollMode, scrollSpeed, scrolling]);
+
+  // The teleprompter: after a bar of count-in, each sung line holds for its
+  // beats and the sheet glides so the line being sung sits a third of the
+  // way down. Headings and blank lines take no time.
+  useEffect(() => {
+    if (!scrolling || scrollMode !== "tempo") return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const rows = Array.from(sheet.querySelectorAll<HTMLElement>("[data-sung]"));
+    if (!rows.length) {
+      setScrolling(false);
+      return;
+    }
+    // Where each line sits inside the sheet, measured once at the start.
+    const sheetTop = sheet.getBoundingClientRect().top - sheet.scrollTop;
+    const tops = rows.map((row) => row.getBoundingClientRect().top - sheetTop);
+    const beat = 60 / bpm;
+    const countIn = 4;
+    const lineSeconds = beatsPerLine * beat;
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const audio = clickOn && AudioContextClass ? new AudioContextClass() : null;
+    const started = performance.now();
+    let nextBeat = 0;
+    let frame = 0;
+    const tick = (now: number) => {
+      const elapsed = (now - started) / 1000;
+      if (audio) {
+        // Clicks are scheduled a moment ahead on the audio clock.
+        while (nextBeat * beat < elapsed + 0.1) {
+          const at = audio.currentTime + Math.max(0, nextBeat * beat - elapsed);
+          const osc = audio.createOscillator();
+          const gain = audio.createGain();
+          const bar = ((nextBeat - countIn) % 4 + 4) % 4 === 0;
+          osc.frequency.value = nextBeat < countIn ? 1320 : bar ? 1000 : 760;
+          gain.gain.setValueAtTime(0.0001, at);
+          gain.gain.exponentialRampToValueAtTime(0.35, at + 0.002);
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+          osc.connect(gain).connect(audio.destination);
+          osc.start(at);
+          osc.stop(at + 0.08);
+          nextBeat += 1;
+        }
+      }
+      const sung = elapsed - countIn * beat;
+      const index = sung < 0 ? -1 : Math.floor(sung / lineSeconds);
+      if (index >= rows.length) {
+        setScrolling(false);
+        return;
+      }
+      setCurrentLine(index);
+      const from = tops[Math.max(0, index)];
+      const to = tops[Math.min(tops.length - 1, index + 1)];
+      const within = index < 0 ? 0 : (sung % lineSeconds) / lineSeconds;
+      // Ease into the next line over the last quarter of this one.
+      const glide = Math.max(0, (within - 0.75) / 0.25);
+      const top = from + (to - from) * glide * glide * (3 - 2 * glide);
+      sheet.scrollTop = Math.max(0, top - sheet.clientHeight / 3);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      void audio?.close();
+      setCurrentLine(-1);
+    };
+  }, [beatsPerLine, bpm, clickOn, scrollMode, scrolling]);
 
   const loadSongs = async () => {
     setShowSongs((value) => !value);
@@ -166,9 +247,17 @@ export function SongbookTool({ initial = null }: Props) {
         }
         return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
       },
-      "songbook.scroll": ({ on, speed }) => {
+      "songbook.scroll": ({ on, speed, bpm: nextBpm, beatsPerLine: nextBeats }) => {
+        if (typeof nextBpm === "number") {
+          setBpm(Math.max(40, Math.min(220, Math.round(nextBpm))));
+          setScrollMode("tempo");
+        }
+        if (typeof nextBeats === "number" && [2, 4, 8, 12, 16].includes(nextBeats)) setBeatsPerLine(nextBeats);
         if (!body.trim()) return { ok: false, message: "אין טקסט לגלול" };
-        if (typeof speed === "number") setScrollSpeed(Math.max(5, Math.min(120, Math.round(speed))));
+        if (typeof speed === "number") {
+          setScrollSpeed(Math.max(5, Math.min(120, Math.round(speed))));
+          if (typeof nextBpm !== "number") setScrollMode("free");
+        }
         setEditing(false);
         setScrolling(Boolean(on));
         return { ok: true, message: on ? "הגלילה האוטומטית פועלת" : "הגלילה נעצרה" };
@@ -287,12 +376,42 @@ export function SongbookTool({ initial = null }: Props) {
                 </div>
                 <div className="setting-field">
                   <span>גלילה אוטומטית</span>
+                  <div className="segmented-control" role="group" aria-label="סוג הגלילה">
+                    <button type="button" className={scrollMode === "free" ? "active" : ""} aria-pressed={scrollMode === "free"} onClick={() => setScrollMode("free")}>
+                      קבועה
+                    </button>
+                    <button type="button" className={scrollMode === "tempo" ? "active" : ""} aria-pressed={scrollMode === "tempo"} onClick={() => setScrollMode("tempo")}>
+                      לפי קצב
+                    </button>
+                  </div>
                   <div className="songbook-stepper">
                     <button type="button" className="primary-button compact" onClick={() => setScrolling((value) => !value)} aria-pressed={scrolling}>
                       {scrolling ? <Pause size={16} /> : <Play size={16} />} {scrolling ? "עצור" : "התחל"}
                     </button>
-                    <input type="range" min={5} max={120} value={scrollSpeed} onChange={(event) => setScrollSpeed(Number(event.target.value))} aria-label="מהירות הגלילה" />
+                    {scrollMode === "free" ? (
+                      <input type="range" min={5} max={120} value={scrollSpeed} onChange={(event) => setScrollSpeed(Number(event.target.value))} aria-label="מהירות הגלילה" />
+                    ) : (
+                      <>
+                        <label className="songbook-tempo">
+                          <input type="number" min={40} max={220} value={bpm} onChange={(event) => setBpm(Math.max(40, Math.min(220, Number(event.target.value) || 90)))} aria-label="קצב השיר" />
+                          BPM
+                        </label>
+                        <select value={beatsPerLine} onChange={(event) => setBeatsPerLine(Number(event.target.value))} aria-label="פעמות לכל שורה">
+                          <option value={2}>2 פעמות לשורה</option>
+                          <option value={4}>תיבה לשורה</option>
+                          <option value={8}>2 תיבות לשורה</option>
+                          <option value={12}>3 תיבות לשורה</option>
+                          <option value={16}>4 תיבות לשורה</option>
+                        </select>
+                      </>
+                    )}
                   </div>
+                  {scrollMode === "tempo" && (
+                    <label className="checkbox-field">
+                      <input type="checkbox" checked={clickOn} onChange={(event) => setClickOn(event.target.checked)} />
+                      <span>מטרונום (עם תיבת ספירה)</span>
+                    </label>
+                  )}
                 </div>
                 <label className="checkbox-field">
                   <input type="checkbox" checked={flats} onChange={(event) => setFlats(event.target.checked)} />
@@ -309,17 +428,24 @@ export function SongbookTool({ initial = null }: Props) {
               <div className="chords-diagrams songbook-diagrams">
                 {chords.map((name) => {
                   const parsed = parseChordSymbol(name);
-                  return parsed ? <ChordDiagram key={name} root={parsed.root} quality={parsed.quality} size={72} flats={flats} /> : null;
+                  return parsed ? <ChordDiagram key={name} root={parsed.root} quality={parsed.quality} size={72} flats={flats || /^[A-G]b/.test(name)} /> : null;
                 })}
               </div>
             )}
 
-            <div className="songbook-sheet" ref={sheetRef} style={{ fontSize }} dir="auto">
+            <div className={`songbook-sheet ${currentLine >= 0 ? "is-prompting" : ""}`} ref={sheetRef} style={{ fontSize }} dir="auto">
               {title && <h2>{title}</h2>}
               {lines.map((line, index) => {
                 if (line.kind === "blank") return <div key={index} className="songbook-blank" />;
                 if (line.kind === "heading") return <h3 key={index}>{line.lyric}</h3>;
-                if (!line.chords.length) return <p key={index}>{line.lyric}</p>;
+                const sungIndex = sungIndexes.get(index) ?? -1;
+                if (!line.chords.length) {
+                  return (
+                    <p key={index} data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
+                      {line.lyric}
+                    </p>
+                  );
+                }
                 // Each chord opens a span that carries the chord above the word it starts on.
                 const pieces: { chord: string | null; text: string }[] = [];
                 let cursor = 0;
@@ -331,7 +457,7 @@ export function SongbookTool({ initial = null }: Props) {
                 });
                 if (cursor < line.lyric.length) pieces.push({ chord: null, text: line.lyric.slice(cursor) });
                 return (
-                  <p key={index} className="songbook-line">
+                  <p key={index} className="songbook-line" data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
                     {pieces.map((piece, at) => (
                       // A chord over nothing but spaces — a bar of an intro, a
                       // chords-only line — still needs room of its own.
