@@ -1,18 +1,23 @@
-import { CircleSlash, Info, Music2, PowerOff, Sparkles, UserRound, Wrench } from "lucide-react";
+import { CircleSlash, Info, Keyboard, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
+import { AppShell } from "./components/AppShell";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
-import { Hub } from "./components/Hub";
+import { Home } from "./components/Home";
+import { LogoGlyph } from "./components/Logo";
+import { NextSteps } from "./components/NextSteps";
 import { SharePage } from "./components/SharePage";
-import { ToolShell } from "./components/ToolShell";
+import { ShortcutsDialog } from "./components/ShortcutsDialog";
+import { SiteFooter } from "./components/SiteFooter";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
 import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
+import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
 import { useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
@@ -20,6 +25,7 @@ import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { AnalyzeTool } from "./tools/AnalyzeTool";
+import { BeatMakerTool } from "./tools/BeatMakerTool";
 import { ChordsTool } from "./tools/ChordsTool";
 import { ConvertTool } from "./tools/ConvertTool";
 import { IdentifyTool } from "./tools/IdentifyTool";
@@ -34,6 +40,7 @@ import { MetronomeTool } from "./tools/MetronomeTool";
 import { PianoTool } from "./tools/PianoTool";
 import { RingtoneTool } from "./tools/RingtoneTool";
 import { SpeedTool } from "./tools/SpeedTool";
+import { TheoryTool } from "./tools/TheoryTool";
 import { TranscriptTool } from "./tools/TranscriptTool";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
 import { TunerTool } from "./tools/TunerTool";
@@ -97,6 +104,7 @@ function WorkspaceApp() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
   const owner = isAdmin(user);
@@ -125,6 +133,24 @@ function WorkspaceApp() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [route]);
 
+  // The tools opened last come back on the home page and in the palette.
+  useEffect(() => {
+    if (tool) recordToolVisit(tool.id);
+  }, [tool]);
+
+  // "?" anywhere outside a text field opens the shortcuts sheet.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "?" || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
+      event.preventDefault();
+      setShortcutsOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // What the site counts about itself: which page was opened and for how
   // long. The route is all it is told — never what was done there.
   useEffect(() => startAnalytics(), []);
@@ -145,6 +171,7 @@ function WorkspaceApp() {
       .catch(() => setPaletteWorks([]));
   }, [user]);
   useCommandKey(openPalette);
+  const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -252,8 +279,9 @@ function WorkspaceApp() {
 
   const commands = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [
-      { id: "page:home", label: "דף הבית", group: "דפים", icon: <Music2 size={15} />, run: () => go("home") },
+      { id: "page:home", label: "דף הבית", group: "דפים", icon: <House size={15} />, run: () => go("home") },
       { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
+      { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
@@ -290,15 +318,31 @@ function WorkspaceApp() {
   // its state across renders.
   const keyFor = (kind: SavedWork["kind"]) => (opened && initialFor(kind) ? opened.key : 0);
 
+  // A tool renders only when the site is open and the tool is switched on.
+  const shown = tool && !closed && !toolOff ? tool.id : null;
+  const loading = (label: string) => (
+    <div className="tool-loading" role="status">
+      <span className="brand-mark">
+        <LogoGlyph />
+      </span>
+      {label}
+    </div>
+  );
+
   return (
-    <ToolShell
+    <AppShell
+      route={route}
       tool={tool}
-      pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : null}
+      pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : shareToken ? "עבודה משותפת" : null}
       account={accountOpen}
+      owner={owner}
+      disabledTools={control.disabledTools}
       themePreference={theme.preference}
       onCycleTheme={theme.cycle}
-      onHome={() => go("home")}
+      onNavigate={go}
       onOpenAccount={() => setAccountOpen(true)}
+      onOpenPalette={openPalette}
+      onOpenShortcuts={() => setShortcutsOpen(true)}
     >
       <AccountDrawer
         open={accountOpen}
@@ -316,6 +360,7 @@ function WorkspaceApp() {
       />
 
       <CommandPalette open={paletteOpen} items={commands} onClose={() => setPaletteOpen(false)} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={closeShortcuts} />
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">
@@ -353,16 +398,7 @@ function WorkspaceApp() {
       ) : null}
       {!closed && shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
       {!closed && me && (
-        <Suspense
-          fallback={
-            <div className="tool-loading" role="status">
-              <span className="brand-mark">
-                <Music2 size={20} />
-              </span>
-              טוען את האזור האישי…
-            </div>
-          }
-        >
+        <Suspense fallback={loading("טוען את האזור האישי…")}>
           <MePage
             onOpenWork={openWork}
             onOpenAdmin={owner ? () => go("admin") : null}
@@ -385,33 +421,15 @@ function WorkspaceApp() {
         </div>
       )}
       {admin && (
-        <Suspense
-          fallback={
-            <div className="tool-loading" role="status">
-              <span className="brand-mark">
-                <Music2 size={20} />
-              </span>
-              טוען את אזור הניהול…
-            </div>
-          }
-        >
+        <Suspense fallback={loading("טוען את אזור הניהול…")}>
           <AdminPanel onHome={() => go("home")} />
         </Suspense>
       )}
       {!closed && !tool && !shareToken && !admin && !me && (
-        <Hub onOpen={go} disabledTools={control.disabledTools} />
+        <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} />
       )}
-      {tool?.id === "notes" && (
-        <Suspense
-          fallback={
-            <div className="tool-loading" role="status">
-              <span className="brand-mark">
-                <Music2 size={20} />
-              </span>
-              טוען את מנוע התווים…
-            </div>
-          }
-        >
+      {shown === "notes" && (
+        <Suspense fallback={loading("טוען את מנוע התווים…")}>
           <TranscriberTool
             key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
             initial={
@@ -422,44 +440,34 @@ function WorkspaceApp() {
           />
         </Suspense>
       )}
-      {tool?.id === "ringtone" && <RingtoneTool />}
-      {tool?.id === "vocals" && (
-        <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />
-      )}
-      {tool?.id === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
-      {tool?.id === "metronome" && (
-        <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />
-      )}
-      {tool?.id === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
-      {tool?.id === "piano" && <PianoTool />}
-      {tool?.id === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
-      {tool?.id === "analyze" && (
-        <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />
-      )}
-      {tool?.id === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-      {tool?.id === "identify" && <IdentifyTool />}
-      {tool?.id === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
-      {tool?.id === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
-      {tool?.id === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
-      {tool?.id === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
-      {tool?.id === "video" && <VideoTool />}
-      {tool?.id === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
-      {tool?.id === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
-      {tool?.id === "transcript" && (
-        <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />
-      )}
+      {shown === "ringtone" && <RingtoneTool />}
+      {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
+      {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+      {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
+      {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
+      {shown === "piano" && <PianoTool />}
+      {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+      {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
+      {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
+      {shown === "identify" && <IdentifyTool />}
+      {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
+      {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+      {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+      {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+      {shown === "video" && <VideoTool />}
+      {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+      {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
+      {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
+      {shown === "beats" && <BeatMakerTool />}
+      {shown === "theory" && <TheoryTool />}
 
       {tool && (
-        <footer>
-          <button className="brand brand-button" type="button" onClick={() => go("home")}>
-            <span className="brand-mark">
-              <Music2 size={20} />
-            </span>
-            <span>כלי מוזיקה</span>
-          </button>
-        </footer>
+        <>
+          {shown && <NextSteps tool={tool} onOpen={go} />}
+          <SiteFooter onOpen={go} />
+        </>
       )}
-    </ToolShell>
+    </AppShell>
   );
 }
 
@@ -469,12 +477,12 @@ export default function App() {
 
   if (loading) {
     return (
-      <main className="page auth-screen" data-theme={theme.resolved}>
+      <main className="auth-screen" data-theme={theme.resolved}>
         <div className="auth-loading" role="status">
           <span className="brand-mark">
-            <Music2 size={22} />
+            <LogoGlyph />
           </span>
-          <strong>טוען את כלי המוזיקה…</strong>
+          <strong>טוען את הסטודיו…</strong>
         </div>
       </main>
     );

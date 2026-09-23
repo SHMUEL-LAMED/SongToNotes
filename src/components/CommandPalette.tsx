@@ -33,12 +33,22 @@ export function CommandPalette({
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const list = needle
-      ? items.filter((item) =>
-          `${item.label} ${item.hint ?? ""} ${item.group} ${item.keywords ?? ""}`.toLowerCase().includes(needle),
-        )
-      : items;
-    return list.slice(0, 40);
+    if (!needle) return items.slice(0, 40);
+    // A match in the name beats one in the hint or the keywords; the group's
+    // own heading is not searched, or "פים" would find every page.
+    const rank = (item: CommandItem) => {
+      const label = item.label.toLowerCase();
+      if (label.startsWith(needle)) return 0;
+      if (label.includes(needle)) return 1;
+      return `${item.hint ?? ""} ${item.keywords ?? ""}`.toLowerCase().includes(needle) ? 2 : -1;
+    };
+    const groups = [...new Set(items.map((item) => item.group))];
+    return items
+      .map((item) => ({ item, score: rank(item) }))
+      .filter((entry) => entry.score >= 0)
+      .sort((a, b) => a.score - b.score || groups.indexOf(a.item.group) - groups.indexOf(b.item.group))
+      .map((entry) => entry.item)
+      .slice(0, 40);
   }, [items, query]);
 
   useEffect(() => {

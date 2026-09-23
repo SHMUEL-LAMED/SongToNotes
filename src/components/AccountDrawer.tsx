@@ -208,7 +208,7 @@ export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdm
             {recent.map((work) => {
               const tool = findTool(KIND_TOOL[work.kind]);
               return (
-                <li key={work.id} style={{ "--accent-hue": tool?.hue ?? 258 } as CSSProperties}>
+                <li key={work.id} style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}>
                   <button type="button" className="quick-item" onClick={() => onOpenWork(work)}>
                     <WorkThumb work={work} className="is-tiny" />
                     <span className="quick-item-text">

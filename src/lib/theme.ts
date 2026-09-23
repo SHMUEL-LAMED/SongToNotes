@@ -41,7 +41,7 @@ export function useTheme() {
       document.documentElement.dataset.theme = next;
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute("content", next === "light" ? "#f6f7fb" : "#070911");
+        ?.setAttribute("content", next === "light" ? "#f5f4f0" : "#09090d");
     };
     apply();
 

@@ -196,7 +196,7 @@ describe("how a tool did", () => {
 describe("naming a tool", () => {
   it("uses the tool's own Hebrew name and colour", () => {
     expect(toolLabel("notes")).toBe("שיר לתווים");
-    expect(toolHue("notes")).toBe(258);
+    expect(toolHue("notes")).toBe(292);
   });
 
   it("still names the pages that are not tools", () => {

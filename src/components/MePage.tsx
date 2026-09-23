@@ -518,7 +518,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
   /* ---------------------------------------------------------- the page */
 
   return (
-    <div className="me-full" style={{ "--accent-hue": 262 } as CSSProperties}>
+    <div className="me-full" style={{ "--accent-hue": 292 } as CSSProperties}>
       <header className="me-hero">
         <div className="me-identity">
           {profile?.avatar_url ? (
@@ -566,7 +566,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
 
       <div className="admin-tiles me-tiles">
         <StatTile label="פריטים שמורים" value={works ? formatNumber(all.length) : "…"} icon={<Archive size={16} />} note={starredCount ? `${starredCount} מסומנים בכוכב` : undefined} />
-        <StatTile label="רצף ימים" value={works ? String(currentStreak) : "…"} icon={<Flame size={16} />} note={currentStreak ? "ימים ברצף עם משהו שנשמר" : "שמור משהו היום כדי להתחיל"} hue={currentStreak ? 24 : 262} />
+        <StatTile label="רצף ימים" value={works ? String(currentStreak) : "…"} icon={<Flame size={16} />} note={currentStreak ? "ימים ברצף עם משהו שנשמר" : "שמור משהו היום כדי להתחיל"} hue={currentStreak ? 45 : 292} />
         <StatTile label="החודש" value={works ? String(thisMonth) : "…"} icon={<Calendar size={16} />} note="פריטים שנשמרו החודש" />
         <StatTile
           label="הכלי המוביל"
@@ -688,7 +688,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
                   className={`chip-toggle ${kind === item ? "active" : ""}`}
                   aria-pressed={kind === item}
                   onClick={() => setKind(kind === item ? "all" : item)}
-                  style={{ "--accent-hue": tool?.hue ?? 258 } as CSSProperties}
+                  style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}
                 >
                   {Icon && <Icon size={14} />}
                   {KIND_LABELS[item]} <b>{counts[item]}</b>
@@ -768,7 +768,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
                   <li
                     key={work.id}
                     className={`me-tile ${isPlaying ? "is-playing" : ""} ${isChosen ? "is-chosen" : ""}`}
-                    style={{ "--accent-hue": tool?.hue ?? 258 } as CSSProperties}
+                    style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}
                   >
                     {selecting && (
                       <button type="button" className="me-tile-check" aria-pressed={isChosen} aria-label={isChosen ? "בטל בחירה" : "בחר"} onClick={() => toggleSelected(work.id)}>
@@ -915,7 +915,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
             {storage.length ? (
               <div className="meter-stack">
                 {storage.map((row) => (
-                  <div key={row.kind} style={{ "--accent-hue": findTool(KIND_TOOL[row.kind])?.hue ?? 258 } as CSSProperties}>
+                  <div key={row.kind} style={{ "--accent-hue": findTool(KIND_TOOL[row.kind])?.hue ?? 292 } as CSSProperties}>
                     <Meter label={row.label} value={row.bytes} max={storage[0].bytes} note={`${row.count} קבצים`} format={formatBytes} />
                   </div>
                 ))}
@@ -961,7 +961,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
                 {trash.map((entry) => {
                   const tool = findTool(KIND_TOOL[entry.work.kind]);
                   return (
-                    <li key={entry.work.id} style={{ "--accent-hue": tool?.hue ?? 258 } as CSSProperties}>
+                    <li key={entry.work.id} style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}>
                       <WorkThumb work={entry.work} className="is-tiny" />
                       <span className="trash-text">
                         <b>{entry.work.title}</b>
@@ -1002,7 +1002,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
                   const dead = Boolean(item.revokedAt) || expiryLabel(item.expiresAt, now) === "פג תוקף";
                   const url = shareLink(item.token);
                   return (
-                    <li key={item.token} className={dead ? "is-dead" : ""} style={{ "--accent-hue": findTool(KIND_TOOL[item.kind])?.hue ?? 258 } as CSSProperties}>
+                    <li key={item.token} className={dead ? "is-dead" : ""} style={{ "--accent-hue": findTool(KIND_TOOL[item.kind])?.hue ?? 292 } as CSSProperties}>
                       <span className="links-text">
                         <b>{item.title}</b>
                         <small>
@@ -1142,7 +1142,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
       {/* ================================================== preview */}
       {preview && (
         <div className="preview-overlay" role="presentation" onMouseDown={() => setPreview(null)}>
-          <div className="preview" role="dialog" aria-modal="true" aria-label={preview.title} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent-hue": findTool(KIND_TOOL[preview.kind])?.hue ?? 258 } as CSSProperties}>
+          <div className="preview" role="dialog" aria-modal="true" aria-label={preview.title} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent-hue": findTool(KIND_TOOL[preview.kind])?.hue ?? 292 } as CSSProperties}>
             <button type="button" className="icon-button preview-close" aria-label="סגור" onClick={() => setPreview(null)}>
               <X size={18} />
             </button>
