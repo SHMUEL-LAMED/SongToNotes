@@ -88,7 +88,7 @@ function define(
 export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
-  "beats", "theory",
+  "beats", "theory", "progressions",
 ];
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -136,6 +136,13 @@ export const ACTIONS: ActionSpec[] = [
   define("beats", "write", "beats.clear", "ניקוי הרשת", "מוחק את כל המכות."),
   define("beats", "write", "beats.steps", "תכנות צעדים", "מסמן מכות לכלי אחד בצעדים 1..16 (למשל \"1,5,9,13\" או \"1-16\"); clear מנקה את השורה קודם, accent מדגיש.", ["voice:kick|snare|clap|hat|open|lowTom|highTom|cowbell", ["steps", "מספרי צעדים 1..16"], "accent?:boolean", "clear?:boolean"]),
   define("beats", "write", "beats.export", "הורדת הביט", "מוריד את הלולאה כקובץ WAV באורך מספר תיבות (1..16).", ["bars?:number"]),
+
+  // ---- progression generator ----
+  define("progressions", "write", "progressions.generate", "מהלך אקורדים חדש", "יוצר מהלך אקורדים לפי אווירה ובסולם (אם ניתן).", ["mood?:pop|happy|sad|dramatic|rock|dreamy|jazz|epic", ["key?", "טוניקה, למשל C או F♯"]]),
+  define("progressions", "write", "progressions.set", "הגדרות הליווי", "קצב (50..200), פעמות לאקורד (2, 4 או 8), דפוס ליווי, סגנון בס ואקורדי ספטימה.", ["bpm?:number", "beats?:number", "pattern?:block|pulse|arpUp|arpUpDown|broken|offbeat", "bass?:none|root|rootFifth|octaves|walking", "sevenths?:boolean"]),
+  define("progressions", "write", "progressions.play", "ניגון המהלך", "מנגן את המהלך בלולאה."),
+  define("progressions", "write", "progressions.stop", "עצירת המהלך", "עוצר את הניגון."),
+  define("progressions", "write", "progressions.songbook", "המהלך לשירון", "שולח את המהלך לשירון ופותח אותו."),
 
   // ---- theory explorer ----
   define("theory", "write", "theory.set", "סולם בסייר התאוריה", "בוחר טוניקה (C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B), סולם או מודוס, משולשים או ספטאקורדים ותצוגה.", [["root?", "שם התו, למשל C או F♯"], "scale?:major|minor|dorian|phrygian|lydian|mixolydian|locrian|harmonicMinor|melodicMinor|majorPentatonic|minorPentatonic|blues", "sevenths?:boolean", "view?:piano|guitar"]),

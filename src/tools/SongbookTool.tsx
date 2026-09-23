@@ -333,7 +333,9 @@ export function SongbookTool({ initial = null }: Props) {
                 return (
                   <p key={index} className="songbook-line">
                     {pieces.map((piece, at) => (
-                      <span key={at} className="songbook-piece">
+                      // A chord over nothing but spaces — a bar of an intro, a
+                      // chords-only line — still needs room of its own.
+                      <span key={at} className={`songbook-piece ${piece.chord && !piece.text.trim() ? "is-bare" : ""}`}>
                         <span className="songbook-chord" dir="ltr">{piece.chord ?? " "}</span>
                         <span className="songbook-word">{piece.text}</span>
                       </span>

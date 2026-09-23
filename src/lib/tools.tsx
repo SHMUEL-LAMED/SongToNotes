@@ -15,6 +15,7 @@ import {
   Guitar,
   Layers,
   Mic2,
+  Music4,
   MicVocal,
   Piano,
   Smartphone,
@@ -238,6 +239,19 @@ export const TOOLS: ToolDefinition[] = [
     category: "practice",
     tags: ["פסנתר", "מקלדת", "סולמות", "midi"],
     related: ["theory", "notes", "ear"],
+  },
+  {
+    id: "progressions",
+    title: "מחולל מהלכים",
+    tagline: "מהלך אקורדים לפי אווירה",
+    description:
+      "בוחרים סולם ואווירה — פופ, עצוב, מזרחי, ג׳אז — ומקבלים מהלך אקורדים שמתנגן בלולאה עם ארפג׳יו ובס. מחליפים אקורד בלחיצה ושולחים לשירון או כ־MIDI.",
+    icon: Music4,
+    hue: 250,
+    category: "create",
+    tags: ["אקורדים", "מהלך", "הרמוניה", "כתיבת שירים", "ארפג׳יו", "בס", "midi"],
+    badge: "חדש",
+    related: ["songbook", "theory", "beats"],
   },
   {
     id: "theory",

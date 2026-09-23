@@ -521,6 +521,7 @@
 .songbook-blank { height: 0.9em; }
 .songbook-line { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 6px; }
 .songbook-piece { display: inline-flex; flex-direction: column; white-space: pre; }
+.songbook-piece.is-bare { margin-inline-end: 1.4em; }
 .songbook-chord { font-weight: 800; color: var(--accent-text); font-size: 0.85em; line-height: 1.2; min-height: 1.2em; }
 .songbook-diagrams { padding: 4px 0 10px; }
 

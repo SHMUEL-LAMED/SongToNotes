@@ -42,6 +42,7 @@ const VideoTool = lazy(() => import("./tools/VideoTool").then((module) => ({ def
 const SongbookTool = lazy(() => import("./tools/SongbookTool").then((module) => ({ default: module.SongbookTool })));
 const EarTrainingTool = lazy(() => import("./tools/EarTrainingTool").then((module) => ({ default: module.EarTrainingTool })));
 const MetronomeTool = lazy(() => import("./tools/MetronomeTool").then((module) => ({ default: module.MetronomeTool })));
+const ProgressionTool = lazy(() => import("./tools/ProgressionTool").then((module) => ({ default: module.ProgressionTool })));
 const PianoTool = lazy(() => import("./tools/PianoTool").then((module) => ({ default: module.PianoTool })));
 const RingtoneTool = lazy(() => import("./tools/RingtoneTool").then((module) => ({ default: module.RingtoneTool })));
 const SpeedTool = lazy(() => import("./tools/SpeedTool").then((module) => ({ default: module.SpeedTool })));
@@ -493,6 +494,7 @@ function WorkspaceApp() {
         {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
         {shown === "beats" && <BeatMakerTool />}
         {shown === "theory" && <TheoryTool />}
+        {shown === "progressions" && <ProgressionTool />}
       </Suspense>
 
       {tool && (
