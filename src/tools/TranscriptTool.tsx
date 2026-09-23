@@ -75,7 +75,7 @@ const TRANSLATE_TO = [
   { id: "es", label: "ספרדית" },
 ];
 
-type AiJob = Exclude<AiAction, "chat" | "speakers">;
+type AiJob = Exclude<AiAction, "chat" | "speakers" | "explain" | "lyrics">;
 const AI_LABELS: Record<AiJob, string> = {
   polish: "נוסח ערוך",
   summarize: "סיכום",

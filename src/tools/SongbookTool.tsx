@@ -1,6 +1,8 @@
-import { BookOpen, ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, Minus, Pause, Play, Plus, Printer, Type, Wand2 } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, Languages, Minus, Pause, Play, Plus, Printer, Type, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
+import { ExplainSong } from "../components/ExplainSong";
+import { AiError, parseLyricGloss, transformText, type LyricGloss } from "../lib/aiApi";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { useAuth } from "../lib/auth";
@@ -54,6 +56,12 @@ export function SongbookTool({ initial = null }: Props) {
   const [beatsPerLine, setBeatsPerLine] = useState(8);
   const [clickOn, setClickOn] = useState(false);
   const [currentLine, setCurrentLine] = useState(-1);
+  // A translation and transliteration under every sung line, for the text it was made for.
+  const [gloss, setGloss] = useState<{ source: string; items: LyricGloss[] } | null>(null);
+  const [glossShown, setGlossShown] = useState(true);
+  const [glossLanguage, setGlossLanguage] = useState<string | null>(null);
+  const [glossBusy, setGlossBusy] = useState(false);
+  const [glossError, setGlossError] = useState<string | null>(null);
   const [showDiagrams, setShowDiagrams] = useState(true);
   const [copied, setCopied] = useState(false);
   const [songs, setSongs] = useState<SavedWork[] | null>(null);
@@ -160,6 +168,34 @@ export function SongbookTool({ initial = null }: Props) {
       setCurrentLine(-1);
     };
   }, [beatsPerLine, bpm, clickOn, scrollMode, scrolling]);
+
+  const sungLyrics = useMemo(() => lines.filter((line) => line.kind === "line").map((line) => line.lyric), [lines]);
+  const lyricSource = sungLyrics.join("\n");
+  const hasLyrics = sungLyrics.some((line) => /\p{L}{2,}/u.test(line));
+  // Hebrew lyrics go to English by default, anything else to Hebrew.
+  const mostlyHebrew = (lyricSource.match(/[\u0590-\u05FF]/g)?.length ?? 0) > lyricSource.replace(/\s/g, "").length / 2;
+  const targetLanguage = glossLanguage ?? (mostlyHebrew ? "אנגלית" : "עברית");
+  const glossItems = gloss && gloss.source === lyricSource && glossShown ? gloss.items : null;
+
+  const translateLyrics = async () => {
+    if (!hasLyrics || glossBusy) return;
+    setGlossBusy(true);
+    setGlossError(null);
+    try {
+      const reply = await transformText("lyrics", lyricSource.slice(0, 20_000), { language: targetLanguage });
+      const items = parseLyricGloss(reply.text, sungLyrics);
+      if (!items) {
+        setGlossError("התרגום חזר בלי שורה לכל שורה. נסה שוב.");
+        return;
+      }
+      setGloss({ source: lyricSource, items });
+      setGlossShown(true);
+    } catch (caught) {
+      setGlossError(caught instanceof AiError || caught instanceof Error ? caught.message : "התרגום נכשל.");
+    } finally {
+      setGlossBusy(false);
+    }
+  };
 
   const loadSongs = async () => {
     setShowSongs((value) => !value);
@@ -437,12 +473,20 @@ export function SongbookTool({ initial = null }: Props) {
               {title && <h2>{title}</h2>}
               {lines.map((line, index) => {
                 if (line.kind === "blank") return <div key={index} className="songbook-blank" />;
-                if (line.kind === "heading") return <h3 key={index}>{line.lyric}</h3>;
+                if (line.kind === "heading") return <h3 key={index} dir="auto">{line.lyric}</h3>;
                 const sungIndex = sungIndexes.get(index) ?? -1;
+                const glossLine = glossItems?.[sungIndex];
+                const under = glossLine && (glossLine.transliteration || glossLine.translation) ? (
+                  <span className="songbook-gloss">
+                    {glossLine.transliteration && <span className="songbook-gloss-sound">{glossLine.transliteration}</span>}
+                    {glossLine.translation && <span className="songbook-gloss-meaning">{glossLine.translation}</span>}
+                  </span>
+                ) : null;
                 if (!line.chords.length) {
                   return (
-                    <p key={index} data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
+                    <p key={index} dir="auto" data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
                       {line.lyric}
+                      {under}
                     </p>
                   );
                 }
@@ -457,7 +501,7 @@ export function SongbookTool({ initial = null }: Props) {
                 });
                 if (cursor < line.lyric.length) pieces.push({ chord: null, text: line.lyric.slice(cursor) });
                 return (
-                  <p key={index} className="songbook-line" data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
+                  <p key={index} className="songbook-line" dir="auto" data-sung="" data-now={sungIndex === currentLine ? "" : undefined}>
                     {pieces.map((piece, at) => (
                       // A chord over nothing but spaces — a bar of an intro, a
                       // chords-only line — still needs room of its own.
@@ -466,10 +510,40 @@ export function SongbookTool({ initial = null }: Props) {
                         <span className="songbook-word">{piece.text}</span>
                       </span>
                     ))}
+                    {under}
                   </p>
                 );
               })}
             </div>
+
+            {hasLyrics && (
+              <div className="tool-inline-actions songbook-gloss-actions">
+                <button type="button" className="secondary-button" onClick={() => void translateLyrics()} disabled={glossBusy}>
+                  <Languages size={16} /> {glossBusy ? "מתרגם…" : gloss && gloss.source === lyricSource ? "תרגום מחדש" : "תרגום ותעתיק"}
+                </button>
+                <label className="songbook-tempo">
+                  ל־
+                  <select value={targetLanguage} onChange={(event) => setGlossLanguage(event.target.value)} aria-label="שפת התרגום">
+                    {["עברית", "אנגלית", "ערבית", "רוסית", "צרפתית", "ספרדית", "אמהרית", "יידיש"].map((language) => (
+                      <option key={language} value={language}>
+                        {language}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {gloss && gloss.source === lyricSource && (
+                  <label className="checkbox-field">
+                    <input type="checkbox" checked={glossShown} onChange={(event) => setGlossShown(event.target.checked)} />
+                    <span>הצג תחת כל שורה</span>
+                  </label>
+                )}
+                {glossError && (
+                  <p className="error-message" role="alert">
+                    {glossError}
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -508,6 +582,10 @@ export function SongbookTool({ initial = null }: Props) {
           <SaveButton state={saving.state} onSave={() => void save()} disabled={!body.trim()} label="שמור בשירון" message={saving.message} />
         </div>
       </div>
+
+      {!editing && chords.length > 0 && (
+        <ExplainSong songKey={shown} describe={() => `שם השיר: ${title || "לא ידוע"}\nהשיר מהשירון, אקורדים בסוגריים לפני המילה שהם נופלים עליה:\n${shown}`} />
+      )}
     </section>
   );
 }
