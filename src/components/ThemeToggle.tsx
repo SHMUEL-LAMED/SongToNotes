@@ -13,17 +13,16 @@ const LABELS: Record<ThemePreference, string> = {
 };
 
 export function ThemeToggle({ preference, onCycle }: Props) {
-  const Icon =
-    preference === "light" ? Sun : preference === "dark" ? Moon : Monitor;
+  const Icon = preference === "light" ? Sun : preference === "dark" ? Moon : Monitor;
   return (
     <button
       className="icon-button theme-toggle"
       type="button"
       onClick={onCycle}
-      aria-label={`ערכת נושא: ${LABELS[preference]}. לחץ להחלפה`}
+      aria-label={`ערכת נושא: ${LABELS[preference]}. לחצו להחלפה`}
       title={LABELS[preference]}
     >
-      <Icon size={18} />
+      <Icon size={17} />
     </button>
   );
 }

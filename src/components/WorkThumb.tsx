@@ -214,7 +214,7 @@ export function WorkThumb({ work, className = "" }: { work: SavedWork; className
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       role="img"
       aria-hidden="true"
-      style={{ "--accent-hue": tool?.hue ?? 258 } as CSSProperties}
+      style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}
     >
       <rect x={0} y={0} width={WIDTH} height={HEIGHT} rx={0} className="thumb-bg" />
       {body}

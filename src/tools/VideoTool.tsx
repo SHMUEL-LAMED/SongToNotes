@@ -7,7 +7,7 @@ import { Transport } from "../components/Transport";
 import { decodeAudioFile, formatTime } from "../lib/audio";
 import { convertAudio } from "../lib/convert";
 import { downloadFile } from "../lib/export";
-import { handOffTo } from "../lib/handoff";
+import { handOffTo, hasHandoff, takeHandoff } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 
@@ -108,6 +108,18 @@ export function VideoTool() {
       result.file,
     );
   };
+
+  // A video dropped on the home page's quick start arrives here, once.
+  const pickRef = useRef(pick);
+  useEffect(() => {
+    pickRef.current = pick;
+  });
+  useEffect(() => {
+    if (!hasHandoff()) return;
+    void takeHandoff().then((handed) => {
+      if (handed) void pickRef.current(handed.file);
+    });
+  }, []);
 
   const targets = [
     { id: "transcript", label: "לתמלול", note: "כתוביות לסרטון", icon: Captions },

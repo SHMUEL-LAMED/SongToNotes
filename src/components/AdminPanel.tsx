@@ -207,14 +207,14 @@ function Overview({
           value={formatNumber(stats.live)}
           note="פעילות בחמש הדקות האחרונות"
           icon={<Zap size={16} />}
-          hue={152}
+          hue={155}
         />
         <StatTile
           label="שיעור שגיאות"
           value={`${errorRate}%`}
           note={`${formatNumber(sumSeries(series(stats.daily, "errors")))} שגיאות מתוך ${compactNumber(stats.views)} כניסות`}
           icon={<TriangleAlert size={16} />}
-          hue={errorRate >= 5 ? 8 : 212}
+          hue={errorRate >= 5 ? 25 : 250}
         />
       </div>
 
@@ -1139,7 +1139,7 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   }
 
   return (
-    <div className="admin-page" style={{ "--accent-hue": 212 } as CSSProperties}>
+    <div className="admin-page" style={{ "--accent-hue": 250 } as CSSProperties}>
       <header className="admin-head">
         <div>
           <p className="admin-eyebrow">

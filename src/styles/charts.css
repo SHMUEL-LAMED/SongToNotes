@@ -1,0 +1,142 @@
+/* ==========================================================================
+   Charts, shared by the admin area and the personal area
+   They draw magnitude in one hue and borrow the theme's tokens, so they
+   follow light and dark like everything else. Identity lives in the labels.
+   ========================================================================== */
+
+.chart { position: relative; }
+.chart svg { display: block; overflow: visible; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart-tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-bar { fill: var(--accent); opacity: 0.8; transition: opacity 0.15s var(--ease); }
+.chart-bar.is-hover { opacity: 1; }
+.chart-readout { margin: 8px 0 0; min-height: 20px; font-size: 13.5px; color: var(--text-soft); }
+.chart-readout b { font-size: 15px; color: var(--text); }
+.chart-readout-idle { color: var(--text-muted); }
+
+.sparkline { display: block; overflow: visible; }
+.sparkline-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sparkline-dot { fill: var(--accent); stroke: var(--surface-solid); stroke-width: 2; }
+
+/* ---- ranked bars ---- */
+
+.bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.bar-list-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(60px, 1.6fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  text-align: inherit;
+  color: inherit;
+}
+.bar-list-row.is-button { cursor: pointer; }
+.bar-list-row.is-button:hover { background: var(--surface-hover); }
+.bar-list-name { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; min-width: 0; }
+.bar-list-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.bar-list-text > span,
+.bar-list-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-list-text small { color: var(--text-muted); font-size: 11.5px; }
+.bar-list-track { display: block; height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bar-list-fill { display: block; width: var(--fill); height: 100%; border-radius: 99px; background: var(--accent); }
+.bar-list-value { font-size: 14px; font-variant-numeric: tabular-nums; }
+.bar-list-value small { color: var(--text-muted); font-weight: 400; }
+
+/* ---- the week ---- */
+
+.heatmap { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-hours {
+  display: flex;
+  justify-content: space-between;
+  padding-inline-start: 46px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.heatmap-row { display: flex; align-items: center; gap: 8px; }
+.heatmap-day { width: 38px; color: var(--text-muted); font-size: 12px; text-align: start; }
+.heatmap-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; flex: 1; direction: rtl; }
+.heatmap-cell { height: 16px; border-radius: 4px; background: var(--surface-3); }
+.heatmap-cell.has-value { background: oklch(0.6 0.2 var(--accent-hue) / var(--weight)); }
+:root[data-theme="dark"] .heatmap-cell.has-value { background: oklch(0.77 0.15 var(--accent-hue) / var(--weight)); }
+.heatmap-legend { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; color: var(--text-muted); font-size: 11.5px; }
+.heatmap-ramp {
+  flex: 0 0 90px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(to left, oklch(0.6 0.2 var(--accent-hue) / 0.15), oklch(0.6 0.2 var(--accent-hue)));
+}
+
+/* ---- one quantity against its ceiling ---- */
+
+.meter-stack { display: flex; flex-direction: column; gap: 14px; }
+.meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.meter-label { font-size: 13.5px; color: var(--text-soft); }
+.meter-value { font-size: 14px; font-variant-numeric: tabular-nums; unicode-bidi: plaintext; }
+.meter-value small { color: var(--text-muted); font-weight: 400; }
+.meter-track { height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.meter-fill { display: block; width: var(--fill); height: 100%; border-radius: 99px; background: var(--accent); }
+.meter-track.is-high .meter-fill { background: var(--warning); }
+.meter-track.is-full .meter-fill { background: var(--danger); }
+.meter-note { margin: 6px 0 0; color: var(--text-muted); font-size: 12px; }
+
+/* ---- the three steps of a tool ---- */
+
+.funnel { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.funnel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 14px; }
+.funnel-head b { font-variant-numeric: tabular-nums; unicode-bidi: plaintext; }
+.funnel-head small { color: var(--text-muted); font-weight: 400; }
+.funnel-track { height: 22px; border-radius: var(--radius-xs); background: var(--surface-3); overflow: hidden; }
+.funnel-fill { display: block; width: var(--fill); height: 100%; border-radius: 6px; background: var(--accent-grad); }
+.funnel-drop { margin: 5px 0 0; color: var(--text-muted); font-size: 12px; }
+
+/* ---- one bar, two parts ---- */
+
+.split-track { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.split-part { display: block; width: var(--share); height: 100%; }
+.split-part-1 { background: var(--accent); }
+.split-part-2 { background: oklch(0.72 0.08 var(--accent-hue)); }
+:root[data-theme="dark"] .split-part-2 { background: oklch(0.5 0.08 var(--accent-hue)); }
+.split-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.split-legend li { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; font-size: 13.5px; }
+.split-legend b { font-variant-numeric: tabular-nums; }
+.split-legend small { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.split-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ---- a figure with its name ---- */
+
+.stat-tile {
+  padding: 16px 16px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: radial-gradient(120% 120% at 100% 0%, var(--accent-tint), transparent 62%), var(--surface);
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-tile-head { display: flex; align-items: center; gap: 8px; color: var(--text-soft); font-size: 13px; }
+.stat-tile-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.stat-tile-value { font-size: clamp(24px, 3vw, 30px); font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.stat-tile-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); }
+.stat-trend { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.stat-trend.is-up { color: var(--success); }
+.stat-trend.is-down { color: var(--danger); }
+.stat-trend.is-flat { color: var(--text-muted); }
+.stat-tile .sparkline { margin-top: 6px; align-self: flex-start; }
+
+/* A tool's own colour, as a mark beside its name. */
+.tool-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }

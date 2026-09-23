@@ -1,0 +1,189 @@
+/* ==========================================================================
+   Design tokens
+   Every colour in the interface resolves through this layer. The two themes
+   are two value sets, and each tool tints the same components by setting one
+   number — its hue. Accents are computed in OKLCH, so a yellow tool and a
+   blue tool reach the eye at the same brightness instead of one glaring and
+   the other sinking into the page.
+   ========================================================================== */
+
+:root {
+  /* The brand's own hue, used wherever no tool has set one. */
+  --accent-hue: 292;
+
+  --font-sans: "Rubik Variable", "Rubik", "Heebo", "Segoe UI", system-ui, "Arial Hebrew", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 30px;
+  --radius-pill: 999px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --sidebar-w: 276px;
+  --topbar-h: 64px;
+  --content-w: 1140px;
+  --tool-w: 980px;
+  --gutter: clamp(16px, 3vw, 36px);
+
+  /* The signature gradient: the brand mark, the hero, the home page. */
+  --brand-1: oklch(0.7 0.21 292);
+  --brand-2: oklch(0.7 0.22 345);
+  --brand-3: oklch(0.8 0.16 55);
+  --brand-gradient: linear-gradient(120deg, var(--brand-1), var(--brand-2) 55%, var(--brand-3));
+
+  /* ---- light theme ---- */
+  --bg: #f5f4f0;
+  --bg-deep: #eceae4;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-2: #faf9f6;
+  --surface-3: #f1efea;
+  --surface-sunken: rgba(28, 24, 40, 0.045);
+  --surface-hover: rgba(28, 24, 40, 0.06);
+  --sidebar-bg: rgba(250, 249, 246, 0.86);
+  --line: rgba(28, 24, 40, 0.09);
+  --line-strong: rgba(28, 24, 40, 0.17);
+  --text: #18161f;
+  --text-soft: #4b4857;
+  --text-muted: #7b7887;
+  --ink: #18161f;
+  --on-ink: #ffffff;
+
+  --success: oklch(0.58 0.15 155);
+  --success-soft: oklch(0.58 0.15 155 / 0.12);
+  --warning: oklch(0.62 0.15 70);
+  --warning-soft: oklch(0.75 0.15 75 / 0.16);
+  --danger: oklch(0.58 0.21 20);
+  --danger-soft: oklch(0.58 0.21 20 / 0.1);
+  --mint: oklch(0.62 0.12 180);
+
+  --shadow-xs: 0 1px 2px rgba(20, 16, 36, 0.06);
+  --shadow-sm: 0 1px 2px rgba(20, 16, 36, 0.05), 0 4px 12px rgba(20, 16, 36, 0.05);
+  --shadow-md: 0 2px 6px rgba(20, 16, 36, 0.05), 0 14px 34px rgba(20, 16, 36, 0.08);
+  --shadow-lg: 0 8px 20px rgba(20, 16, 36, 0.08), 0 30px 70px rgba(20, 16, 36, 0.14);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  --roll-row-black: #ecebf2;
+  --roll-row-odd: #f6f5f9;
+  --roll-row-even: #fcfbfe;
+  --roll-grid-line: rgba(30, 24, 60, 0.09);
+  --roll-bar-line: rgba(30, 24, 60, 0.26);
+  --roll-label: #837f95;
+  --roll-gutter: #f1eff5;
+  --roll-key-black: #2c2838;
+  --roll-key-white: #ffffff;
+  --roll-playhead: var(--danger);
+
+  --wave-bg: rgba(28, 24, 40, 0.04);
+
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #09090d;
+  --bg-deep: #050508;
+  --surface: #111117;
+  --surface-solid: #15151c;
+  --surface-2: #17171e;
+  --surface-3: #1d1d25;
+  --surface-sunken: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-bg: rgba(13, 13, 18, 0.82);
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #f3f2f8;
+  --text-soft: #b6b4c4;
+  --text-muted: #817f91;
+  --ink: #f3f2f8;
+  --on-ink: #0b0b10;
+
+  --success: oklch(0.78 0.16 155);
+  --success-soft: oklch(0.78 0.16 155 / 0.13);
+  --warning: oklch(0.83 0.14 80);
+  --warning-soft: oklch(0.83 0.14 80 / 0.13);
+  --danger: oklch(0.72 0.18 20);
+  --danger-soft: oklch(0.72 0.18 20 / 0.13);
+  --mint: oklch(0.8 0.12 180);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --roll-row-black: #0e0e14;
+  --roll-row-odd: #13131a;
+  --roll-row-even: #17171f;
+  --roll-grid-line: rgba(255, 255, 255, 0.06);
+  --roll-bar-line: rgba(255, 255, 255, 0.2);
+  --roll-label: #807e92;
+  --roll-gutter: #0b0b10;
+  --roll-key-black: #1c1c25;
+  --roll-key-white: #e4e3ec;
+
+  --wave-bg: rgba(0, 0, 0, 0.3);
+
+  color-scheme: dark;
+}
+
+/* The accent family. A custom property resolves var() where it is declared,
+   so anything that sets its own hue — a tool page, a card, a row in a chart,
+   any element given `--accent-hue` inline — re-derives the whole family from
+   it, and nothing sits half in one colour and half in another. */
+:root,
+.tool-page,
+.tool-card,
+.admin-page,
+.me-tile,
+[style*="--accent-hue"] {
+  --accent: oklch(0.57 0.2 var(--accent-hue));
+  --accent-strong: oklch(0.5 0.19 var(--accent-hue));
+  --accent-soft: oklch(0.95 0.035 var(--accent-hue));
+  --accent-tint: oklch(0.57 0.2 var(--accent-hue) / 0.08);
+  --accent-ring: oklch(0.6 0.2 var(--accent-hue) / 0.26);
+  --accent-text: oklch(0.45 0.16 var(--accent-hue));
+  --accent-line: oklch(0.57 0.2 var(--accent-hue) / 0.35);
+  --on-accent: #ffffff;
+  --accent-grad: linear-gradient(135deg, oklch(0.64 0.2 var(--accent-hue)), oklch(0.55 0.21 calc(var(--accent-hue) + 35)));
+  --shadow-accent: 0 10px 28px oklch(0.55 0.2 var(--accent-hue) / 0.28);
+  --roll-note-top: oklch(0.68 0.18 var(--accent-hue));
+  --roll-note-bottom: oklch(0.56 0.2 var(--accent-hue));
+  --roll-note-edge: oklch(0.8 0.12 var(--accent-hue));
+  --wave-body: oklch(0.64 0.17 var(--accent-hue));
+  --wave-selected: oklch(0.55 0.2 var(--accent-hue));
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] .tool-page,
+:root[data-theme="dark"] .tool-card,
+:root[data-theme="dark"] .admin-page,
+:root[data-theme="dark"] .me-tile,
+:root[data-theme="dark"] [style*="--accent-hue"] {
+  --accent: oklch(0.77 0.15 var(--accent-hue));
+  --accent-strong: oklch(0.71 0.16 var(--accent-hue));
+  --accent-soft: oklch(0.34 0.07 var(--accent-hue) / 0.5);
+  --accent-tint: oklch(0.77 0.15 var(--accent-hue) / 0.07);
+  --accent-ring: oklch(0.77 0.15 var(--accent-hue) / 0.3);
+  --accent-text: oklch(0.85 0.11 var(--accent-hue));
+  --accent-line: oklch(0.77 0.15 var(--accent-hue) / 0.35);
+  --on-accent: #0b0b10;
+  --accent-grad: linear-gradient(135deg, oklch(0.82 0.14 var(--accent-hue)), oklch(0.72 0.17 calc(var(--accent-hue) + 35)));
+  --shadow-accent: 0 12px 34px oklch(0.6 0.18 var(--accent-hue) / 0.3);
+  --roll-note-top: oklch(0.8 0.14 var(--accent-hue));
+  --roll-note-bottom: oklch(0.66 0.17 var(--accent-hue));
+  --roll-note-edge: oklch(0.9 0.08 var(--accent-hue));
+  --wave-body: oklch(0.74 0.14 var(--accent-hue));
+  --wave-selected: oklch(0.82 0.15 var(--accent-hue));
+}

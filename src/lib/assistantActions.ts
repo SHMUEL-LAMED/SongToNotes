@@ -88,6 +88,7 @@ function define(
 export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
+  "beats", "theory",
 ];
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -125,6 +126,20 @@ export const ACTIONS: ActionSpec[] = [
   define("tts", "write", "tts.download", "הורדת ההקראה", "מוריד את קובץ ה־MP3 שנוצר."),
   define("tts", "write", "tts.save", "שמירת ההקראה", "שומר את ההקראה באזור האישי."),
   define("tts", "read", "tts.read", "קריאת הטקסט", "הטקסט שבתיבה, הקול והמהירות."),
+
+  // ---- drum machine ----
+  define("beats", "write", "beats.play", "ניגון הביט", "מפעיל את מכונת התופים."),
+  define("beats", "write", "beats.stop", "עצירת הביט", "עוצר את מכונת התופים."),
+  define("beats", "write", "beats.set", "הגדרות הביט", "קצב (50..220), סווינג באחוזים (0..60) ועוצמה ראשית (0..100).", ["bpm?:number", "swing?:number", "volume?:number"]),
+  define("beats", "write", "beats.preset", "סגנון מוכן", "טוען תבנית מוכנה עם הקצב שלה.", ["style:house|boombap|rock|trap|reggaeton|funk|empty"]),
+  define("beats", "write", "beats.random", "ביט אקראי", "ממלא את הרשת בגרוב אקראי שנשמע טוב."),
+  define("beats", "write", "beats.clear", "ניקוי הרשת", "מוחק את כל המכות."),
+  define("beats", "write", "beats.steps", "תכנות צעדים", "מסמן מכות לכלי אחד בצעדים 1..16 (למשל \"1,5,9,13\" או \"1-16\"); clear מנקה את השורה קודם, accent מדגיש.", ["voice:kick|snare|clap|hat|open|lowTom|highTom|cowbell", ["steps", "מספרי צעדים 1..16"], "accent?:boolean", "clear?:boolean"]),
+  define("beats", "write", "beats.export", "הורדת הביט", "מוריד את הלולאה כקובץ WAV באורך מספר תיבות (1..16).", ["bars?:number"]),
+
+  // ---- theory explorer ----
+  define("theory", "write", "theory.set", "סולם בסייר התאוריה", "בוחר טוניקה (C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B), סולם או מודוס, משולשים או ספטאקורדים ותצוגה.", [["root?", "שם התו, למשל C או F♯"], "scale?:major|minor|dorian|phrygian|lydian|mixolydian|locrian|harmonicMinor|melodicMinor|majorPentatonic|minorPentatonic|blues", "sevenths?:boolean", "view?:piano|guitar"]),
+  define("theory", "write", "theory.play", "השמעה בסייר התאוריה", "משמיע את הסולם, או אקורד על דרגה (1..7).", ["what?:scale|chord", "degree?:number"]),
 
   // ---- metronome ----
   define("metronome", "write", "metronome.set", "הגדרות מטרונום", "קצב (30..260), משקל, חלוקת משנה (1 רבעים, 2 שמיניות, 3 טריולות, 4 שש־עשריות), צליל ועוצמה (0..100).", ["bpm?:number", "meter?:2/4|3/4|4/4|5/4|6/8|7/8", "subdivision?:number", "sound?:click|wood|beep", "volume?:number"]),

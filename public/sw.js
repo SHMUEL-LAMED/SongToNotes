@@ -16,7 +16,7 @@
  *    name outside the `musictools-` prefix so the clean-up below leaves it be.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `musictools-shell-${VERSION}`;
 const RUNTIME_CACHE = `musictools-runtime-${VERSION}`;
 
