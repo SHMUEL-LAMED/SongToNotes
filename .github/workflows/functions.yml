@@ -1,14 +1,15 @@
 name: Deploy Supabase functions
 
-# The site goes out through GitHub Pages; the Edge Functions do not, so this
-# sends them to Supabase whenever one of them changes on main, or on demand.
-# Needs the repository secret SUPABASE_ACCESS_TOKEN (a personal access token
-# from supabase.com/dashboard/account/tokens).
+# GitHub Pages deploys the site; this workflow deploys the Edge Functions.
+# It runs only from main and can also be started manually from main.
+# Requires SUPABASE_ACCESS_TOKEN in repository Actions secrets.
 
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**"]
+    paths:
+      - "supabase/functions/**"
+      - ".github/workflows/functions.yml"
   workflow_dispatch:
     inputs:
       function:
@@ -21,7 +22,7 @@ permissions:
 
 concurrency:
   group: supabase-functions
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   PROJECT_REF: ydcfafijktzasrkkxyux
@@ -30,8 +31,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Refuse manual deploy outside main
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Manual Supabase deployments are allowed only from main."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Check the token is set
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -40,31 +48,35 @@ jobs:
             echo "::error::Add the repository secret SUPABASE_ACCESS_TOKEN (Settings → Secrets and variables → Actions)."
             exit 1
           fi
+
       - name: Set up the Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
-      # The site calls the functions with the publishable key, which is not a
-      # JWT, and each function checks the signed-in user itself — so the
-      # gateway's own JWT check stays off, as the functions run today.
+
+      # These functions already run with the gateway JWT check disabled and
+      # perform their own checks where needed, so preserve the current setting.
       - name: Deploy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ONLY: ${{ github.event.inputs.function }}
         run: |
           if [ -n "$ONLY" ]; then
-            supabase functions deploy "$ONLY" --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
-          else
-            failed=""
-            for dir in supabase/functions/*/; do
-              name="$(basename "$dir")"
-              case "$name" in _*) continue ;; esac
-              echo "::group::$name"
-              supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api --no-verify-jwt || failed="$failed $name"
-              echo "::endgroup::"
-            done
-            if [ -n "$failed" ]; then
-              echo "::error::Failed to deploy:$failed"
+            if [ ! -d "supabase/functions/$ONLY" ] || [ "${ONLY#_}" != "$ONLY" ]; then
+              echo "::error::Unknown or internal function: $ONLY"
               exit 1
             fi
+
+            supabase functions deploy "$ONLY" \
+              --project-ref "$PROJECT_REF" \
+              --use-api \
+              --no-verify-jwt
+          else
+            # Deploy every local function and remove remote functions that no
+            # longer exist in this repository, keeping Supabase in sync with main.
+            supabase functions deploy \
+              --project-ref "$PROJECT_REF" \
+              --use-api \
+              --no-verify-jwt \
+              --prune
           fi
