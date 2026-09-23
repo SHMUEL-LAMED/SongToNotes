@@ -102,6 +102,7 @@ export const ACTIONS: ActionSpec[] = [
   define(null, "write", "account.open", "פתיחת האזור האישי", "פותח את האזור האישי (ההיסטוריה והקבצים השמורים)."),
   define(null, "write", "account.close", "סגירת האזור האישי", "סוגר את האזור האישי."),
   define(null, "write", "theme.set", "ערכת נושא", "מחליף בין ערכת נושא בהירה, כהה או לפי המערכת.", ["theme:light|dark|system"]),
+  define(null, "write", "theme.color", "צבע האתר", "מחליף את צבע האתר; everywhere צובע בו גם את כל הכלים.", ["color:default|סגול|ורוד|אדום|כתום|זהב|ירוק|טורקיז|כחול|אינדיגו", "everywhere?:boolean"]),
   define(null, "read", "works.list", "רשימת העבודות השמורות", "העבודות השמורות של הגולש (כותרת, סוג, תיאור, מזהה), החדשות קודם.", ["kind?:notes|ringtone|vocals|speed|piano|analysis|ear|metronome|tuner|transcript|chords|song|convert|rhythm|mix|lyrics|tts", ["query?", "סינון לפי טקסט בכותרת"], "limit?:number"]),
   define(null, "write", "works.open", "פתיחת עבודה שמורה", "פותח עבודה שמורה בכלי שיצר אותה.", [["id", "מזהה מתוך works.list"]]),
   define(null, "write", "works.rename", "שינוי שם לעבודה", "משנה את הכותרת של עבודה שמורה.", ["id", "title"]),

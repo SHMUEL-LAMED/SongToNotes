@@ -31,7 +31,7 @@ type Props = PropsWithChildren<{
   owner: boolean;
   disabledTools: string[];
   themePreference: ThemePreference;
-  onCycleTheme: () => void;
+  onOpenAppearance: () => void;
   onNavigate: (route: string) => void;
   onOpenAccount: () => void;
   onOpenPalette: () => void;
@@ -53,7 +53,7 @@ export function AppShell({
   owner,
   disabledTools,
   themePreference,
-  onCycleTheme,
+  onOpenAppearance,
   onNavigate,
   onOpenAccount,
   onOpenPalette,
@@ -267,7 +267,7 @@ export function AppShell({
             <button type="button" className="icon-button shortcuts-button" onClick={onOpenShortcuts} aria-label="קיצורי מקלדת" title="קיצורי מקלדת (?)">
               <Keyboard size={17} />
             </button>
-            <ThemeToggle preference={themePreference} onCycle={onCycleTheme} />
+            <ThemeToggle preference={themePreference} onOpen={onOpenAppearance} />
             <button
               className={`account-button ${account ? "is-current" : ""}`}
               type="button"

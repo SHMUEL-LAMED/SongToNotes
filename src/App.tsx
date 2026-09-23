@@ -1,9 +1,10 @@
-import { CircleSlash, Info, Keyboard, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
+import { CircleSlash, Info, Keyboard, Palette, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
 import { AppShell } from "./components/AppShell";
+import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
@@ -19,7 +20,7 @@ import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
-import { useTheme, type ThemePreference } from "./lib/theme";
+import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
@@ -132,6 +133,8 @@ function WorkspaceApp() {
   }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const { accent, setAccent } = useAccent();
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
   const owner = isAdmin(user);
@@ -205,6 +208,7 @@ function WorkspaceApp() {
   }, [user]);
   useCommandKey(openPalette);
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
+  const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -234,7 +238,7 @@ function WorkspaceApp() {
   // What the assistant may do on the site itself, from any page.
   useAssistantTool("site", {
     state: () =>
-      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
     handlers: {
       navigate: ({ tool: target }) => {
         const id = String(target);
@@ -254,6 +258,16 @@ function WorkspaceApp() {
       "account.close": () => {
         setAccountOpen(false);
         return { ok: true, message: "האזור האישי נסגר" };
+      },
+      "theme.color": ({ color, everywhere }) => {
+        if (color === "default") {
+          setAccent({ hue: null, everywhere: false });
+          return { ok: true, message: "הצבע חזר לברירת המחדל" };
+        }
+        const found = ACCENT_CHOICES.find((item) => item.label === color || String(item.hue) === String(color));
+        if (!found) return { ok: false, message: `הצבעים: ${ACCENT_CHOICES.map((item) => item.label).join(", ")} או default` };
+        setAccent({ hue: found.hue, everywhere: Boolean(everywhere) });
+        return { ok: true, message: `צבע האתר: ${found.label}${everywhere ? ", בכל הכלים" : ""}` };
       },
       "theme.set": ({ theme: choice }) => {
         theme.setPreference(choice as ThemePreference);
@@ -315,6 +329,7 @@ function WorkspaceApp() {
       { id: "page:home", label: "דף הבית", group: "דפים", icon: <House size={15} />, run: () => go("home") },
       { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
+      { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
@@ -371,7 +386,7 @@ function WorkspaceApp() {
       owner={owner}
       disabledTools={control.disabledTools}
       themePreference={theme.preference}
-      onCycleTheme={theme.cycle}
+      onOpenAppearance={() => setAppearanceOpen(true)}
       onNavigate={go}
       onOpenAccount={() => setAccountOpen(true)}
       onOpenPalette={openPalette}
@@ -394,6 +409,14 @@ function WorkspaceApp() {
 
       <CommandPalette open={paletteOpen} items={commands} onClose={() => setPaletteOpen(false)} />
       <ShortcutsDialog open={shortcutsOpen} onClose={closeShortcuts} />
+      <AppearanceDialog
+        open={appearanceOpen}
+        onClose={closeAppearance}
+        preference={theme.preference}
+        onPreference={theme.setPreference}
+        accent={accent}
+        onAccent={setAccent}
+      />
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">
