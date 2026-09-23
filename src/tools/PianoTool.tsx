@@ -1,5 +1,7 @@
 import { Circle, Download, Piano, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MidiButton } from "../components/MidiButton";
+import { useMidiInput } from "../lib/midiInput";
 import { SaveButton } from "../components/SaveButton";
 import { midiToFrequency } from "../lib/dsp";
 import { downloadFile, notesToMidi } from "../lib/export";
@@ -201,6 +203,14 @@ export function PianoTool() {
     voice.release();
     voicesRef.current.delete(midi);
   }, []);
+
+  // A keyboard plugged into the computer plays the same voices, across its
+  // whole range rather than only the octaves on screen.
+  const midi = useMidiInput({
+    onNoteOn: (note) => noteOn(note),
+    onNoteOff: (note) => noteOff(note),
+    onSustain: setSustain,
+  });
 
   // Turning sustain off releases whatever the pedal was still holding.
   useEffect(() => {
@@ -529,6 +539,7 @@ export function PianoTool() {
         >
           פדל סוסטיין {sustain ? "פועל" : "כבוי"}
         </button>
+        <MidiButton midi={midi} />
         <button
           className={`secondary-button ${recording ? "is-danger" : ""}`}
           type="button"
