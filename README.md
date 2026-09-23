@@ -79,7 +79,7 @@ npm run dev
 
 פונקציות ה־Edge אינן נפרסות עם האתר: פריסת GitHub Pages מעלה רק את
 `dist/`. אחרי שינוי ב־`supabase/functions/*` צריך להריץ
-`supabase functions deploy <name>` (או להעלות אותן מלוח הבקרה), אחרת האתר
+`supabase functions deploy <name>` (או להעלות אותן מלוח הבקרה) — או לתת לזרימה `.github/workflows/functions.yml` לעשות את זה: היא פורסת כל פונקציה ששונתה ב־main, ואפשר להריץ אותה ידנית מ־Actions. היא צריכה סוד מאגר בשם `SUPABASE_ACCESS_TOKEN`. אחרת האתר
 החדש ידבר עם פונקציה ישנה.
 
 התמלול לטקסט רץ בפונקציית Edge, `supabase/functions/transcribe`, כדי שהגולש
