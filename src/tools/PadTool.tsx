@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CircleStop, Mic2, Play, RotateCcw, Square } from "lucide-react";
+import { CircleStop, Mic2, Play, RotateCcw } from "lucide-react";
 import "./pad.css";
 
 type Pad = { name: string; key: string; color: string; kind: "kick" | "snare" | "hat" | "clap" | "tom" | "perc" };
