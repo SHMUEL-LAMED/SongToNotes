@@ -41,7 +41,8 @@ const STATE_KEY = "musictools.beats.v1";
 const SAVED_KEY = "musictools.beats.saved.v1";
 
 type Stored = { pattern: Pattern; bpm: number; swing: number; volume: number; mix: Mix };
-type SavedBeat = { id: string; name: string; bpm: number; swing: number; pattern: Pattern; createdAt: string };
+/** A named beat keeps its mix too, so it sounds the way it did when it was saved. */
+type SavedBeat = { id: string; name: string; bpm: number; swing: number; pattern: Pattern; mix?: Mix; volume?: number; createdAt: string };
 
 function readStored(): Stored {
   const fallback: Stored = { pattern: PRESETS[0].pattern, bpm: PRESETS[0].bpm, swing: PRESETS[0].swing, volume: 0.85, mix: defaultMix() };
@@ -49,11 +50,7 @@ function readStored(): Stored {
     const raw = localStorage.getItem(STATE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<Stored>;
-    const mix = defaultMix();
-    for (const voice of VOICES) {
-      const item = parsed.mix?.[voice.id];
-      if (item) mix[voice.id] = { volume: clamp(Number(item.volume), 0, 1, 0.8), muted: Boolean(item.muted) };
-    }
+    const mix = readMix(parsed.mix);
     return {
       pattern: normalizePattern(parsed.pattern) ?? fallback.pattern,
       bpm: clamp(Number(parsed.bpm), 50, 220, fallback.bpm),
@@ -66,6 +63,15 @@ function readStored(): Stored {
   }
 }
 
+function readMix(raw: Partial<Mix> | undefined): Mix {
+  const mix = defaultMix();
+  for (const voice of VOICES) {
+    const item = raw?.[voice.id];
+    if (item) mix[voice.id] = { volume: clamp(Number(item.volume), 0, 1, 0.8), muted: Boolean(item.muted) };
+  }
+  return mix;
+}
+
 function readSaved(): SavedBeat[] {
   try {
     const raw = localStorage.getItem(SAVED_KEY);
@@ -74,7 +80,14 @@ function readSaved(): SavedBeat[] {
       ? list.flatMap((item) => {
           const pattern = normalizePattern(item?.pattern);
           return pattern && typeof item.name === "string"
-            ? [{ ...item, pattern, bpm: clamp(Number(item.bpm), 50, 220, 100), swing: clamp(Number(item.swing), 0, 0.6, 0) }]
+            ? [{
+                ...item,
+                pattern,
+                bpm: clamp(Number(item.bpm), 50, 220, 100),
+                swing: clamp(Number(item.swing), 0, 0.6, 0),
+                mix: item.mix ? readMix(item.mix) : undefined,
+                volume: item.volume === undefined ? undefined : clamp(Number(item.volume), 0, 1, 0.85),
+              }]
             : [];
         })
       : [];
@@ -216,26 +229,34 @@ export function BeatMakerTool() {
     return true;
   };
 
-  const render = async () => {
-    const buffer = await renderPattern({ pattern, mix, bpm, swing, volume, bars });
+  const render = async (length: number) => {
+    const buffer = await renderPattern({ pattern, mix, bpm, swing, volume, bars: length });
     const blob = encodeWav(fromAudioBuffer(buffer));
-    return new File([blob], `beat-${bpm}bpm-${bars}bars.wav`, { type: "audio/wav" });
+    return new File([blob], `beat-${bpm}bpm-${length}bars.wav`, { type: "audio/wav" });
   };
 
-  const exportTo = async (target: "download" | "mixer" | "convert") => {
-    if (busy) return;
+  /** Renders and sends the loop; resolves with the file, or with the reason it did not happen. */
+  const exportTo = async (
+    target: "download" | "mixer" | "convert",
+    length = bars,
+  ): Promise<{ file: File } | { error: string }> => {
+    if (busy) return { error: "ייצוא אחר כבר רץ." };
     if (!countHits(pattern)) {
-      setError("הרשת ריקה — צריך לפחות מכה אחת כדי שיהיה מה לייצא.");
-      return;
+      const message = "הרשת ריקה — צריך לפחות מכה אחת כדי שיהיה מה לייצא.";
+      setError(message);
+      return { error: message };
     }
     setBusy(target);
     setError(null);
     try {
-      const file = await render();
+      const file = await render(length);
       if (target === "download") downloadFile(file, file.name, file.type);
       else await handOffTo(target, file, "הביט ממכונת התופים");
+      return { file };
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "הייצוא נכשל.");
+      const message = caught instanceof Error ? caught.message : "הייצוא נכשל.";
+      setError(message);
+      return { error: message };
     } finally {
       setBusy(null);
     }
@@ -253,7 +274,7 @@ export function BeatMakerTool() {
   const saveCurrent = () => {
     const title = name.trim() || `ביט ${saved.length + 1} · ${bpm} BPM`;
     persistSaved([
-      { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: title.slice(0, 60), bpm, swing, pattern, createdAt: new Date().toISOString() },
+      { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: title.slice(0, 60), bpm, swing, pattern, mix, volume, createdAt: new Date().toISOString() },
       ...saved,
     ].slice(0, 40));
     setName("");
@@ -303,9 +324,12 @@ export function BeatMakerTool() {
         return { ok: true, message: `${VOICES.find((item) => item.id === id)?.label}: ${list.length} צעדים` };
       },
       "beats.export": async ({ bars: nextBars }) => {
-        if (nextBars !== undefined) setBars(clamp(Number(nextBars), 1, 16, bars));
-        await exportTo("download");
-        return { ok: true, message: "קובץ ה־WAV ירד" };
+        const length = nextBars === undefined ? bars : Math.round(clamp(Number(nextBars), 1, 16, bars));
+        if (nextBars !== undefined) setBars(length);
+        const outcome = await exportTo("download", length);
+        return "file" in outcome
+          ? { ok: true, message: `${outcome.file.name} ירד (${length} תיבות)` }
+          : { ok: false, message: outcome.error };
       },
     },
   });
@@ -528,6 +552,8 @@ export function BeatMakerTool() {
                     setPattern(item.pattern);
                     setBpm(item.bpm);
                     setSwing(item.swing);
+                    if (item.mix) setMix(item.mix);
+                    if (item.volume !== undefined) setVolume(item.volume);
                   }}
                 >
                   <b>{item.name}</b>

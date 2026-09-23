@@ -100,8 +100,8 @@ export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
             הסטודיו המוזיקלי <span className="gradient-text">שלך, בדפדפן.</span>
           </h1>
           <p>
-            תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {TOOLS.length} כלים שרצים אצלך
-            במכשיר. שום קובץ לא עולה לשרת.
+            תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {TOOLS.length} כלים, ורובם רצים
+            כולם אצלך במכשיר, בלי להעלות את הקובץ.
           </p>
           <div className="hero-actions">
             <button type="button" className="primary-button compact" onClick={() => onOpen("notes")}>
@@ -117,8 +117,8 @@ export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
               <dd>{TOOLS.length}</dd>
             </div>
             <div>
-              <dt>העלאות לשרת</dt>
-              <dd>0</dd>
+              <dt>כלים בדפדפן בלבד</dt>
+              <dd>{TOOLS.filter((tool) => !tool.server).length}</dd>
             </div>
             <div>
               <dt>מחיר</dt>
@@ -329,7 +329,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
           <div>
             <ShieldCheck size={20} />
             <h3>פרטי מהיסוד</h3>
-            <p>השמע מעובד בדפדפן. אין העלאה, אין שמירה בשרת, אין מעקב אחרי מה שעשית.</p>
+            <p>ברוב הכלים השמע מעובד בדפדפן ולא עולה לשום מקום. הכלים שנעזרים בשרת מסומנים ככאלה.</p>
           </div>
           <div>
             <WifiOff size={20} />

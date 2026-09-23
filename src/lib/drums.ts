@@ -307,6 +307,8 @@ type Settings = { pattern: Pattern; mix: Mix; bpm: number; swing: number; volume
 export class BeatPlayer {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** One bus per run: stopping silences and drops it, taking the hits already scheduled with it. */
+  private bus: GainNode | null = null;
   private timer: number | null = null;
   private nextStep = 0;
   private nextTime = 0;
@@ -353,6 +355,8 @@ export class BeatPlayer {
     const context = this.ensureContext();
     if (context.state === "suspended") await context.resume();
     if (this.timer !== null) return;
+    this.bus = context.createGain();
+    this.bus.connect(this.master!);
     this.nextStep = 0;
     this.nextTime = context.currentTime + 0.08;
     this.queue = [];
@@ -364,6 +368,16 @@ export class BeatPlayer {
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = null;
     this.queue = [];
+    const bus = this.bus;
+    this.bus = null;
+    if (bus && this.context) {
+      // A few milliseconds of fade rather than a click, then the bus and
+      // everything still queued on it are gone.
+      const now = this.context.currentTime;
+      bus.gain.setValueAtTime(bus.gain.value, now);
+      bus.gain.linearRampToValueAtTime(0, now + 0.015);
+      window.setTimeout(() => bus.disconnect(), 60);
+    }
   }
 
   dispose() {
@@ -384,7 +398,7 @@ export class BeatPlayer {
 
   private schedule() {
     const context = this.context;
-    if (!context || !this.master) return;
+    if (!context || !this.bus) return;
     const { pattern, mix, bpm, swing } = this.settings;
     const stepSeconds = 60 / bpm / 4;
     while (this.nextTime < context.currentTime + 0.12) {
@@ -392,7 +406,7 @@ export class BeatPlayer {
       const at = this.nextTime + swungDelay;
       for (const voice of VOICES) {
         const level = levelFor(pattern[voice.id][this.nextStep], mix[voice.id]);
-        if (level > 0) playVoice(context, this.master, voice.id, at, level);
+        if (level > 0) playVoice(context, this.bus, voice.id, at, level);
       }
       this.queue.push({ step: this.nextStep, time: at });
       this.nextTime += stepSeconds;
@@ -403,15 +417,21 @@ export class BeatPlayer {
 
 /* ---- rendering to a file ---- */
 
-/** The groove rendered to audio, `bars` times over, with a short tail for the last hits to ring out. */
+const TAIL_SECONDS = 0.5;
+
+/**
+ * The groove rendered to audio, `bars` times over. The file is exactly that
+ * many bars long so it loops on the grid: the ring-out of the last hits is
+ * folded back onto the start, the way it sounds when the loop repeats.
+ */
 export async function renderPattern(settings: Settings & { bars: number }, sampleRate = 44_100): Promise<AudioBuffer> {
   const OfflineContext =
     window.OfflineAudioContext ||
     (window as typeof window & { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
   if (!OfflineContext) throw new Error("הדפדפן הזה אינו תומך בעיבוד אודיו.");
   const bar = barSeconds(settings.bpm);
-  const duration = bar * settings.bars + 0.5;
-  const context = new OfflineContext(2, Math.ceil(duration * sampleRate), sampleRate);
+  const loopFrames = Math.round(bar * settings.bars * sampleRate);
+  const context = new OfflineContext(2, loopFrames + Math.ceil(TAIL_SECONDS * sampleRate), sampleRate);
   const master = context.createGain();
   master.gain.value = settings.volume;
   const compressor = context.createDynamicsCompressor();
@@ -428,5 +448,20 @@ export async function renderPattern(settings: Settings & { bars: number }, sampl
       }
     }
   }
-  return context.startRendering();
+  const rendered = await context.startRendering();
+  const loop = new AudioBuffer({ length: loopFrames, numberOfChannels: rendered.numberOfChannels, sampleRate });
+  for (let channel = 0; channel < rendered.numberOfChannels; channel += 1) {
+    loop.copyToChannel(foldTail(rendered.getChannelData(channel), loopFrames), channel);
+  }
+  return loop;
+}
+
+/** The first `length` samples, with everything after them added back onto the start. */
+export function foldTail(samples: Float32Array, length: number): Float32Array<ArrayBuffer> {
+  const out = samples.slice(0, length);
+  for (let index = length; index < samples.length; index += 1) {
+    const target = (index - length) % length;
+    out[target] = Math.max(-1, Math.min(1, out[target] + samples[index]));
+  }
+  return out;
 }

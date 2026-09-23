@@ -7,7 +7,7 @@ export function SiteFooter({ onOpen }: { onOpen: (route: string) => void }) {
       <button type="button" className="brand brand-button" onClick={() => onOpen("home")} aria-label="לדף הבית">
         <Logo compact />
       </button>
-      <p>כל העיבוד קורה בדפדפן שלך · חינם, בלי פרסומות ובלי הרשמה</p>
+      <p>רוב העיבוד קורה בדפדפן שלך · חינם, בלי פרסומות ובלי הרשמה</p>
       <nav aria-label="קישורים">
         <button type="button" onClick={() => onOpen("notes")}>שיר לתווים</button>
         <button type="button" onClick={() => onOpen("vocals")}>קריוקי</button>

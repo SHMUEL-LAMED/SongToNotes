@@ -13,6 +13,8 @@ describe("spelling a scale", () => {
 
   it("writes minor keys the way they are usually read", () => {
     expect(names(1, "minor")[0]).toBe("C♯");
+    expect(names(3, "minor")).toEqual(["D♯", "E♯", "F♯", "G♯", "A♯", "B", "C♯"]);
+    expect(names(3, "major")[0]).toBe("E♭");
     expect(names(8, "harmonicMinor")).toEqual(["G♯", "A♯", "B", "C♯", "D♯", "E", "F𝄪"]);
   });
 

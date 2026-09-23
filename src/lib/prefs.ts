@@ -13,8 +13,12 @@ const RECENT_LIMIT = 8;
 
 const listeners = new Set<() => void>();
 const cache = new Map<string, { raw: string | null; value: string[] }>();
+/** Lists that could not be written to storage live here for the visit, and win over it. */
+const memory = new Map<string, string[]>();
 
 function readList(key: string): string[] {
+  const held = memory.get(key);
+  if (held) return held;
   let raw: string | null = null;
   try {
     raw = localStorage.getItem(key);
@@ -37,9 +41,10 @@ function readList(key: string): string[] {
 function writeList(key: string, value: string[]) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    memory.delete(key);
   } catch {
-    // Kept in memory only.
-    cache.set(key, { raw: JSON.stringify(value), value });
+    // Kept in memory only, for the rest of the visit.
+    memory.set(key, value);
   }
   listeners.forEach((listener) => listener());
 }

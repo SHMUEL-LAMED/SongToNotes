@@ -24,9 +24,10 @@ export const ROOTS: { name: string; pc: number; letter: number }[] = [
   { name: "B", pc: 11, letter: 6 },
 ];
 
-/** Minor keys read better with sharps on these roots: C♯m, F♯m, G♯m. */
+/** Minor keys read with sharps on these roots, as the circle writes them: C♯m, D♯m, G♯m. */
 const MINOR_ROOTS: Record<number, { name: string; letter: number }> = {
   1: { name: "C♯", letter: 0 },
+  3: { name: "D♯", letter: 1 },
   8: { name: "G♯", letter: 4 },
 };
 

@@ -13,7 +13,8 @@ function isVideo(file: File) {
 /**
  * The home page's front door: drop any song, recording or video and pick
  * what to do with it. The file is handed to the chosen tool through the
- * same hand-off the tools use among themselves — it never leaves the device.
+ * same hand-off the tools use among themselves; it waits on the device
+ * until a tool is chosen.
  */
 export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] }) {
   const [file, setFile] = useState<File | null>(null);
@@ -23,8 +24,18 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
 
   const choose = (candidate?: File | null) => {
     if (!candidate) return;
-    const problem = validateAudioFile(candidate, 800 * 1024 * 1024);
-    if (problem && !isVideo(candidate)) {
+    const limit = 800 * 1024 * 1024;
+    // Empty and oversized files are refused whatever they are; only the
+    // audio-type check is waived for a video.
+    const problem =
+      candidate.size === 0
+        ? "הקובץ ריק."
+        : candidate.size > limit
+          ? `הקובץ גדול מ־${formatBytes(limit)}.`
+          : isVideo(candidate)
+            ? null
+            : validateAudioFile(candidate, limit);
+    if (problem) {
       setError(problem);
       return;
     }
@@ -61,7 +72,7 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
           <div>
             <strong>{file.name}</strong>
             <small>
-              {formatBytes(file.size)} · {video ? "סרטון" : "קובץ שמע"} · נשאר במכשיר שלך
+              {formatBytes(file.size)} · {video ? "סרטון" : "קובץ שמע"} · מחכה במכשיר עד שתבחרו
             </small>
           </div>
           <button type="button" className="icon-button" onClick={() => setFile(null)} aria-label="בחירת קובץ אחר" title="קובץ אחר">

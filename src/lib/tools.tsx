@@ -43,6 +43,8 @@ export type ToolDefinition = {
   quick?: string;
   /** Tools that naturally come next, offered at the foot of the page. */
   related: string[];
+  /** True when the tool sends audio or text to the site's server to do its work. */
+  server?: boolean;
 };
 
 export const CATEGORY_LABELS: Record<ToolCategory, string> = {
@@ -161,6 +163,7 @@ export const TOOLS: ToolDefinition[] = [
     tags: ["מילים", "קריוקי", "lrc", "כתוביות", "סנכרון"],
     quick: "מילים מסונכרנות",
     related: ["vocals", "songbook", "transcript"],
+    server: true,
   },
   {
     id: "tts",
@@ -173,6 +176,7 @@ export const TOOLS: ToolDefinition[] = [
     category: "create",
     tags: ["הקראה", "דיבור", "tts", "קול", "mp3"],
     related: ["transcript", "convert", "mixer"],
+    server: true,
   },
   {
     id: "speed",
@@ -284,6 +288,7 @@ export const TOOLS: ToolDefinition[] = [
     tags: ["תמלול", "טקסט", "כתוביות", "srt", "דיבור", "כתוביות לסרטון"],
     quick: "תמלול לטקסט",
     related: ["tts", "lyrics", "video"],
+    server: true,
   },
   {
     id: "chords",
@@ -309,6 +314,7 @@ export const TOOLS: ToolDefinition[] = [
     category: "analyze",
     tags: ["זיהוי שיר", "שאזאם", "מה השיר", "אמן"],
     related: ["chords", "lyrics", "analyze"],
+    server: true,
   },
   {
     id: "analyze",

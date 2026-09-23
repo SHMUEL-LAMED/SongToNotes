@@ -332,6 +332,7 @@
   white-space: nowrap;
 }
 .privacy-pill svg { color: var(--success); }
+.privacy-pill.is-server svg { color: var(--accent); }
 
 /* ---- small square buttons ---- */
 

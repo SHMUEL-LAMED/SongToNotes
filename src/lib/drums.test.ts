@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRESETS, STEPS, VOICES, barSeconds, countHits, emptyPattern, normalizePattern, randomPattern, stepOffset } from "./drums";
+import { PRESETS, STEPS, VOICES, barSeconds, countHits, emptyPattern, foldTail, normalizePattern, randomPattern, stepOffset } from "./drums";
 
 describe("patterns", () => {
   it("starts empty, one row per voice", () => {
@@ -47,5 +47,18 @@ describe("timing", () => {
     expect(stepOffset(2, 120, 0.5)).toBeCloseTo(stepOffset(2, 120, 0));
     expect(stepOffset(3, 120, 0.5)).toBeGreaterThan(stepOffset(3, 120, 0));
     expect(stepOffset(3, 120, 0.5)).toBeLessThan(stepOffset(4, 120, 0));
+  });
+});
+
+describe("loop files", () => {
+  it("stay exactly the loop long, with the ring-out folded onto the start", () => {
+    const rendered = new Float32Array([0.1, 0.2, 0.3, 0.4, 0.5, 0.25, 0.1]);
+    const loop = foldTail(rendered, 5);
+    expect(loop).toHaveLength(5);
+    [0.35, 0.3, 0.3, 0.4, 0.5].forEach((value, index) => expect(loop[index]).toBeCloseTo(value, 5));
+  });
+
+  it("never clips past full scale when folding", () => {
+    expect(foldTail(new Float32Array([0.9, 0, 0.9]), 2)[0]).toBe(1);
   });
 });

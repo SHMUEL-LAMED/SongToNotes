@@ -1,5 +1,6 @@
 import {
   ChevronLeft,
+  Cloud,
   History,
   House,
   Keyboard,
@@ -195,7 +196,7 @@ export function AppShell({
         <div className="sidebar-foot">
           <p className="sidebar-note">
             <LockKeyhole size={14} />
-            <span>הקבצים שלכם לא עוזבים את המכשיר. העיבוד כולו קורה בדפדפן.</span>
+            <span>רוב הכלים עובדים כולם בדפדפן. תמלול, מילים, הקראה וזיהוי שיר נעזרים בשרת.</span>
           </p>
         </div>
       </aside>
@@ -251,9 +252,15 @@ export function AppShell({
                 <Star size={17} />
               </button>
             )}
-            <span className="privacy-pill">
-              <LockKeyhole size={14} /> הקובץ נשאר אצלך
-            </span>
+            {tool?.server ? (
+              <span className="privacy-pill is-server">
+                <Cloud size={14} /> הכלי נעזר בשרת
+              </span>
+            ) : (
+              <span className="privacy-pill">
+                <LockKeyhole size={14} /> הקובץ נשאר אצלך
+              </span>
+            )}
             <button type="button" className="icon-button topbar-search" onClick={openPalette} aria-label="חיפוש">
               <Search size={17} />
             </button>
