@@ -7,7 +7,6 @@ import {
   Clapperboard,
   Compass,
   Disc3,
-  Disc,
   Drum,
   Ear,
   FileMusic,
@@ -61,17 +60,6 @@ export const CATEGORY_ORDER: ToolCategory[] = ["create", "practice", "analyze"];
  * titles, so adding a tool is a matter of one entry here and one component.
  */
 export const TOOLS: ToolDefinition[] = [
-  {
-    id: "dj",
-    title: "עמדת די־ג׳יי",
-    tagline: "שני שירים, מעבר אחד חלק",
-    description: "טוענים שני שירים, מאזינים לכל אחד ומעבירים ביניהם עם קרוספיידר ועוצמה נפרדת.",
-    icon: Disc,
-    hue: 267,
-    category: "create",
-    tags: ["די־ג׳יי", "DJ", "מיקס", "קרוספיידר"],
-    related: ["mixer", "beats", "ringtone"],
-  },
   {
     id: "notes",
     title: "שיר לתווים",
