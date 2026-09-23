@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 const SHORTCUTS: { label: string; keys: string[] }[] = [
   { label: "חיפוש כלי, עבודה או פעולה", keys: ["Ctrl", "K"] },
+  { label: "פתיחה וסגירה של העוזר", keys: ["Ctrl", "J"] },
   { label: "רשימת הקיצורים הזאת", keys: ["?"] },
   { label: "סגירת חלון או תפריט", keys: ["Esc"] },
   { label: "ניגון ועצירה במטרונום, בפסנתר ובתווים", keys: ["רווח"] },

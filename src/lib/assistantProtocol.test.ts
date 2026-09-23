@@ -68,3 +68,25 @@ describe("parseAssistantReply", () => {
     expect(parsed.actions.map((call) => call.id)).toEqual(["a.b", "c.d"]);
   });
 });
+
+describe("plans", () => {
+  it("reads a plan block into steps and keeps it out of the prose", () => {
+    const parsed = parseAssistantReply("מתחיל.\n```plan\n- [x] לפתוח את המטרונום\n- [~] לקבוע 100 BPM\n- [ ] להפעיל\n```\n```action\n{\"action\":\"metronome.start\"}\n```");
+    expect(parsed.text).toBe("מתחיל.");
+    expect(parsed.plan).toEqual([
+      { text: "לפתוח את המטרונום", status: "done" },
+      { text: "לקבוע 100 BPM", status: "active" },
+      { text: "להפעיל", status: "pending" },
+    ]);
+    expect(parsed.actions).toHaveLength(1);
+  });
+  it("accepts numbered steps without boxes", () => {
+    expect(parseAssistantReply("```plan\n1. אחד\n2. שניים\n```").plan).toEqual([
+      { text: "אחד", status: "pending" },
+      { text: "שניים", status: "pending" },
+    ]);
+  });
+  it("has no plan when none was written", () => {
+    expect(parseAssistantReply("שלום").plan).toBeNull();
+  });
+});

@@ -49,6 +49,8 @@ import { VocalsTool } from "./tools/VocalsTool";
 // The transcriber pulls in the engraver and, through it, the biggest slice of
 // the bundle. Splitting it out keeps the hub and the lighter tools quick to
 // open for someone who never asks for sheet music.
+const ASSISTANT_OPEN_KEY = "musictools.assistant.open.v1";
+
 const TranscriberTool = lazy(() =>
   import("./tools/TranscriberTool").then((module) => ({ default: module.TranscriberTool })),
 );
@@ -102,7 +104,26 @@ function WorkspaceApp() {
   );
   const [shellError, setShellError] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  // The assistant stays docked across visits once it was left open, on a
+  // screen wide enough to hold it beside the page.
+  const [assistantOpen, setAssistantOpenState] = useState(() => {
+    try {
+      return localStorage.getItem(ASSISTANT_OPEN_KEY) === "1" && window.matchMedia("(min-width: 1100px)").matches;
+    } catch {
+      return false;
+    }
+  });
+  const setAssistantOpen = useCallback((value: boolean | ((open: boolean) => boolean)) => {
+    setAssistantOpenState((current) => {
+      const next = typeof value === "function" ? value(current) : value;
+      try {
+        localStorage.setItem(ASSISTANT_OPEN_KEY, next ? "1" : "0");
+      } catch {
+        // Fine.
+      }
+      return next;
+    });
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
@@ -138,9 +159,15 @@ function WorkspaceApp() {
     if (tool) recordToolVisit(tool.id);
   }, [tool]);
 
-  // "?" anywhere outside a text field opens the shortcuts sheet.
+  // "?" anywhere outside a text field opens the shortcuts sheet; Ctrl+J,
+  // from anywhere, shows or hides the assistant.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === "j" || event.key === "J" || event.code === "KeyJ")) {
+        event.preventDefault();
+        setAssistantOpen((open) => !open);
+        return;
+      }
       if (event.key !== "?" || event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
@@ -149,7 +176,7 @@ function WorkspaceApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setAssistantOpen]);
 
   // What the site counts about itself: which page was opened and for how
   // long. The route is all it is told — never what was done there.

@@ -4,21 +4,25 @@ import {
   CircleHelp,
   Copy,
   History,
+  ListChecks,
   LoaderCircle,
   LogIn,
-  Maximize2,
+  MapPin,
   MessageSquarePlus,
-  MousePointerClick,
-  Minimize2,
+  Mic,
+  MicOff,
   Pencil,
+  Play,
   RefreshCw,
+  Settings2,
   SendHorizontal,
   Sparkles,
   Square,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AiError, chatStream, type AssistantMode, type ChatMessage } from "../lib/aiApi";
 import {
   describeCatalog,
@@ -42,7 +46,7 @@ import {
   type Chat,
   type StoredMessage,
 } from "../lib/assistantChats";
-import { parseAssistantReply } from "../lib/assistantProtocol";
+import { parseAssistantReply, type PlanStep } from "../lib/assistantProtocol";
 import { useAuth } from "../lib/auth";
 import { renderMarkdown } from "../lib/markdown";
 
@@ -62,6 +66,7 @@ type Props = {
 type Message = StoredMessage;
 
 const MODE_KEY = "musictools.assistant.mode.v1";
+const PREFS_KEY = "musictools.assistant.prefs.v1";
 /**
  * A message is capped only where a text box has to stop somewhere; the
  * conversation itself is not trimmed here. What fits in the model's context
@@ -71,12 +76,22 @@ const MODE_KEY = "musictools.assistant.mode.v1";
 const MAX_MESSAGE = 32_000;
 /** How long after the last change the thread is written down. */
 const SAVE_AFTER = 700;
-/** How many times the model may act, look, and act again for one request. */
-const MAX_ROUNDS = 4;
+/** How many times the agent may act, look, and act again for one request. */
+const MAX_ROUNDS = 12;
 /** Actions run from one reply; anything past this is ignored. */
 const MAX_ACTIONS = 8;
 /** Between two actions, so the page has rendered the first before the second reads it. */
 const ACTION_GAP = 80;
+/** The panel's width, in pixels: what it opens at and how far it can be dragged. */
+const DEFAULT_WIDTH = 420;
+const MIN_WIDTH = 340;
+const MAX_WIDTH = 760;
+
+const MODES: { id: AssistantMode; label: string; hint: string; icon: typeof Zap }[] = [
+  { id: "question", label: "שאלה", hint: "תשובות והסברים, בלי לגעת בכלום", icon: CircleHelp },
+  { id: "plan", label: "תכנון", hint: "תוכנית צעד אחר צעד, ומבצעים בלחיצה", icon: ListChecks },
+  { id: "execute", label: "סוכן", hint: "מתכנן ומבצע באתר עד הסוף, בלי לעצור לאישור", icon: Zap },
+];
 
 const SUGGESTIONS = [
   "איך מוציאים תווים משיר?",
@@ -85,12 +100,19 @@ const SUGGESTIONS = [
   "תסביר לי מה זה סולם מז'ור",
 ];
 
-/** Things to ask the assistant to do, when it is allowed to do them. */
+/** Things to ask the agent to do. */
 const DO_SUGGESTIONS = [
   "כתוב שיר קצר על החורף עם אקורדים ושים אותו בשירון",
   "הפעל מטרונום ב־100 BPM במשקל 3/4",
   "פתח את הפסנתר ונגן אקורד דו מז'ור",
   "מה שמרתי באזור האישי?",
+];
+
+/** Bigger jobs, for the plan mode. */
+const PLAN_SUGGESTIONS = [
+  "תכנן לי אימון גיטרה של 20 דקות עם מטרונום ואקורדים",
+  "תכנן שיר יום הולדת: מילים, אקורדים, והקראה",
+  "תכנן ביט היפ־הופ ב־90 BPM ושמירה שלו",
 ];
 
 /** Something to ask about the page the visitor is on. */
@@ -107,9 +129,11 @@ const BY_TOOL: Record<string, string[]> = {
   analyze: ["מה זה Camelot ואיך משתמשים בו?"],
   chords: ["איך מנגנים אקורד באר?", "מה זה קאפו ולמה הוא עוזר?"],
   songbook: ["איך כותבים אקורדים מעל המילים?"],
+  beats: ["מה זה סווינג בתופים?"],
+  theory: ["איך עובד מעגל הקווינטות?", "מה ההבדל בין דוריאני למינור?"],
 };
 
-/** Something to ask the assistant to do on the page the visitor is on. */
+/** Something to ask the agent to do on the page the visitor is on. */
 const DO_BY_TOOL: Record<string, string[]> = {
   notes: ["טען את מנגינת הדוגמה והפוך אותה לתווים", "הורד את התוצאה כ־MIDI"],
   ringtone: ["קח את הפזמון ותעשה צלצול של 20 שניות"],
@@ -130,13 +154,36 @@ const DO_BY_TOOL: Record<string, string[]> = {
   convert: ["המר ל־MP3 באיכות 320"],
   video: ["חלץ את השמע כ־MP3 ושלח לתמלול"],
   identify: ["האזן וזהה את השיר"],
+  beats: ["בנה ביט טראפ ב־140 BPM והפעל", "הוסף היי־האט על כל שמינית"],
+  theory: ["הראה את סולם לה מינור על הגיטרה", "נגן את האקורד של הדרגה החמישית"],
 };
 
 function loadMode(): AssistantMode {
   try {
-    return localStorage.getItem(MODE_KEY) === "question" ? "question" : "execute";
+    const stored = localStorage.getItem(MODE_KEY);
+    return stored === "question" || stored === "plan" ? stored : "execute";
   } catch {
     return "execute";
+  }
+}
+
+type Prefs = { detailed: boolean; confirm: boolean; width: number };
+
+function clampWidth(value: number) {
+  const room = typeof window === "undefined" ? MAX_WIDTH : Math.max(MIN_WIDTH, window.innerWidth - 420);
+  return Math.round(Math.min(MAX_WIDTH, room, Math.max(MIN_WIDTH, value)));
+}
+
+function loadPrefs(): Prefs {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "null") as Partial<Prefs> | null;
+    return {
+      detailed: stored?.detailed === true,
+      confirm: stored?.confirm === true,
+      width: typeof stored?.width === "number" && Number.isFinite(stored.width) ? stored.width : DEFAULT_WIDTH,
+    };
+  } catch {
+    return { detailed: false, confirm: false, width: DEFAULT_WIDTH };
   }
 }
 
@@ -151,14 +198,73 @@ function whenLabel(value: string) {
   return Number.isNaN(date.getTime()) ? "" : timeFormat.format(date);
 }
 
+/** The newest plan in the thread, from the assistant's own turns. */
+function latestPlan(messages: Message[]): PlanStep[] | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "assistant") continue;
+    const { plan } = parseAssistantReply(message.content);
+    if (plan) return plan;
+  }
+  return null;
+}
+
+/** The browser's speech recognition, where there is one. */
+type Recognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+function speechRecognition(): (new () => Recognition) | null {
+  if (typeof window === "undefined") return null;
+  const scope = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
+  return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
+}
+
+/** A task list: what is done, what is under way, what is next. */
+function PlanCard({ steps, compact = false }: { steps: PlanStep[]; compact?: boolean }) {
+  const done = steps.filter((step) => step.status === "done").length;
+  return (
+    <div className={`assistant-plan ${compact ? "is-compact" : ""}`}>
+      <div className="assistant-plan-head">
+        <ListChecks size={15} />
+        <strong>תוכנית</strong>
+        <span>
+          {done}/{steps.length}
+        </span>
+      </div>
+      <div className="assistant-plan-bar" aria-hidden="true">
+        <span style={{ width: `${(done / steps.length) * 100}%` }} />
+      </div>
+      {!compact && (
+        <ol className="assistant-plan-steps">
+          {steps.map((step, index) => (
+            <li key={index} className={`is-${step.status}`}>
+              <span className="assistant-plan-mark" aria-hidden="true">
+                {step.status === "done" ? <Check size={12} /> : step.status === "active" ? <LoaderCircle size={12} className="spin" /> : index + 1}
+              </span>
+              <span dir="auto">{step.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 /**
- * A helper that answers questions about the tools and about music, and does
- * things on the site when asked to, from a button at the corner of every
- * page. The model runs on the site's server and its reply streams in as it
- * is written. In "do" mode the reply can carry actions ({@link ../lib/assistantProtocol});
- * the panel runs them one by one, asks the visitor before anything that
- * cannot be undone, and — when an action brought data back or failed —
- * reports the outcome to the model so it can carry on.
+ * The assistant, docked at the side of every page. It answers questions
+ * about the tools and about music, writes a plan for a bigger job, and — as
+ * an agent — carries the job out on the site: the reply can carry a plan and
+ * actions ({@link ../lib/assistantProtocol}), the panel runs the actions one
+ * by one, and whatever they brought back goes to the model for the next
+ * round until the plan is done. The model runs on the site's server and its
+ * reply streams in as it is written.
  *
  * Conversations are kept: the one on screen is written down as it grows, and
  * the rest are a click away in the history, on this device and — with an
@@ -183,24 +289,28 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   const [chat, setChat] = useState<Chat>(restored);
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>(restored.messages);
   const [draft, setDraft] = useState("");
-  const [detailed, setDetailed] = useState(false);
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [mode, setMode] = useState<AssistantMode>(loadMode);
   const [busy, setBusy] = useState(false);
   // The reply being written, shown as it grows.
   const [partial, setPartial] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<string | null>(null);
-  const [wide, setWide] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [model, setModel] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
   // The action under way, and an action waiting for the visitor's yes.
   const [acting, setActing] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const recognitionRef = useRef<Recognition | null>(null);
   // Set by the stop button: no further action of this request runs.
   const haltRef = useRef(false);
   // The text of the reply under way, for keeping it when the visitor stops.
@@ -209,6 +319,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   useEffect(() => {
     onOpenRef.current = onOpen;
   }, [onOpen]);
+  const width = clampWidth(prefs.width);
 
   // The thread is written down a moment after it stops changing, so a reply
   // streaming in token by token is one save rather than hundreds.
@@ -280,6 +391,24 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       // Fine.
     }
   }, [mode]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch {
+      // Fine.
+    }
+  }, [prefs]);
+
+  // Docked, the panel takes its width from the page rather than covering
+  // it: the shell reads these two from the root and makes room.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.assistant = open ? "open" : "closed";
+    root.style.setProperty("--assistant-w", `${width}px`);
+    return () => {
+      delete root.dataset.assistant;
+    };
+  }, [open, width]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: partial ? "auto" : "smooth" });
@@ -290,6 +419,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       abortRef.current?.abort();
       abortRef.current = null;
       haltRef.current = true;
+      recognitionRef.current?.stop();
     },
     [],
   );
@@ -298,23 +428,49 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     if (!open) return;
     const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // Escape closes the panel only from inside it: on the page it belongs
+      // to whatever dialog or menu is open there.
+      if (event.key === "Escape" && panelRef.current?.contains(event.target as Node)) {
+        if (showSettings) setShowSettings(false);
+        else onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, open]);
+  }, [onClose, open, showSettings]);
 
   // The box grows with the question, up to a few lines.
   const resize = useCallback(() => {
     const box = inputRef.current;
     if (!box) return;
     box.style.height = "auto";
-    box.style.height = `${Math.min(140, box.scrollHeight)}px`;
+    box.style.height = `${Math.min(180, box.scrollHeight)}px`;
   }, []);
   useEffect(resize, [draft, resize]);
+
+  /** Dragging the panel's inner edge makes it wider or narrower. */
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    event.preventDefault();
+    const rtl = getComputedStyle(panel).direction === "rtl";
+    const rect = panel.getBoundingClientRect();
+    const move = (moved: PointerEvent) => {
+      const next = rtl ? moved.clientX - rect.left : rect.right - moved.clientX;
+      setPrefs((current) => ({ ...current, width: clampWidth(next) }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.documentElement.classList.remove("is-resizing-assistant");
+    };
+    document.documentElement.classList.add("is-resizing-assistant");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   const stop = () => {
     haltRef.current = true;
@@ -330,7 +486,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     setPartial(null);
     if (kept) {
       const { text } = parseAssistantReply(kept);
-      if (text) setMessages((previous) => [...previous, { role: "assistant" as const, content: text }]);
+      if (text) setMessages((previous) => [...previous, { role: "assistant" as const, content: kept }]);
     }
   };
 
@@ -354,7 +510,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     for (const call of calls.slice(0, MAX_ACTIONS)) {
       if (haltRef.current) break;
       const spec = findAction(call.id);
-      if (spec?.confirm) {
+      if (spec?.confirm && prefs.confirm) {
         const approved = await askConfirmation(call, spec);
         if (haltRef.current) break;
         if (!approved) {
@@ -375,10 +531,11 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
 
   /**
    * One round: the model answers the conversation as it stands, its actions
-   * run, and — when it has something to learn from them — the outcome goes
-   * back as the next turn and the round repeats.
+   * run, and — when it has something to learn from them or steps of its
+   * plan are still open — the outcome goes back as the next turn and the
+   * round repeats.
    */
-  const converse = async (next: Message[], round: number): Promise<void> => {
+  const converse = async (next: Message[], round: number, runMode: AssistantMode): Promise<void> => {
     setMessages(next);
     setError(null);
     setRetry(null);
@@ -392,15 +549,26 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       controller.abort();
     }, 90_000);
     writtenRef.current = "";
+    let answeredBy: string | null = null;
     const asked = next[next.length - 1]?.content ?? "";
     try {
       const context = {
         state: describeState().slice(0, 4000) || undefined,
-        catalog: mode === "execute" ? describeCatalog(toolId) : undefined,
+        catalog: runMode === "question" ? undefined : describeCatalog(toolId),
       };
       const reply = await chatStream(
         toHistory(next),
-        { tool: toolId, detailed, mode, context, signal: controller.signal },
+        {
+          tool: toolId,
+          detailed: prefs.detailed,
+          mode: runMode,
+          context,
+          signal: controller.signal,
+          onModel: (name) => {
+            answeredBy = name;
+            setModel(name);
+          },
+        },
         (piece) => {
           if (controller.signal.aborted) return;
           writtenRef.current += piece;
@@ -410,12 +578,16 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       window.clearTimeout(timer);
       if (controller.signal.aborted) return;
       const parsed = parseAssistantReply(reply);
-      const actions = mode === "execute" ? parsed.actions : [];
-      const text = parsed.text || (actions.length ? "מבצע." : "");
-      if (!text) throw new Error("התקבלה תשובה ריקה. אפשר לנסות שוב.");
+      const actions = runMode === "execute" ? parsed.actions : [];
+      if (!parsed.text && !parsed.plan && !actions.length) throw new Error("התקבלה תשובה ריקה. אפשר לנסות שוב.");
       writtenRef.current = "";
       setPartial(null);
-      let entry: Message = { role: "assistant", content: text, ...(actions.length ? { actions: [] } : {}) };
+      let entry: Message = {
+        role: "assistant",
+        content: reply.trim(),
+        ...(actions.length ? { actions: [] } : {}),
+        ...(answeredBy ? { model: answeredBy } : {}),
+      };
       let history = [...next, entry];
       setMessages(history);
       if (!actions.length) return;
@@ -426,13 +598,15 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
         setMessages(history);
       });
       if (haltRef.current) return;
-      // A read brought data the model asked for; a failure is worth a
-      // second try. A plain success needs no more words from the model.
-      const worthAnotherRound = records.some((record) => (record.ok && record.data !== undefined) || (!record.ok && !record.cancelled));
+      // A read brought data the model asked for, a failure is worth a second
+      // try, and a plan with open steps is not finished: each of these is
+      // another round. A plain success with nothing left needs no more words.
+      const openSteps = (parsed.plan ?? (round > 0 ? latestPlan(next) : null) ?? []).some((step) => step.status !== "done");
+      const worthAnotherRound = openSteps || records.some((record) => (record.ok && record.data !== undefined) || (!record.ok && !record.cancelled));
       if (worthAnotherRound && round < MAX_ROUNDS) {
         abortRef.current = null;
         const report: Message = { role: "user", content: formatActionResults(records), hidden: true };
-        await converse([...history, report], round + 1);
+        await converse([...history, report], round + 1, runMode);
       }
     } catch (caught) {
       if (controller.signal.aborted) return;
@@ -448,15 +622,58 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     }
   };
 
-  const send = (content: string, base?: Message[]) => {
+  const send = (content: string, base?: Message[], runMode: AssistantMode = mode) => {
     const clean = content.trim();
     if (!clean || abortRef.current || !user) return;
     if (clean.length > MAX_MESSAGE) {
       setError(`אפשר לשלוח עד ${MAX_MESSAGE} תווים בכל הודעה.`);
       return;
     }
+    recognitionRef.current?.stop();
     setDraft("");
-    void converse([...(base ?? messages), { role: "user" as const, content: clean }], 0);
+    setShowSettings(false);
+    void converse([...(base ?? messages), { role: "user" as const, content: clean }], 0, runMode);
+  };
+
+  /** The plan on screen becomes the agent's task. */
+  const executePlan = () => {
+    setMode("execute");
+    send("בצע את התוכנית.", undefined, "execute");
+  };
+
+  /** Speaking instead of typing, where the browser can listen. */
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Speech = speechRecognition();
+    if (!Speech) {
+      setError("הדפדפן הזה לא תומך בהכתבה. אפשר לנסות ב־Chrome או ב־Edge.");
+      return;
+    }
+    const recognition = new Speech();
+    recognition.lang = "he-IL";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    const before = draft ? `${draft.trimEnd()} ` : "";
+    recognition.onresult = (event) => {
+      let heard = "";
+      for (let index = 0; index < event.results.length; index += 1) heard += event.results[index][0].transcript;
+      setDraft(before + heard);
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
   };
 
   /** Puts the current thread away and starts an empty one. */
@@ -526,61 +743,96 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     send(draft);
   };
 
+  const current = MODES.find((item) => item.id === mode) ?? MODES[2];
   const starters =
     mode === "execute"
-      ? [...(toolId && DO_BY_TOOL[toolId] ? DO_BY_TOOL[toolId] : []), ...(toolId && BY_TOOL[toolId] ? BY_TOOL[toolId].slice(0, 1) : []), ...DO_SUGGESTIONS.slice(0, toolId ? 2 : 4)]
-      : toolId && BY_TOOL[toolId]
-        ? [...BY_TOOL[toolId], ...SUGGESTIONS.slice(0, 2)]
-        : toolTitle
-          ? [`איך משתמשים בכלי ${toolTitle}?`, ...SUGGESTIONS.slice(0, 3)]
-          : SUGGESTIONS;
+      ? [...(toolId && DO_BY_TOOL[toolId] ? DO_BY_TOOL[toolId] : []), ...DO_SUGGESTIONS.slice(0, toolId ? 2 : 4)]
+      : mode === "plan"
+        ? PLAN_SUGGESTIONS
+        : toolId && BY_TOOL[toolId]
+          ? [...BY_TOOL[toolId], ...SUGGESTIONS.slice(0, 2)]
+          : toolTitle
+            ? [`איך משתמשים בכלי ${toolTitle}?`, ...SUGGESTIONS.slice(0, 3)]
+            : SUGGESTIONS;
   const shown = messages.filter((message) => !message.hidden);
   const lastAssistant = shown.length > 0 && shown[shown.length - 1].role === "assistant";
   const lastShownIndex = messages.lastIndexOf(shown[shown.length - 1]);
+  // Only the newest plan is shown in full; the ones it replaced shrink to their bar.
+  const lastPlanIndex = messages.reduce((found, message, index) => (message.role === "assistant" && parseAssistantReply(message.content).plan ? index : found), -1);
+  const livePlan = busy ? (partial ? parseAssistantReply(partial).plan : null) ?? latestPlan(messages) : null;
+  const status = confirmation
+    ? "ממתין לאישור שלך"
+    : acting
+      ? `מבצע: ${acting}`
+      : busy
+        ? partial
+          ? "כותב…"
+          : "חושב…"
+        : model
+          ? `מוכן · ${model}`
+          : "מוכן";
 
   const bubble = (message: Message, index: number, live = false) => {
     if (message.role === "user") {
       return (
-        <div key={`u${index}`} className="assistant-bubble is-user" dir="auto">
-          {message.content}
+        <div key={`u${index}`} className="assistant-turn is-user">
+          <div className="assistant-bubble is-user" dir="auto">
+            {message.content}
+          </div>
         </div>
       );
     }
     // Always parsed, not only while streaming: a reply kept from before the
     // action protocol, or saved when the visitor pressed stop mid-block, can
     // still carry markup, and none of it belongs on screen.
-    const text = parseAssistantReply(message.content).text || message.content;
+    const parsed = parseAssistantReply(message.content);
+    const text = parsed.text || (parsed.plan || parsed.actions.length || parsed.pending ? "" : message.content);
+    const canExecute = !live && !busy && index === lastShownIndex && parsed.plan && parsed.plan.some((step) => step.status !== "done") && mode !== "execute" && !message.actions;
     return (
-      <div key={`a${index}`} className={`assistant-bubble is-assistant ${live ? "is-live" : ""}`} dir="auto">
-        <div className="assistant-markdown">{renderMarkdown(text)}</div>
-        {!live && message.actions && message.actions.length > 0 && (
-          <ul className="assistant-actions" aria-label="פעולות שבוצעו">
-            {message.actions.map((record, at) => {
-              const spec = findAction(record.id);
-              return (
-                <li key={at} className={`assistant-action ${record.cancelled ? "is-cancelled" : record.ok ? "is-ok" : "is-failed"}`}>
-                  {record.cancelled ? <X size={14} /> : record.ok ? <Check size={14} /> : <X size={14} />}
-                  <div>
-                    <b>{spec?.label ?? record.id}</b>
-                    {record.message && <span> · {record.message}</span>}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {!live && (
-          <div className="assistant-bubble-tools">
-            <button type="button" className="link-button" onClick={() => void copy(index, text)} aria-label="העתק את התשובה">
-              {copied === index ? <Check size={13} /> : <Copy size={13} />} {copied === index ? "הועתק" : "העתק"}
-            </button>
-            {index === lastShownIndex && !busy && (
-              <button type="button" className="link-button" onClick={regenerate} aria-label="נסח מחדש">
-                <RefreshCw size={13} /> תשובה אחרת
+      <div key={`a${index}`} className="assistant-turn is-assistant">
+        <span className="assistant-avatar" aria-hidden="true">
+          <Sparkles size={14} />
+        </span>
+        <div className={`assistant-bubble is-assistant ${live ? "is-live" : ""}`} dir="auto">
+          {text && <div className="assistant-markdown">{renderMarkdown(text)}</div>}
+          {parsed.plan && <PlanCard steps={parsed.plan} compact={!live && (busy || index !== lastPlanIndex)} />}
+          {!live && message.actions && message.actions.length > 0 && (
+            <ol className="assistant-actions" aria-label="פעולות שבוצעו">
+              {message.actions.map((record, at) => {
+                const spec = findAction(record.id);
+                return (
+                  <li key={at} className={`assistant-action ${record.cancelled ? "is-cancelled" : record.ok ? "is-ok" : "is-failed"}`}>
+                    <span className="assistant-action-mark">{record.ok && !record.cancelled ? <Check size={12} /> : <X size={12} />}</span>
+                    <div>
+                      <b>{spec?.label ?? record.id}</b>
+                      {record.message && <span>{record.message}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          {canExecute && (
+            <div className="assistant-tools">
+              <button type="button" className="assistant-open" onClick={executePlan}>
+                <Play size={14} /> בצע את התוכנית
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+          {!live && (
+            <div className="assistant-bubble-tools">
+              <button type="button" className="link-button" onClick={() => void copy(index, text || message.content)} aria-label="העתק את התשובה">
+                {copied === index ? <Check size={13} /> : <Copy size={13} />} {copied === index ? "הועתק" : "העתק"}
+              </button>
+              {index === lastShownIndex && !busy && (
+                <button type="button" className="link-button" onClick={regenerate} aria-label="נסח מחדש">
+                  <RefreshCw size={13} /> תשובה אחרת
+                </button>
+              )}
+              {message.model && <small className="assistant-model">{message.model}</small>}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -588,33 +840,34 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   return (
     <>
       {!open && (
-        <button type="button" className="assistant-launcher" onClick={onOpen} aria-label="פתח את העוזר" title="שאל את העוזר">
-          <Sparkles size={20} />
-          <span>עוזר</span>
+        <button type="button" className="assistant-launcher" onClick={onOpen} aria-label="פתח את העוזר" title="העוזר (Ctrl+J)">
+          <span className="assistant-launcher-orb" aria-hidden="true">
+            <Sparkles size={17} />
+          </span>
+          <span>עוזר AI</span>
         </button>
       )}
       {open && (
-        <aside className={`assistant-panel ${wide ? "is-wide" : ""}`} role="dialog" aria-label="העוזר של כלי מוזיקה" aria-modal="false">
+        <aside ref={panelRef} className={`assistant-panel ${busy ? "is-busy" : ""}`} aria-label="העוזר של כלי מוזיקה">
+          <div className="assistant-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="שינוי רוחב העוזר" title="גרור כדי לשנות רוחב" />
           <header className="assistant-head">
-            <span className="tool-intro-icon">
-              <Bot size={20} />
+            <span className="assistant-orb" aria-hidden="true">
+              <Bot size={18} />
             </span>
             <div>
               <strong>העוזר</strong>
-              <small>
-                {mode === "execute"
-                  ? toolTitle
-                    ? `מבצע פעולות בכלי ${toolTitle} ובכל האתר, ועונה על שאלות`
-                    : "מבצע פעולות באתר ועונה על שאלות במוזיקה"
-                  : toolTitle
-                    ? `עוזר בכלי ${toolTitle} ובכל שאלה במוזיקה`
-                    : "שאלות על הכלים ועל מוזיקה"}
+              <small className="assistant-status" role="status">
+                <span className={`assistant-status-dot ${busy ? "is-busy" : ""}`} aria-hidden="true" />
+                {status}
               </small>
             </div>
             <button
               type="button"
               className={`icon-button ${showHistory ? "is-on" : ""}`}
-              onClick={() => setShowHistory((value) => !value)}
+              onClick={() => {
+                setShowHistory((value) => !value);
+                setShowSettings(false);
+              }}
               aria-label="שיחות קודמות"
               aria-pressed={showHistory}
               title="שיחות קודמות"
@@ -624,22 +877,64 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             <button type="button" className="icon-button" onClick={startNewChat} aria-label="שיחה חדשה" title="שיחה חדשה" disabled={!messages.length && !busy}>
               <MessageSquarePlus size={16} />
             </button>
-            <button type="button" className="icon-button" onClick={() => setWide((value) => !value)} aria-label={wide ? "הקטן" : "הגדל"} title={wide ? "הקטן" : "הגדל"}>
-              {wide ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            <button
+              type="button"
+              className={`icon-button ${showSettings ? "is-on" : ""}`}
+              onClick={() => {
+                setShowSettings((value) => !value);
+                setShowHistory(false);
+              }}
+              aria-label="הגדרות העוזר"
+              aria-expanded={showSettings}
+              title="הגדרות"
+            >
+              <Settings2 size={16} />
             </button>
-            <button type="button" className="icon-button" onClick={onClose} aria-label="סגור את העוזר">
+            <button type="button" className="icon-button" onClick={onClose} aria-label="סגור את העוזר" title="סגור (Esc)">
               <X size={18} />
             </button>
           </header>
 
-          <div className="segmented-control assistant-mode" role="group" aria-label="מצב העוזר">
-            <button type="button" className={mode === "execute" ? "active" : ""} aria-pressed={mode === "execute"} disabled={busy} onClick={() => setMode("execute")}>
-              <MousePointerClick size={15} /> מצב ביצוע
-            </button>
-            <button type="button" className={mode === "question" ? "active" : ""} aria-pressed={mode === "question"} disabled={busy} onClick={() => setMode("question")}>
-              <CircleHelp size={15} /> מצב שאלה
-            </button>
+          <div className="assistant-modes" role="group" aria-label="מצב העוזר">
+            {MODES.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={mode === item.id ? "is-active" : ""}
+                  aria-pressed={mode === item.id}
+                  disabled={busy}
+                  onClick={() => setMode(item.id)}
+                  title={item.hint}
+                >
+                  <Icon size={14} /> {item.label}
+                </button>
+              );
+            })}
           </div>
+
+          {showSettings && (
+            <div className="assistant-settings">
+              <label>
+                <input type="checkbox" checked={prefs.detailed} onChange={(event) => setPrefs((value) => ({ ...value, detailed: event.target.checked }))} />
+                <span>
+                  <b>תשובות מפורטות</b>
+                  <small>צעדים, דוגמה, ומה לעשות אם משהו לא עובד</small>
+                </span>
+              </label>
+              <label>
+                <input type="checkbox" checked={prefs.confirm} onChange={(event) => setPrefs((value) => ({ ...value, confirm: event.target.checked }))} />
+                <span>
+                  <b>לבקש אישור לפני פעולות רגישות</b>
+                  <small>כבוי: הסוכן מבצע הכול בעצמו, גם מחיקה ושמירה</small>
+                </span>
+              </label>
+              <button type="button" className="link-button" onClick={() => setPrefs((value) => ({ ...value, width: DEFAULT_WIDTH }))}>
+                איפוס רוחב הלוח
+              </button>
+            </div>
+          )}
 
           {showHistory && (
             <div className="assistant-history">
@@ -706,17 +1001,41 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             </div>
           )}
 
+          {livePlan && (
+            <div className="assistant-progress">
+              <PlanCard steps={livePlan} compact />
+              <span dir="auto">{livePlan.find((step) => step.status !== "done")?.text ?? "מסיים…"}</span>
+            </div>
+          )}
+
           <div className="assistant-messages" ref={listRef} aria-live="polite">
             {shown.length === 0 && !busy && (
               <div className="assistant-empty">
+                <span className="assistant-hero-orb" aria-hidden="true">
+                  <Sparkles size={26} />
+                </span>
+                <h2>במה אפשר לעזור?</h2>
                 <p>
                   {mode === "execute"
-                    ? "שלום! אפשר לבקש ממני לעשות דברים באתר — לכתוב שיר לשירון, להפעיל מטרונום, לנגן, לתמלל, לשמור — וגם לשאול כל שאלה על הכלים ועל מוזיקה."
-                    : "שלום! אני כאן לכל שאלה על הכלים באתר ועל מוזיקה. במצב ביצוע אני גם עושה דברים באתר."}
+                    ? "אני סוכן שעובד באתר בעצמו: מתכנן, פותח כלים, כותב, מנגן, שומר — ומדווח מה עשיתי. בלי לעצור לאישור."
+                    : mode === "plan"
+                      ? "תאר משימה, ואכין תוכנית צעד אחר צעד. כשהיא נראית לך — לחיצה אחת ואני מבצע אותה."
+                      : "שאל כל שאלה על הכלים באתר ועל מוזיקה — תיאוריה, אקורדים, טכניקה ותרגול."}
                 </p>
+                <div className="assistant-capabilities" aria-hidden="true">
+                  <span>
+                    <CircleHelp size={13} /> שואל
+                  </span>
+                  <span>
+                    <ListChecks size={13} /> מתכנן
+                  </span>
+                  <span>
+                    <Zap size={13} /> מבצע
+                  </span>
+                </div>
                 <div className="assistant-suggestions">
                   {starters.map((item) => (
-                    <button key={item} type="button" className="chip-toggle" onClick={() => send(item)} disabled={busy || !user}>
+                    <button key={item} type="button" className="assistant-suggestion" onClick={() => send(item)} disabled={busy || !user}>
                       {item}
                     </button>
                   ))}
@@ -726,10 +1045,15 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             {messages.map((message, index) => (message.hidden ? null : bubble(message, index)))}
             {busy && partial !== null && partial.length > 0 && bubble({ role: "assistant", content: partial }, messages.length, true)}
             {busy && !partial && !acting && !confirmation && (
-              <div className="assistant-bubble is-assistant is-thinking" aria-label="העוזר חושב">
-                <span />
-                <span />
-                <span />
+              <div className="assistant-turn is-assistant">
+                <span className="assistant-avatar is-thinking" aria-hidden="true">
+                  <Sparkles size={14} />
+                </span>
+                <div className="assistant-bubble is-assistant is-thinking" aria-label="העוזר חושב">
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             )}
             {acting && (
@@ -765,14 +1089,14 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
               </div>
             )}
             {!busy && retry && (
-              <button type="button" className="chip-toggle" onClick={() => send(retry, messages.slice(0, -1))}>
+              <button type="button" className="assistant-suggestion" onClick={() => send(retry, messages.slice(0, -1))}>
                 <RefreshCw size={14} /> נסה שוב
               </button>
             )}
             {!busy && !retry && lastAssistant && (
               <div className="assistant-suggestions is-followups">
-                {(mode === "execute" ? ["בטל את זה", "תסביר בשלבים", "תן דוגמה"] : ["תסביר בשלבים", "תן דוגמה", "בקצרה יותר"]).map((item) => (
-                  <button key={item} type="button" className="chip-toggle" onClick={() => send(item)}>
+                {(mode === "execute" ? ["המשך", "בטל את זה", "מה עשית?"] : mode === "plan" ? ["פרט יותר", "קצר את התוכנית"] : ["תסביר בשלבים", "תן דוגמה", "בקצרה יותר"]).map((item) => (
+                  <button key={item} type="button" className="assistant-suggestion" onClick={() => send(item)}>
                     {item}
                   </button>
                 ))}
@@ -782,9 +1106,14 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
 
           {user ? (
             <form className="assistant-compose" onSubmit={submit}>
-              <label className="assistant-detailed">
-                <input type="checkbox" checked={detailed} onChange={(event) => setDetailed(event.target.checked)} /> מפורט
-              </label>
+              <div className="assistant-context">
+                <span className={`assistant-chip is-mode-${mode}`} title={current.hint}>
+                  <current.icon size={12} /> {current.label}
+                </span>
+                <span className="assistant-chip" title="העוזר רואה את העמוד הזה">
+                  <MapPin size={12} /> {toolTitle ?? "דף הבית"}
+                </span>
+              </div>
               <textarea
                 ref={inputRef}
                 value={draft}
@@ -797,19 +1126,32 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                 }}
                 rows={1}
                 maxLength={MAX_MESSAGE}
-                placeholder={mode === "execute" ? "כתוב מה לעשות, או מה לשאול…" : "כתוב שאלה…"}
-                aria-label="השאלה שלך"
+                placeholder={mode === "execute" ? "מה לעשות? אני אתכנן ואבצע…" : mode === "plan" ? "תאר משימה ואכין תוכנית…" : "שאל כל שאלה…"}
+                aria-label="ההודעה שלך"
                 dir="auto"
               />
-              {busy ? (
-                <button type="button" className="primary-button compact" onClick={stop} aria-label="עצור" title="עצור">
-                  <Square size={18} />
+              <div className="assistant-compose-row">
+                <button
+                  type="button"
+                  className={`icon-button assistant-mic ${listening ? "is-on" : ""}`}
+                  onClick={toggleListening}
+                  aria-label={listening ? "הפסק הכתבה" : "הכתבה בקול"}
+                  aria-pressed={listening}
+                  title={listening ? "הפסק הכתבה" : "הכתבה בקול"}
+                >
+                  {listening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
-              ) : (
-                <button type="submit" className="primary-button compact" disabled={!draft.trim()} aria-label="שלח">
-                  <SendHorizontal size={18} />
-                </button>
-              )}
+                <small className="assistant-hint">Enter לשליחה · Shift+Enter לשורה חדשה</small>
+                {busy ? (
+                  <button type="button" className="assistant-send is-stop" onClick={stop} aria-label="עצור" title="עצור">
+                    <Square size={15} />
+                  </button>
+                ) : (
+                  <button type="submit" className="assistant-send" disabled={!draft.trim()} aria-label="שלח">
+                    <SendHorizontal size={16} />
+                  </button>
+                )}
+              </div>
             </form>
           ) : (
             <div className="assistant-signin">

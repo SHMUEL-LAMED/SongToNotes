@@ -78,7 +78,8 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 
 export type AiAction = "polish" | "summarize" | "translate" | "speakers" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
-export type AssistantMode = "question" | "execute";
+/** Answer only; write a plan and wait; or carry the task out as an agent. */
+export type AssistantMode = "question" | "plan" | "execute";
 export type AssistantAction = { type: "navigate"; route: string };
 export type AiReply = {
   text: string;
@@ -118,6 +119,8 @@ export type ChatOptions = {
   mode?: AssistantMode;
   context?: ChatContext;
   signal?: AbortSignal;
+  /** Told which model is answering, as soon as the reply starts. */
+  onModel?: (model: string) => void;
 };
 
 /** The assistant's next reply to a conversation, all at once. */
@@ -170,6 +173,8 @@ export async function chatStream(
     const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
     throw new AiError(code, describeAiError(code, response.status));
   }
+  const answering = response.headers.get("X-Model");
+  if (answering) options.onModel?.(answering);
   const type = response.headers.get("Content-Type") ?? "";
   if (!type.includes("text/event-stream") || !response.body) {
     const body = (await response.json()) as AiReply;
