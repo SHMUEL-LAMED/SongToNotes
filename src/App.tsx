@@ -32,6 +32,7 @@ import { IdentifyTool } from "./tools/IdentifyTool";
 import { TtsTool } from "./tools/TtsTool";
 import { LyricsTool } from "./tools/LyricsTool";
 import { MixerTool } from "./tools/MixerTool";
+import { PadTool } from "./tools/PadTool";
 import { RhythmTool } from "./tools/RhythmTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SongbookTool } from "./tools/SongbookTool";
@@ -480,6 +481,7 @@ function WorkspaceApp() {
       {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
       {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
       {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+      {shown === "pads" && <PadTool />}
       {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
       {shown === "video" && <VideoTool />}
       {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
