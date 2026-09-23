@@ -55,11 +55,16 @@ jobs:
           if [ -n "$ONLY" ]; then
             supabase functions deploy "$ONLY" --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
           else
+            failed=""
             for dir in supabase/functions/*/; do
               name="$(basename "$dir")"
               case "$name" in _*) continue ;; esac
               echo "::group::$name"
-              supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
+              supabase functions deploy "$name" --project-ref "$PROJECT_REF" --use-api --no-verify-jwt || failed="$failed $name"
               echo "::endgroup::"
             done
+            if [ -n "$failed" ]; then
+              echo "::error::Failed to deploy:$failed"
+              exit 1
+            fi
           fi

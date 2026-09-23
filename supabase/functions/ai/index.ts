@@ -33,7 +33,7 @@
  *   AI_DAILY_TOKENS   default 5000000
  *   <NAME>_API_KEY    a key for one of the known providers
  */
-import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "./common.ts";
+import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
 
 /**
  * The daily allowance, in tokens. The free providers below cost nothing, so
