@@ -61,6 +61,18 @@ export const CATEGORY_ORDER: ToolCategory[] = ["create", "practice", "analyze"];
  */
 export const TOOLS: ToolDefinition[] = [
   {
+    id: "pads",
+    title: "פדים לדי־ג׳יי",
+    tagline: "ביטים ואפקטים בלחיצה",
+    description: "רשת פדים צבעונית לנגינת ביטים ואפקטים, עם מקשי קיצור והקלטת רצף.",
+    icon: Grid3x3,
+    hue: 330,
+    category: "create",
+    tags: ["פדים", "די־ג׳יי", "ביטים", "סמפלר", "אפקטים"],
+    badge: "חדש",
+    related: ["beats", "mixer", "ringtone"],
+  },
+  {
     id: "notes",
     title: "שיר לתווים",
     tagline: "מנגינה נכנסת, תווים יוצאים",
