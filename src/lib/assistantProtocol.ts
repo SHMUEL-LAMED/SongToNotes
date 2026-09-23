@@ -8,10 +8,15 @@
  */
 import type { ActionCall } from "./assistantActions";
 
+export type PlanStatus = "pending" | "active" | "done";
+export type PlanStep = { text: string; status: PlanStatus };
+
 export type ParsedReply = {
-  /** The reply without its action blocks. */
+  /** The reply without its action and plan blocks. */
   text: string;
   actions: ActionCall[];
+  /** The task list the model wrote in a ```plan block, the last one if several. */
+  plan: PlanStep[] | null;
   /** True while a fence is open, in a reply still being written. */
   pending: boolean;
 };
@@ -40,6 +45,23 @@ function toCall(value: unknown): ActionCall | null {
     if (typeof record.action === "string" && record.action.trim() === "navigate" && typeof record.tool === "string") params.tool = record.tool;
   }
   return { id: id.trim(), params };
+}
+
+const STEP = /^\s*(?:[-*•]|\d+[.)])?\s*(?:\[([ xX~>-])\])?\s*(.+?)\s*$/;
+
+/** The steps of a plan block: one a line, `[x]` done, `[~]` under way. */
+export function parsePlan(body: string): PlanStep[] | null {
+  const steps = body
+    .split("\n")
+    .map((line): PlanStep | null => {
+      const match = STEP.exec(line);
+      if (!match || !match[2]) return null;
+      const mark = (match[1] ?? " ").toLowerCase();
+      return { text: match[2].replace(/^\*\*(.+)\*\*$/, "$1"), status: mark === "x" ? "done" : mark === "~" || mark === ">" || mark === "-" ? "active" : "pending" };
+    })
+    .filter((step): step is PlanStep => step !== null)
+    .slice(0, 20);
+  return steps.length ? steps : null;
 }
 
 function parseCalls(body: string): ActionCall[] | null {
@@ -79,6 +101,7 @@ function prose(text: string, actions: ActionCall[]) {
 export function parseAssistantReply(raw: string): ParsedReply {
   const source = raw.replace(/\r/g, "");
   const actions: ActionCall[] = [];
+  let plan: PlanStep[] | null = null;
   const pieces: string[] = [];
   let pending = false;
   let cursor = 0;
@@ -101,7 +124,9 @@ export function parseAssistantReply(raw: string): ParsedReply {
     const tag = source.slice(open + FENCE.length, newline).trim().toLowerCase();
     const body = source.slice(newline + 1, close);
     const calls = parseCalls(body);
-    if (tag === "action" || tag === "actions") {
+    if (tag === "plan" || tag === "todo" || tag === "tasks") {
+      plan = parsePlan(body) ?? plan;
+    } else if (tag === "action" || tag === "actions") {
       // A block meant as an action that did not parse is still an action the
       // model tried to make; saying so is better than showing it as prose.
       if (calls) actions.push(...calls);
@@ -122,6 +147,7 @@ export function parseAssistantReply(raw: string): ParsedReply {
       .replace(/\n{3,}/g, "\n\n")
       .trim(),
     actions,
+    plan,
     pending,
   };
 }

@@ -35,13 +35,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("assistant initial state", () => {
-  it("offers detailed answers and separate do/ask modes, doing by default", () => {
+  it("offers the ask, plan and agent modes, the agent by default", () => {
     const html = render();
-    expect(html).toContain("מפורט");
-    expect(html).toContain("מצב שאלה");
-    expect(html).toContain("מצב ביצוע");
+    expect(html).toContain("שאלה");
+    expect(html).toContain("תכנון");
+    expect(html).toContain("סוכן");
     expect(html).toContain("כתוב שיר קצר על החורף");
-    expect(html).toContain("מבצע פעולות באתר");
+    expect(html).toContain("בלי לעצור לאישור");
+  });
+  it("keeps detailed answers and approvals in its settings", () => {
+    expect(render()).toContain('aria-label="הגדרות העוזר"');
+  });
+  it("remembers the plan mode", () => {
+    values.set("musictools.assistant.mode.v1", "plan");
+    const html = render();
+    expect(html).toContain("תכנן לי אימון גיטרה");
+    expect(html).not.toContain("כתוב שיר קצר על החורף");
   });
   it("lets a message be far longer than a sentence", () => {
     expect(render()).toContain('maxLength="32000"');
@@ -65,6 +74,19 @@ describe("assistant initial state", () => {
 });
 
 describe("the conversation it comes back to", () => {
+  it("shows a plan as a task list, and offers to carry it out in plan mode", () => {
+    values.set("musictools.assistant.mode.v1", "plan");
+    seed([
+      { role: "user", content: "תכנן אימון" },
+      { role: "assistant", content: "הנה התוכנית:\n```plan\n- [x] לפתוח מטרונום\n- [ ] לנגן סולם\n```" },
+    ]);
+    const html = render();
+    expect(html).toContain("assistant-plan");
+    expect(html).toContain("לנגן סולם");
+    expect(html).toContain("1/2");
+    expect(html).toContain("בצע את התוכנית");
+    expect(html).not.toContain("```plan");
+  });
   it("reopens the thread this device was last on", () => {
     seed([
       { role: "user", content: "מה הסולם?" },
@@ -115,6 +137,6 @@ describe("the conversation it comes back to", () => {
   it("renders only the launcher when closed", () => {
     const html = renderToStaticMarkup(<AiAssistant {...props} open={false} />);
     expect(html).toContain("assistant-launcher");
-    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain("assistant-panel");
   });
 });

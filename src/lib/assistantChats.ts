@@ -29,6 +29,8 @@ export type StoredMessage = {
   /** The site's own report of what its actions did: sent to the model, never shown. */
   hidden?: boolean;
   actions?: StoredAction[];
+  /** The model that wrote an assistant turn. */
+  model?: string;
 };
 
 export type Chat = {
@@ -99,6 +101,7 @@ export function normalizeMessages(value: unknown): StoredMessage[] {
         content: message.content,
         ...(message.hidden === true ? { hidden: true } : {}),
         ...(actions.length ? { actions } : {}),
+        ...(typeof message.model === "string" && message.model ? { model: message.model.slice(0, 80) } : {}),
       };
     })
     .filter((item): item is StoredMessage => item !== null);
