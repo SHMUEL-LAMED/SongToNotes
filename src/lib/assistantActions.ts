@@ -88,7 +88,7 @@ function define(
 export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
-  "beats", "theory", "progressions",
+  "beats", "theory", "progressions", "changes",
 ];
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -143,6 +143,11 @@ export const ACTIONS: ActionSpec[] = [
   define("progressions", "write", "progressions.play", "ניגון המהלך", "מנגן את המהלך בלולאה."),
   define("progressions", "write", "progressions.stop", "עצירת המהלך", "עוצר את הניגון."),
   define("progressions", "write", "progressions.songbook", "המהלך לשירון", "שולח את המהלך לשירון ופותח אותו."),
+
+  // ---- chord changes trainer ----
+  define("changes", "write", "changes.set", "זוג אקורדים לתרגול", "בוחר שני אקורדים (Em, Am, D, A, E, G, C, Dm, E7, A7, D7, G7, C7, Fmaj7, F) ומשך סבב בשניות (30, 60 או 120).", ["first?", "second?", "seconds?:number"]),
+  define("changes", "write", "changes.start", "התחלת סבב", "מתחיל סבב מעברים עם ספירה לאחור; הגולש לוחץ בכל מעבר."),
+  define("changes", "read", "changes.stats", "התוצאות בזוג", "השיא, מספר הסבבים והתוצאות האחרונות (מעברים לדקה) בזוג שנבחר."),
 
   // ---- theory explorer ----
   define("theory", "write", "theory.set", "סולם בסייר התאוריה", "בוחר טוניקה (C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B), סולם או מודוס, משולשים או ספטאקורדים ותצוגה.", [["root?", "שם התו, למשל C או F♯"], "scale?:major|minor|dorian|phrygian|lydian|mixolydian|locrian|harmonicMinor|melodicMinor|majorPentatonic|minorPentatonic|blues", "sevenths?:boolean", "view?:piano|guitar"]),

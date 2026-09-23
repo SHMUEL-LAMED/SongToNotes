@@ -18,6 +18,7 @@ import {
   Music4,
   MicVocal,
   Piano,
+  Shuffle,
   Smartphone,
   Snail,
   Speech,
@@ -265,6 +266,19 @@ export const TOOLS: ToolDefinition[] = [
     tags: ["תאוריה", "סולמות", "מודוסים", "מעגל הקווינטות", "אקורדים", "הרמוניה"],
     badge: "חדש",
     related: ["piano", "ear", "songbook"],
+  },
+  {
+    id: "changes",
+    title: "מאמן מעברים",
+    tagline: "מעברים בין אקורדים, על זמן",
+    description:
+      "שני אקורדים, דקה אחת: סופרים כמה פעמים עברתם ביניהם נקי. השיא לכל זוג נשמר, וגרף מראה את ההתקדמות.",
+    icon: Shuffle,
+    hue: 140,
+    category: "practice",
+    tags: ["גיטרה", "אקורדים", "מעברים", "תרגול", "מתחילים", "one minute changes"],
+    badge: "חדש",
+    related: ["chords", "songbook", "tuner"],
   },
   {
     id: "rhythm",
