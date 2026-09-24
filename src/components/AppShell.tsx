@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   Menu,
   Search,
+  Share2,
   ShieldCheck,
   Star,
   UserRound,
@@ -37,6 +38,7 @@ type Props = PropsWithChildren<{
   onOpenAccount: () => void;
   onOpenPalette: () => void;
   onOpenShortcuts: () => void;
+  onOpenShare: () => void;
 }>;
 
 /**
@@ -59,6 +61,7 @@ export function AppShell({
   onOpenAccount,
   onOpenPalette,
   onOpenShortcuts,
+  onOpenShare,
   children,
 }: Props) {
   const { user, profile } = useAuth();
@@ -262,6 +265,10 @@ export function AppShell({
                 <LockKeyhole size={14} /> הקובץ נשאר אצלך
               </span>
             )}
+            <button type="button" className="share-site-button" onClick={onOpenShare} aria-label="שיתוף האתר" title="שיתוף האתר עם חברים">
+              <Share2 size={16} />
+              <span>שיתוף</span>
+            </button>
             <button type="button" className="icon-button topbar-search" onClick={openPalette} aria-label="חיפוש">
               <Search size={17} />
             </button>

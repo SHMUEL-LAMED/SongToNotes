@@ -1,4 +1,4 @@
-import { CircleSlash, Info, Keyboard, Palette, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
+import { CircleSlash, Info, Keyboard, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
@@ -10,6 +10,7 @@ import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
 import { SharePage } from "./components/SharePage";
+import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { SiteFooter } from "./components/SiteFooter";
 import { useAssistantTool } from "./lib/useAssistantTool";
@@ -23,6 +24,7 @@ import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
+import { useSharePrompt } from "./lib/siteShare";
 import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
@@ -135,6 +137,7 @@ function WorkspaceApp() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const { accent, setAccent } = useAccent();
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
@@ -153,6 +156,12 @@ function WorkspaceApp() {
   const toolOff = Boolean(tool && control.disabledTools.includes(tool.id) && !owner);
   // Maintenance closes everything but the door the owner uses to reopen it.
   const closed = control.maintenance && !owner && !admin;
+  // Every ten minutes on screen, a request to pass the site on — never over
+  // another dialog, a closed site or the admin area.
+  const sharePrompt = useSharePrompt({
+    paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || closed || admin,
+    sharing: shareOpen,
+  });
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
   // than an empty page.
@@ -210,6 +219,7 @@ function WorkspaceApp() {
   useCommandKey(openPalette);
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
   const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -331,6 +341,7 @@ function WorkspaceApp() {
       { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
       { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
+      { id: "page:share", label: "שיתוף האתר", hint: "קישור לחברים, בוואטסאפ או בכל מקום", group: "דפים", icon: <Share2 size={15} />, run: () => setShareOpen(true) },
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
@@ -392,6 +403,7 @@ function WorkspaceApp() {
       onOpenAccount={() => setAccountOpen(true)}
       onOpenPalette={openPalette}
       onOpenShortcuts={() => setShortcutsOpen(true)}
+      onOpenShare={() => setShareOpen(true)}
     >
       <AccountDrawer
         open={accountOpen}
@@ -418,6 +430,7 @@ function WorkspaceApp() {
         accent={accent}
         onAccent={setAccent}
       />
+      <ShareSiteDialog open={shareOpen} onClose={closeShare} />
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">
@@ -433,7 +446,17 @@ function WorkspaceApp() {
         toolTitle={tool?.title ?? null}
       />
 
-      <AppNotices />
+      <AppNotices>
+        {sharePrompt.open && (
+          <SharePrompt
+            onMore={() => {
+              sharePrompt.close();
+              setShareOpen(true);
+            }}
+            onClose={sharePrompt.close}
+          />
+        )}
+      </AppNotices>
 
       {shellError && (
         <div className="shell-error error-message" role="alert">

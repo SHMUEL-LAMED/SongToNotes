@@ -1,13 +1,15 @@
 import { CloudOff, RefreshCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { useOnline, useServiceWorker } from "../lib/pwa";
 
 /**
  * Two quiet, transient messages that belong to the app itself rather than to
  * any one tool: "you are offline, and here is what that means" and "a newer
- * version is ready". Both sit out of the way at the bottom of the screen.
+ * version is ready". Both sit out of the way at the bottom of the screen, and
+ * whatever else the app floats there (the request to share the site) stacks
+ * with them rather than on top of them.
  */
-export function AppNotices() {
+export function AppNotices({ children }: PropsWithChildren) {
   const { updateReady, applyUpdate } = useServiceWorker();
   const online = useOnline();
   const [offlineDismissed, setOfflineDismissed] = useState(false);
@@ -20,7 +22,7 @@ export function AppNotices() {
   }, []);
 
   const showOffline = !online && !offlineDismissed;
-  if (!showOffline && !updateReady) return null;
+  if (!showOffline && !updateReady && !children) return null;
 
   return (
     <div className="app-notices">
@@ -57,6 +59,8 @@ export function AppNotices() {
           </button>
         </div>
       )}
+
+      {children}
     </div>
   );
 }
