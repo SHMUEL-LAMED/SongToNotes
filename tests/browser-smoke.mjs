@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "identify", "beats", "theory"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "beats", "theory"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
@@ -643,11 +643,12 @@ log((await page.locator(".tts-meta").textContent() ?? "").includes(`${ttsSample.
 log((await page.locator(".tts-tool .transport-button.primary").isEnabled()), "tts: the read-aloud button is ready");
 log(await page.locator(".tts-tool .download-buttons button").first().isDisabled(), "tts: the server MP3 waits for a sign-in");
 
-// --- song identifier: signed out, it asks to sign in; the page explains itself ---
+// --- song identifier: hidden from visitors, so its address lands on the hub ---
 await page.goto(`${BASE}#/identify`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
 await page.waitForTimeout(600);
-log(await page.locator(".identify-tool .transcript-signin").isVisible(), "identify: signed out, it asks to sign in");
+log(await page.locator(".hub-hero").isVisible(), "identify: hidden, its address lands on the hub");
+log((await page.locator(".tool-card", { hasText: "מזהה שיר" }).count()) === 0, "identify: no card for it on the hub");
 
 // --- transcript extras: a reopened transcript has search with jump and a speakers button ---
 await page.evaluate(() => {

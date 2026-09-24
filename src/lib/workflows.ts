@@ -15,7 +15,7 @@ export const WORKFLOWS: Workflow[] = [
   {
     id: "learn-guitar",
     title: "ללמוד שיר בגיטרה",
-    description: "מזהים את השיר, מוציאים ממנו אקורדים, ושומרים דף מסודר בשירון עם גלילה אוטומטית.",
+    description: "מוציאים מהשיר את האקורדים, ושומרים דף מסודר בשירון עם גלילה אוטומטית.",
     hue: 85,
     steps: [
       { tool: "identify", label: "מה השיר?" },

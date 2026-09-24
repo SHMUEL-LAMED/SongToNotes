@@ -10,6 +10,7 @@
  * a tool's state — it only calls what the tool chose to offer, and a tool
  * says in its own words what happened.
  */
+import { findTool } from "./tools";
 
 export type ParamType = "string" | "number" | "boolean" | "string[]";
 
@@ -85,11 +86,12 @@ function define(
   };
 }
 
+/** The tools the assistant can reach: those visitors see, so a hidden tool is never offered. */
 export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
   "beats", "theory", "progressions", "changes",
-];
+].filter((id) => findTool(id) !== null);
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
 

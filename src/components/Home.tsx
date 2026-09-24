@@ -215,9 +215,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
               <h3>{flow.title}</h3>
               <p>{flow.description}</p>
               <ol className="flow-steps">
-                {flow.steps.map((step, stepIndex) => {
-                  const tool = findTool(step.tool);
-                  if (!tool) return null;
+                {/* A step whose tool is hidden drops out, and the rest are numbered without it. */}
+                {flow.steps.filter((step) => findTool(step.tool)).map((step, stepIndex) => {
+                  const tool = findTool(step.tool)!;
                   const Icon = tool.icon;
                   return (
                     <li key={step.tool} style={{ "--accent-hue": tool.hue } as CSSProperties}>
