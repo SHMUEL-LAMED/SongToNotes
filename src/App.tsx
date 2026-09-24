@@ -25,7 +25,7 @@ import { useCommandKey } from "./lib/useCommandKey";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
-import { TOOLS, findTool } from "./lib/tools";
+import { TOOLS, findAnyTool, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
@@ -143,7 +143,8 @@ function WorkspaceApp() {
   const control = useSiteControl();
   const owner = isAdmin(user);
 
-  const tool = findTool(route);
+  // A hidden tool is an unknown address to visitors; the owner can still open it.
+  const tool = findTool(route) ?? (owner ? findAnyTool(route) : null);
   const shareToken = shareTokenFromRoute(route);
   // The admin area is not a tool: it never appears in the hub, and the page
   // behind the route refuses anybody but the owner — as does the server.

@@ -12,6 +12,7 @@ import {
   runAssistantAction,
   signature,
 } from "./assistantActions";
+import { findTool } from "./tools";
 
 beforeEach(() => {
   resetAssistantBindings();
@@ -31,6 +32,12 @@ describe("the catalogue", () => {
 
   it("covers every tool on the site", () => {
     for (const tool of TOOL_IDS) expect(ACTIONS.some((spec) => spec.tool === tool)).toBe(true);
+  });
+
+  it("never offers a hidden tool", () => {
+    for (const tool of TOOL_IDS) expect(findTool(tool), tool).not.toBeNull();
+    expect(TOOL_IDS).not.toContain("identify");
+    expect(describeCatalog(null)).not.toContain("identify");
   });
 
   it("writes a signature the model can copy", () => {

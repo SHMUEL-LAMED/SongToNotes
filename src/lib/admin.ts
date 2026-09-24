@@ -13,7 +13,7 @@
  * never had any. Nothing here can be turned back into a person, by design.
  */
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
-import { TOOLS } from "./tools";
+import { ALL_TOOLS } from "./tools";
 
 const ADMIN_URL = `${SUPABASE_URL}/functions/v1/admin`;
 
@@ -476,8 +476,9 @@ export function hourLabel(hour: number) {
   return `${String(hour).padStart(2, "0")}:00`;
 }
 
-const TOOL_TITLES = new Map(TOOLS.map((tool) => [tool.id, tool.title]));
-const TOOL_HUES = new Map(TOOLS.map((tool) => [tool.id, tool.hue]));
+// Every tool, hidden ones too: their past events still carry their name and colour.
+const TOOL_TITLES = new Map(ALL_TOOLS.map((tool) => [tool.id, tool.title]));
+const TOOL_HUES = new Map(ALL_TOOLS.map((tool) => [tool.id, tool.hue]));
 
 const EXTRA_TITLES: Record<string, string> = {
   home: "דף הבית",

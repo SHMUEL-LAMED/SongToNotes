@@ -71,7 +71,7 @@ import {
 } from "../lib/admin";
 import { useAuth } from "../lib/auth";
 import { downloadFile } from "../lib/export";
-import { TOOLS, findTool } from "../lib/tools";
+import { TOOLS, findAnyTool } from "../lib/tools";
 import {
   BarList,
   ConfirmButton,
@@ -176,7 +176,7 @@ function Overview({
   const stats = snapshot.stats;
   // The pages that are not tools — home, the personal area — count in the
   // totals but have no place in a ranking of tools.
-  const tools = stats.tools.filter((tool) => findTool(tool.tool));
+  const tools = stats.tools.filter((tool) => findAnyTool(tool.tool));
   const chosen = METRICS.find((item) => item.id === metric) ?? METRICS[0];
   const points = series(stats.daily, metric);
   const change = changeOverRange(points);
@@ -311,8 +311,8 @@ function Overview({
 }
 
 function ToolsTab({ snapshot, focus, setFocus }: { snapshot: AdminSnapshot; focus: string | null; setFocus: (tool: string | null) => void }) {
-  const tools = useMemo(() => snapshot.stats.tools.filter((tool) => findTool(tool.tool)), [snapshot]);
-  const pages = useMemo(() => snapshot.stats.tools.filter((tool) => !findTool(tool.tool)), [snapshot]);
+  const tools = useMemo(() => snapshot.stats.tools.filter((tool) => findAnyTool(tool.tool)), [snapshot]);
+  const pages = useMemo(() => snapshot.stats.tools.filter((tool) => !findAnyTool(tool.tool)), [snapshot]);
   const chosen = focus ? tools.find((tool) => tool.tool === focus) ?? null : null;
   const quiet = useMemo(() => {
     const seen = new Set(tools.map((tool) => tool.tool));

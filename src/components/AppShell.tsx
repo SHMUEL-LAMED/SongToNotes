@@ -200,7 +200,7 @@ export function AppShell({
         <div className="sidebar-foot">
           <p className="sidebar-note">
             <LockKeyhole size={14} />
-            <span>רוב הכלים עובדים כולם בדפדפן. תמלול, מילים, הקראה וזיהוי שיר נעזרים בשרת.</span>
+            <span>רוב הכלים עובדים כולם בדפדפן. תמלול, מילים והקראה נעזרים בשרת.</span>
           </p>
         </div>
       </aside>

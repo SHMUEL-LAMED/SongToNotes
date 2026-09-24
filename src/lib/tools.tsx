@@ -47,6 +47,13 @@ export type ToolDefinition = {
   related: string[];
   /** True when the tool sends audio or text to the site's server to do its work. */
   server?: boolean;
+  /**
+   * Kept out of sight without being removed: no menu, home page, search or
+   * assistant lists it, and its address sends visitors to the home page. Only
+   * the owner can still open it, by its address. Bringing it back is taking
+   * this line out.
+   */
+  hidden?: boolean;
 };
 
 export const CATEGORY_LABELS: Record<ToolCategory, string> = {
@@ -60,8 +67,9 @@ export const CATEGORY_ORDER: ToolCategory[] = ["create", "practice", "analyze"];
 /**
  * One list drives the sidebar, the home page, the routing and the page
  * titles, so adding a tool is a matter of one entry here and one component.
+ * This is every tool, the hidden ones too — for the router and the admin area.
  */
-export const TOOLS: ToolDefinition[] = [
+export const ALL_TOOLS: ToolDefinition[] = [
   {
     id: "pads",
     title: "פדים לדי־ג׳יי",
@@ -355,6 +363,7 @@ export const TOOLS: ToolDefinition[] = [
     tags: ["זיהוי שיר", "שאזאם", "מה השיר", "אמן"],
     related: ["chords", "lyrics", "analyze"],
     server: true,
+    hidden: true,
   },
   {
     id: "analyze",
@@ -371,6 +380,15 @@ export const TOOLS: ToolDefinition[] = [
   },
 ];
 
+/** The tools visitors see. */
+export const TOOLS = ALL_TOOLS.filter((tool) => !tool.hidden);
+
+/** A tool visitors can see; a hidden one is not found. */
 export function findTool(id: string) {
   return TOOLS.find((tool) => tool.id === id) ?? null;
+}
+
+/** Any tool, a hidden one too. */
+export function findAnyTool(id: string) {
+  return ALL_TOOLS.find((tool) => tool.id === id) ?? null;
 }
