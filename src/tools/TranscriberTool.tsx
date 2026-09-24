@@ -38,6 +38,7 @@ import { detectKey, keyName, scientificName } from "../lib/key";
 import { saveTranscription } from "../lib/history";
 import { saveWork } from "../lib/works";
 import { scoreToMusicXml } from "../lib/musicxml";
+import { quantizeNotes } from "../lib/quantize";
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "../lib/refine";
 import { buildScore } from "../lib/score";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
@@ -148,13 +149,27 @@ export function TranscriberTool({ initial }: Props) {
     [settings.sensitivity, settings.harmonicCleanup, settings.minDuration, settings.mode],
   );
 
-  const notes = useMemo(() => refineNotes(rawNotes, refineOptions), [rawNotes, refineOptions]);
+  const refined = useMemo(() => refineNotes(rawNotes, refineOptions), [rawNotes, refineOptions]);
 
-  const detectedTempo = useMemo(() => estimateTempo(notes), [notes]);
+  // The tempo is read from the notes as played; only then are they pulled
+  // onto its grid, so quantizing never changes the grid it snaps to.
+  const detectedTempo = useMemo(() => estimateTempo(refined), [refined]);
   const tempo = useMemo(() => {
     if (!bpmOverride) return detectedTempo;
-    return { bpm: bpmOverride, offset: alignOffset(notes, bpmOverride), fit: detectedTempo.fit };
-  }, [bpmOverride, detectedTempo, notes]);
+    return { bpm: bpmOverride, offset: alignOffset(refined, bpmOverride), fit: detectedTempo.fit };
+  }, [bpmOverride, detectedTempo, refined]);
+
+  const notes = useMemo(
+    () =>
+      quantizeNotes(refined, {
+        bpm: tempo.bpm,
+        offset: tempo.offset,
+        stepsPerBeat: settings.stepsPerBeat,
+        strength: settings.quantize,
+        swing: settings.swing,
+      }),
+    [refined, settings.quantize, settings.stepsPerBeat, settings.swing, tempo.bpm, tempo.offset],
+  );
 
   const keySignature = useMemo(() => detectKey(notes), [notes]);
   const title = audio
@@ -562,8 +577,17 @@ export function TranscriberTool({ initial }: Props) {
         void startTranscription();
         return { ok: true, message: "הניתוח התחיל ורץ ברקע; התוצאה תופיע על המסך" };
       },
-      "notes.set": ({ mode, engine, sensitivity, harmonicCleanup, minDuration, stepsPerBeat, beatsPerMeasure, transpose, withChords, bpm }) => {
-        const done: string[] = [];
+      "notes.set": ({ mode, engine, sensitivity, harmonicCleanup, minDuration, stepsPerBeat, beatsPerMeasure, transpose, withChords, bpm, quantize, swing }) => {
+        const early: string[] = [];
+        if (typeof quantize === "number") {
+          update("quantize", Math.max(0, Math.min(100, quantize)) / 100);
+          early.push(`יישור לרשת ${Math.round(Math.max(0, Math.min(100, quantize)))}%`);
+        }
+        if (typeof swing === "number") {
+          update("swing", Math.max(0, Math.min(60, swing)) / 100);
+          early.push(`סווינג ${Math.round(Math.max(0, Math.min(60, swing)))}%`);
+        }
+        const done: string[] = [...early];
         if (mode === "melody" || mode === "full") {
           update("mode", mode);
           done.push(mode === "melody" ? "מנגינה ראשית" : "כל התווים");
@@ -1058,6 +1082,39 @@ export function TranscriberTool({ initial }: Props) {
                   <option value={8}>חלקי שלושים ושתיים</option>
                 </select>
                 <small>רשת עדינה שומרת פרטים, גסה יותר קלה לקריאה.</small>
+              </label>
+
+              <label className="setting-field">
+                <span>
+                  יישור לרשת <b>{Math.round(settings.quantize * 100)}%</b>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={Math.round(settings.quantize * 100)}
+                  onChange={(event) => update("quantize", Number(event.target.value) / 100)}
+                  aria-label="עוצמת היישור לרשת"
+                />
+                <small>מושך את התווים אל הפעמות. 100% מדויק כמו תווים כתובים, פחות שומר על התחושה של הנגינה.</small>
+              </label>
+
+              <label className="setting-field">
+                <span>
+                  סווינג <b>{Math.round(settings.swing * 100)}%</b>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="1"
+                  value={Math.round(settings.swing * 100)}
+                  onChange={(event) => update("swing", Number(event.target.value) / 100)}
+                  aria-label="סווינג"
+                  disabled={settings.quantize === 0}
+                />
+                <small>{settings.quantize === 0 ? "פועל יחד עם היישור לרשת." : "33% הוא שאפל של ג׳אז ובלוז."}</small>
               </label>
 
               <label className="setting-field">

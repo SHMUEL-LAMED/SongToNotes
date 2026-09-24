@@ -1,10 +1,14 @@
 import { ArrowLeft, Clapperboard, FileAudio, RotateCcw, UploadCloud } from "lucide-react";
-import { useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useState, type CSSProperties, type DragEvent } from "react";
+import { deleteFile, getFile } from "../lib/fileStore";
 import { handOffTo } from "../lib/handoff";
 import { TOOLS } from "../lib/tools";
 import { formatBytes, validateAudioFile } from "./AudioPicker";
 
 const ACCEPT = "audio/*,video/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.opus,.webm,.mp4,.mov,.mkv,.aif,.aiff";
+
+/** Where the service worker leaves a file shared to the app. */
+const SHARED_ID = "shared-in";
 
 function isVideo(file: File) {
   return file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.name);
@@ -42,6 +46,21 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
     setError(null);
     setFile(candidate);
   };
+
+  // A file shared to the installed app from another app (see public/sw.js)
+  // waits under one id; it is taken once and offered here like a dropped file.
+  useEffect(() => {
+    let cancelled = false;
+    void getFile(SHARED_ID).then((shared) => {
+      if (!shared) return;
+      void deleteFile(SHARED_ID);
+      if (!cancelled) choose(shared);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Once, when the home page opens.
+  }, []);
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();

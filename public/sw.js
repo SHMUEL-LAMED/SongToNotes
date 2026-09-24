@@ -16,7 +16,7 @@
  *    name outside the `musictools-` prefix so the clean-up below leaves it be.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `musictools-shell-${VERSION}`;
 const RUNTIME_CACHE = `musictools-runtime-${VERSION}`;
 
@@ -116,8 +116,78 @@ async function handleAsset(request, url) {
   return cached ?? network;
 }
 
+/*
+ * Share target: a song or video shared to the installed app from another app
+ * arrives here as a form post. The file is put where the home page looks for
+ * it (the same IndexedDB store the tools use for hand-offs) and the visitor
+ * lands on the home page, which asks what to do with it. It never leaves the
+ * device.
+ */
+const FILE_DB = "music-tools-files";
+const FILE_STORE = "files";
+const SHARED_ID = "shared-in";
+
+function storeSharedFile(file) {
+  return new Promise((resolve) => {
+    let request;
+    try {
+      request = indexedDB.open(FILE_DB, 1);
+    } catch {
+      resolve(false);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_STORE)) db.createObjectStore(FILE_STORE, { keyPath: "id" });
+    };
+    request.onerror = () => resolve(false);
+    request.onblocked = () => resolve(false);
+    request.onsuccess = () => {
+      const db = request.result;
+      try {
+        const transaction = db.transaction(FILE_STORE, "readwrite");
+        transaction.objectStore(FILE_STORE).put({
+          id: SHARED_ID,
+          name: file.name || "shared-audio",
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          savedAt: new Date().toISOString(),
+          blob: file,
+        });
+        transaction.oncomplete = () => {
+          db.close();
+          resolve(true);
+        };
+        transaction.onerror = () => {
+          db.close();
+          resolve(false);
+        };
+      } catch {
+        db.close();
+        resolve(false);
+      }
+    };
+  });
+}
+
+async function handleShare(request) {
+  const home = new URL("./", self.location.href);
+  try {
+    const form = await request.formData();
+    const file = form.getAll("file").find((item) => item && typeof item === "object" && item.size > 0);
+    if (file) await storeSharedFile(file);
+  } catch {
+    // Land on the home page anyway; the visitor can pick the file there.
+  }
+  return Response.redirect(home.href, 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  if (request.method === "POST" && new URL(request.url).pathname.endsWith("/share-target")) {
+    event.respondWith(handleShare(request));
+    return;
+  }
   if (request.method !== "GET") return;
   // Range requests back the audio elements; a partial response must not be
   // cached or replayed as if it were the whole file.

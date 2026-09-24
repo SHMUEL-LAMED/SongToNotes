@@ -21,6 +21,20 @@ export const VOICES: { id: VoiceId; label: string; short: string; hue: number }[
   { id: "cowbell", label: "קאובל", short: "BELL", hue: 340 },
 ];
 
+/**
+ * Which voice a note from a MIDI drum pad plays: the General MIDI drum map
+ * where it has an obvious match, and otherwise the pads in order from note
+ * 36, which is where most pad controllers start.
+ */
+export function midiToVoice(note: number): VoiceId {
+  const GM: Record<number, VoiceId> = {
+    35: "kick", 36: "kick", 37: "snare", 38: "snare", 40: "snare", 39: "clap",
+    42: "hat", 44: "hat", 46: "open", 41: "lowTom", 43: "lowTom", 45: "lowTom",
+    47: "highTom", 48: "highTom", 50: "highTom", 56: "cowbell",
+  };
+  return GM[note] ?? VOICES[(((note - 36) % VOICES.length) + VOICES.length) % VOICES.length].id;
+}
+
 /** 0 = rest, 1 = hit, 2 = accented hit. */
 export type Cell = 0 | 1 | 2;
 export type Pattern = Record<VoiceId, Cell[]>;

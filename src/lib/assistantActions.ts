@@ -88,7 +88,7 @@ function define(
 export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
-  "beats", "theory",
+  "beats", "theory", "progressions", "changes",
 ];
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -102,6 +102,7 @@ export const ACTIONS: ActionSpec[] = [
   define(null, "write", "account.open", "פתיחת האזור האישי", "פותח את האזור האישי (ההיסטוריה והקבצים השמורים)."),
   define(null, "write", "account.close", "סגירת האזור האישי", "סוגר את האזור האישי."),
   define(null, "write", "theme.set", "ערכת נושא", "מחליף בין ערכת נושא בהירה, כהה או לפי המערכת.", ["theme:light|dark|system"]),
+  define(null, "write", "theme.color", "צבע האתר", "מחליף את צבע האתר; everywhere צובע בו גם את כל הכלים.", ["color:default|סגול|ורוד|אדום|כתום|זהב|ירוק|טורקיז|כחול|אינדיגו", "everywhere?:boolean"]),
   define(null, "read", "works.list", "רשימת העבודות השמורות", "העבודות השמורות של הגולש (כותרת, סוג, תיאור, מזהה), החדשות קודם.", ["kind?:notes|ringtone|vocals|speed|piano|analysis|ear|metronome|tuner|transcript|chords|song|convert|rhythm|mix|lyrics|tts", ["query?", "סינון לפי טקסט בכותרת"], "limit?:number"]),
   define(null, "write", "works.open", "פתיחת עבודה שמורה", "פותח עבודה שמורה בכלי שיצר אותה.", [["id", "מזהה מתוך works.list"]]),
   define(null, "write", "works.rename", "שינוי שם לעבודה", "משנה את הכותרת של עבודה שמורה.", ["id", "title"]),
@@ -113,7 +114,7 @@ export const ACTIONS: ActionSpec[] = [
   define("songbook", "write", "songbook.append", "הוספה לשירון", "מוסיף שורות בסוף הטקסט בשירון, באותו פורמט.", ["body"]),
   define("songbook", "read", "songbook.read", "קריאת השירון", "הכותרת, הטקסט, הטרנספוזיציה והאקורדים שבשירון."),
   define("songbook", "write", "songbook.set", "הגדרות השירון", "טרנספוזיציה בחצאי טונים (-11..11), גודל טקסט (14..32), שמות עם במול, הצגת אחיזות, ומעבר בין עריכה לתצוגה.", ["transpose?:number", "fontSize?:number", "flats?:boolean", "diagrams?:boolean", "view?:edit|view"]),
-  define("songbook", "write", "songbook.scroll", "גלילה אוטומטית", "מפעיל או עוצר גלילה אוטומטית להופעה; speed בפיקסלים לשנייה (5..120).", ["on:boolean", "speed?:number"]),
+  define("songbook", "write", "songbook.scroll", "גלילה אוטומטית", "מפעיל או עוצר גלילה אוטומטית להופעה; speed בפיקסלים לשנייה (5..120), או bpm (40..220) ו־beatsPerLine (2, 4, 8, 12, 16) לגלילה לפי קצב, שורה אחרי שורה.", ["on:boolean", "speed?:number", "bpm?:number", "beatsPerLine?:number"]),
   define("songbook", "write", "songbook.save", "שמירת השיר", "שומר את השיר באזור האישי."),
   define("songbook", "write", "songbook.download", "הורדת השיר", "מוריד את השיר כקובץ טקסט עם האקורדים מעל המילים."),
   define("songbook", "write", "songbook.print", "הדפסה", "פותח את חלון ההדפסה של הדף."),
@@ -136,6 +137,18 @@ export const ACTIONS: ActionSpec[] = [
   define("beats", "write", "beats.clear", "ניקוי הרשת", "מוחק את כל המכות."),
   define("beats", "write", "beats.steps", "תכנות צעדים", "מסמן מכות לכלי אחד בצעדים 1..16 (למשל \"1,5,9,13\" או \"1-16\"); clear מנקה את השורה קודם, accent מדגיש.", ["voice:kick|snare|clap|hat|open|lowTom|highTom|cowbell", ["steps", "מספרי צעדים 1..16"], "accent?:boolean", "clear?:boolean"]),
   define("beats", "write", "beats.export", "הורדת הביט", "מוריד את הלולאה כקובץ WAV באורך מספר תיבות (1..16).", ["bars?:number"]),
+
+  // ---- progression generator ----
+  define("progressions", "write", "progressions.generate", "מהלך אקורדים חדש", "יוצר מהלך אקורדים לפי אווירה ובסולם (אם ניתן).", ["mood?:pop|happy|sad|dramatic|rock|dreamy|jazz|epic", ["key?", "טוניקה, למשל C או F♯"]]),
+  define("progressions", "write", "progressions.set", "הגדרות הליווי", "קצב (50..200), פעמות לאקורד (2, 4 או 8), דפוס ליווי, סגנון בס ואקורדי ספטימה.", ["bpm?:number", "beats?:number", "pattern?:block|pulse|arpUp|arpUpDown|broken|offbeat", "bass?:none|root|rootFifth|octaves|walking", "sevenths?:boolean"]),
+  define("progressions", "write", "progressions.play", "ניגון המהלך", "מנגן את המהלך בלולאה."),
+  define("progressions", "write", "progressions.stop", "עצירת המהלך", "עוצר את הניגון."),
+  define("progressions", "write", "progressions.songbook", "המהלך לשירון", "שולח את המהלך לשירון ופותח אותו."),
+
+  // ---- chord changes trainer ----
+  define("changes", "write", "changes.set", "זוג אקורדים לתרגול", "בוחר שני אקורדים (Em, Am, D, A, E, G, C, Dm, E7, A7, D7, G7, C7, Fmaj7, F) ומשך סבב בשניות (30, 60 או 120).", ["first?", "second?", "seconds?:number"]),
+  define("changes", "write", "changes.start", "התחלת סבב", "מתחיל סבב מעברים עם ספירה לאחור; הגולש לוחץ בכל מעבר."),
+  define("changes", "read", "changes.stats", "התוצאות בזוג", "השיא, מספר הסבבים והתוצאות האחרונות (מעברים לדקה) בזוג שנבחר."),
 
   // ---- theory explorer ----
   define("theory", "write", "theory.set", "סולם בסייר התאוריה", "בוחר טוניקה (C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B), סולם או מודוס, משולשים או ספטאקורדים ותצוגה.", [["root?", "שם התו, למשל C או F♯"], "scale?:major|minor|dorian|phrygian|lydian|mixolydian|locrian|harmonicMinor|melodicMinor|majorPentatonic|minorPentatonic|blues", "sevenths?:boolean", "view?:piano|guitar"]),
@@ -187,7 +200,7 @@ export const ACTIONS: ActionSpec[] = [
   define("notes", "read", "notes.read", "קריאת התווים", "סטטיסטיקה של הניתוח (תווים, קצב, סולם, משך) והתווים הראשונים (limit, ברירת מחדל 60).", ["limit?:number"]),
   define("notes", "write", "notes.demo", "מנגינת דוגמה", "טוען את מנגינת הדוגמה."),
   define("notes", "write", "notes.run", "ניתוח לתווים", "מתחיל את זיהוי התווים בקובץ שנבחר. ממשיך ברקע."),
-  define("notes", "write", "notes.set", "הגדרות הזיהוי", "מנגינה או כל התווים, מנוע, רגישות (20..90), ניקוי הרמוניות (0..1), אורך תו מזערי בשניות (0.02..0.3), חלוקה (1,2,3,4,8), משקל (2,3,4,6), טרנספוזיציה (-12..12), אקורדים, וקצב ידני (40..240; 0 חוזר לאוטומטי).", ["mode?:melody|full", "engine?:fast|deep", "sensitivity?:number", "harmonicCleanup?:number", "minDuration?:number", "stepsPerBeat?:number", "beatsPerMeasure?:number", "transpose?:number", "withChords?:boolean", "bpm?:number"]),
+  define("notes", "write", "notes.set", "הגדרות הזיהוי", "מנגינה או כל התווים, מנוע, רגישות (20..90), ניקוי הרמוניות (0..1), אורך תו מזערי בשניות (0.02..0.3), חלוקה (1,2,3,4,8), משקל (2,3,4,6), טרנספוזיציה (-12..12), אקורדים, וקצב ידני (40..240; 0 חוזר לאוטומטי), יישור לרשת באחוזים (0..100) וסווינג באחוזים (0..60).", ["mode?:melody|full", "engine?:fast|deep", "sensitivity?:number", "harmonicCleanup?:number", "minDuration?:number", "stepsPerBeat?:number", "beatsPerMeasure?:number", "transpose?:number", "withChords?:boolean", "bpm?:number", "quantize?:number", "swing?:number"]),
   define("notes", "write", "notes.transport", "נגינת התוצאה", "מנגן, משהה או עוצר את התווים שזוהו.", ["command:play|pause|stop"]),
   define("notes", "write", "notes.playback", "הגדרות נגינה", "כלי נגינה, מהירות (0.5..1.5), עוצמה (0..100), מטרונום ולולאה על הקטע המסומן.", ["instrument?:piano|strings|organ|synth|marimba", "rate?:number", "volume?:number", "click?:boolean", "loop?:boolean"]),
   define("notes", "write", "notes.tab", "תצוגה", "תווים, Piano Roll או רשימת תווים.", ["tab:sheet|piano|notes"]),
@@ -487,7 +500,8 @@ function currentToolRoute() {
 
 /** The notes engine is a separate chunk, so its page takes longer to appear. */
 function mountWait(tool: string) {
-  return tool === "notes" ? 15_000 : 6_000;
+  // Tools load on first use, so a slow connection needs a moment to fetch one.
+  return tool === "notes" ? 15_000 : 10_000;
 }
 
 /**

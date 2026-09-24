@@ -65,3 +65,77 @@ export function useTheme() {
 
   return { preference, resolved, setPreference, cycle };
 }
+
+/* ---- accent colour ---- */
+
+export type AccentPreference = {
+  /** OKLCH hue of the site's own colour; null keeps the brand's. */
+  hue: number | null;
+  /** Paint every tool in it too, instead of each tool's own colour. */
+  everywhere: boolean;
+};
+
+const ACCENT_KEY = "musictools.accent.v1";
+
+/** Colours to pick from, spread round the wheel at equal brightness. */
+export const ACCENT_CHOICES: { hue: number; label: string }[] = [
+  { hue: 292, label: "סגול" },
+  { hue: 330, label: "ורוד" },
+  { hue: 18, label: "אדום" },
+  { hue: 50, label: "כתום" },
+  { hue: 85, label: "זהב" },
+  { hue: 140, label: "ירוק" },
+  { hue: 180, label: "טורקיז" },
+  { hue: 230, label: "כחול" },
+  { hue: 262, label: "אינדיגו" },
+];
+
+export function normalizeAccent(raw: unknown): AccentPreference {
+  const parsed = (raw && typeof raw === "object" ? raw : {}) as Partial<AccentPreference>;
+  const hue = typeof parsed.hue === "number" && Number.isFinite(parsed.hue) ? ((Math.round(parsed.hue) % 360) + 360) % 360 : null;
+  return { hue, everywhere: hue !== null && parsed.everywhere === true };
+}
+
+function readAccent(): AccentPreference {
+  try {
+    return normalizeAccent(JSON.parse(localStorage.getItem(ACCENT_KEY) ?? "null"));
+  } catch {
+    return { hue: null, everywhere: false };
+  }
+}
+
+/** One write to the root element; the stylesheet does the rest. */
+function applyAccent(accent: AccentPreference) {
+  const root = document.documentElement;
+  if (accent.hue === null) {
+    root.style.removeProperty("--accent-hue");
+    root.style.removeProperty("--user-hue");
+  } else {
+    root.style.setProperty("--accent-hue", String(accent.hue));
+    root.style.setProperty("--user-hue", String(accent.hue));
+  }
+  if (accent.everywhere) root.dataset.accentLock = "";
+  else delete root.dataset.accentLock;
+}
+
+export function useAccent() {
+  const [accent, setAccentState] = useState<AccentPreference>(() => {
+    const initial = readAccent();
+    // Applied before the first paint, so the page never flashes the old colour.
+    if (typeof document !== "undefined") applyAccent(initial);
+    return initial;
+  });
+
+  const setAccent = useCallback((next: AccentPreference) => {
+    const clean = normalizeAccent(next);
+    setAccentState(clean);
+    applyAccent(clean);
+    try {
+      localStorage.setItem(ACCENT_KEY, JSON.stringify(clean));
+    } catch {
+      // For this visit only.
+    }
+  }, []);
+
+  return { accent, setAccent };
+}

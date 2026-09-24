@@ -491,7 +491,7 @@
 .songbook-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .songbook-editor { width: 100%; min-height: 280px; padding: 14px 16px; font-size: 16px; line-height: 1.85; resize: vertical; }
 .songbook-editor-tools { display: flex; gap: 16px; flex-wrap: wrap; }
-.songbook-stepper { display: flex; align-items: center; gap: 8px; }
+.songbook-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .songbook-stepper > button:not(.link-button):not(.primary-button) {
   width: 36px;
   height: 36px;
@@ -521,6 +521,13 @@
 .songbook-blank { height: 0.9em; }
 .songbook-line { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 6px; }
 .songbook-piece { display: inline-flex; flex-direction: column; white-space: pre; }
+.songbook-piece.is-bare { margin-inline-end: 1.4em; }
+.songbook-sheet p[data-sung] { border-radius: 8px; padding-inline: 6px; margin-inline: -6px; transition: background 0.2s var(--ease), opacity 0.2s var(--ease); }
+.songbook-sheet.is-prompting p[data-sung]:not([data-now]) { opacity: 0.45; }
+.songbook-sheet p[data-now] { background: var(--accent-tint); }
+.songbook-stepper select { min-height: 36px; }
+.songbook-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.songbook-tempo input { inline-size: 72px; min-height: 36px; }
 .songbook-chord { font-weight: 800; color: var(--accent-text); font-size: 0.85em; line-height: 1.2; min-height: 1.2em; }
 .songbook-diagrams { padding: 4px 0 10px; }
 
@@ -780,3 +787,23 @@
   .identify-listen.is-live, .rhythm-pad, .chords-block, .songbook-sheet { animation: none !important; transition: none !important; }
   .songbook-sheet, .lyrics-karaoke { scroll-behavior: auto; }
 }
+
+/* ---- explain the song ---- */
+
+.explain-song { display: flex; flex-direction: column; gap: 14px; }
+.explain-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.explain-head > div { flex: 1 1 240px; min-width: 0; }
+.explain-head h2 { margin: 0; font-size: 17px; }
+.explain-head p { margin: 2px 0 0; font-size: 13px; color: var(--text-muted); }
+.explain-icon { inline-size: 36px; block-size: 36px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); }
+.explain-body { max-inline-size: 70ch; line-height: 1.65; }
+.explain-body h2,
+.explain-body h3 { margin: 14px 0 6px; font-size: 15.5px; }
+
+/* ---- lyric translation under each line ---- */
+
+.songbook-sheet p[data-sung] { flex-wrap: wrap; }
+.songbook-gloss { flex-basis: 100%; display: flex; flex-direction: column; gap: 1px; margin: 2px 0 8px; font-size: 0.72em; line-height: 1.35; white-space: normal; }
+.songbook-gloss-sound { color: var(--accent-text); }
+.songbook-gloss-meaning { color: var(--text-muted); font-style: italic; }
+.songbook-gloss-actions { margin-top: 12px; }

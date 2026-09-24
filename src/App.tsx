@@ -1,9 +1,10 @@
-import { CircleSlash, Info, Keyboard, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
+import { CircleSlash, Info, Keyboard, Palette, PowerOff, Sparkles, UserRound, Wrench, House } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
 import { AppNotices } from "./components/AppNotices";
 import { AppShell } from "./components/AppShell";
+import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
@@ -19,33 +20,38 @@ import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
-import { useTheme, type ThemePreference } from "./lib/theme";
+import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { TOOLS, findTool } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
-import { AnalyzeTool } from "./tools/AnalyzeTool";
-import { BeatMakerTool } from "./tools/BeatMakerTool";
-import { ChordsTool } from "./tools/ChordsTool";
-import { ConvertTool } from "./tools/ConvertTool";
-import { IdentifyTool } from "./tools/IdentifyTool";
-import { TtsTool } from "./tools/TtsTool";
-import { LyricsTool } from "./tools/LyricsTool";
-import { MixerTool } from "./tools/MixerTool";
-import { PadTool } from "./tools/PadTool";
-import { RhythmTool } from "./tools/RhythmTool";
-import { VideoTool } from "./tools/VideoTool";
-import { SongbookTool } from "./tools/SongbookTool";
-import { EarTrainingTool } from "./tools/EarTrainingTool";
-import { MetronomeTool } from "./tools/MetronomeTool";
-import { PianoTool } from "./tools/PianoTool";
-import { RingtoneTool } from "./tools/RingtoneTool";
-import { SpeedTool } from "./tools/SpeedTool";
-import { TheoryTool } from "./tools/TheoryTool";
-import { TranscriptTool } from "./tools/TranscriptTool";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
-import { TunerTool } from "./tools/TunerTool";
-import { VocalsTool } from "./tools/VocalsTool";
+
+// Every tool is its own chunk: the hub downloads only the shell, and a
+// tool's code arrives the first time somebody opens it.
+const AnalyzeTool = lazy(() => import("./tools/AnalyzeTool").then((module) => ({ default: module.AnalyzeTool })));
+const BeatMakerTool = lazy(() => import("./tools/BeatMakerTool").then((module) => ({ default: module.BeatMakerTool })));
+const ChordsTool = lazy(() => import("./tools/ChordsTool").then((module) => ({ default: module.ChordsTool })));
+const ConvertTool = lazy(() => import("./tools/ConvertTool").then((module) => ({ default: module.ConvertTool })));
+const IdentifyTool = lazy(() => import("./tools/IdentifyTool").then((module) => ({ default: module.IdentifyTool })));
+const TtsTool = lazy(() => import("./tools/TtsTool").then((module) => ({ default: module.TtsTool })));
+const LyricsTool = lazy(() => import("./tools/LyricsTool").then((module) => ({ default: module.LyricsTool })));
+const MixerTool = lazy(() => import("./tools/MixerTool").then((module) => ({ default: module.MixerTool })));
+const PadTool = lazy(() => import("./tools/PadTool").then((module) => ({ default: module.PadTool })));
+const RhythmTool = lazy(() => import("./tools/RhythmTool").then((module) => ({ default: module.RhythmTool })));
+const VideoTool = lazy(() => import("./tools/VideoTool").then((module) => ({ default: module.VideoTool })));
+const SongbookTool = lazy(() => import("./tools/SongbookTool").then((module) => ({ default: module.SongbookTool })));
+const EarTrainingTool = lazy(() => import("./tools/EarTrainingTool").then((module) => ({ default: module.EarTrainingTool })));
+const MetronomeTool = lazy(() => import("./tools/MetronomeTool").then((module) => ({ default: module.MetronomeTool })));
+const ProgressionTool = lazy(() => import("./tools/ProgressionTool").then((module) => ({ default: module.ProgressionTool })));
+const ChangesTool = lazy(() => import("./tools/ChangesTool").then((module) => ({ default: module.ChangesTool })));
+const PianoTool = lazy(() => import("./tools/PianoTool").then((module) => ({ default: module.PianoTool })));
+const RingtoneTool = lazy(() => import("./tools/RingtoneTool").then((module) => ({ default: module.RingtoneTool })));
+const SpeedTool = lazy(() => import("./tools/SpeedTool").then((module) => ({ default: module.SpeedTool })));
+const TheoryTool = lazy(() => import("./tools/TheoryTool").then((module) => ({ default: module.TheoryTool })));
+const TranscriptTool = lazy(() => import("./tools/TranscriptTool").then((module) => ({ default: module.TranscriptTool })));
+const TunerTool = lazy(() => import("./tools/TunerTool").then((module) => ({ default: module.TunerTool })));
+const VocalsTool = lazy(() => import("./tools/VocalsTool").then((module) => ({ default: module.VocalsTool })));
 
 // The transcriber pulls in the engraver and, through it, the biggest slice of
 // the bundle. Splitting it out keeps the hub and the lighter tools quick to
@@ -127,6 +133,8 @@ function WorkspaceApp() {
   }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const { accent, setAccent } = useAccent();
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
   const owner = isAdmin(user);
@@ -200,6 +208,7 @@ function WorkspaceApp() {
   }, [user]);
   useCommandKey(openPalette);
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
+  const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -229,7 +238,7 @@ function WorkspaceApp() {
   // What the assistant may do on the site itself, from any page.
   useAssistantTool("site", {
     state: () =>
-      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
     handlers: {
       navigate: ({ tool: target }) => {
         const id = String(target);
@@ -249,6 +258,16 @@ function WorkspaceApp() {
       "account.close": () => {
         setAccountOpen(false);
         return { ok: true, message: "האזור האישי נסגר" };
+      },
+      "theme.color": ({ color, everywhere }) => {
+        if (color === "default") {
+          setAccent({ hue: null, everywhere: false });
+          return { ok: true, message: "הצבע חזר לברירת המחדל" };
+        }
+        const found = ACCENT_CHOICES.find((item) => item.label === color || String(item.hue) === String(color));
+        if (!found) return { ok: false, message: `הצבעים: ${ACCENT_CHOICES.map((item) => item.label).join(", ")} או default` };
+        setAccent({ hue: found.hue, everywhere: Boolean(everywhere) });
+        return { ok: true, message: `צבע האתר: ${found.label}${everywhere ? ", בכל הכלים" : ""}` };
       },
       "theme.set": ({ theme: choice }) => {
         theme.setPreference(choice as ThemePreference);
@@ -310,6 +329,7 @@ function WorkspaceApp() {
       { id: "page:home", label: "דף הבית", group: "דפים", icon: <House size={15} />, run: () => go("home") },
       { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
+      { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
@@ -366,7 +386,7 @@ function WorkspaceApp() {
       owner={owner}
       disabledTools={control.disabledTools}
       themePreference={theme.preference}
-      onCycleTheme={theme.cycle}
+      onOpenAppearance={() => setAppearanceOpen(true)}
       onNavigate={go}
       onOpenAccount={() => setAccountOpen(true)}
       onOpenPalette={openPalette}
@@ -389,6 +409,14 @@ function WorkspaceApp() {
 
       <CommandPalette open={paletteOpen} items={commands} onClose={() => setPaletteOpen(false)} />
       <ShortcutsDialog open={shortcutsOpen} onClose={closeShortcuts} />
+      <AppearanceDialog
+        open={appearanceOpen}
+        onClose={closeAppearance}
+        preference={theme.preference}
+        onPreference={theme.setPreference}
+        accent={accent}
+        onAccent={setAccent}
+      />
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">
@@ -468,27 +496,31 @@ function WorkspaceApp() {
           />
         </Suspense>
       )}
-      {shown === "ringtone" && <RingtoneTool />}
-      {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
-      {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
-      {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
-      {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
-      {shown === "piano" && <PianoTool />}
-      {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
-      {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
-      {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-      {shown === "identify" && <IdentifyTool />}
-      {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
-      {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
-      {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
-      {shown === "pads" && <PadTool />}
-      {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
-      {shown === "video" && <VideoTool />}
-      {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
-      {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
-      {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
-      {shown === "beats" && <BeatMakerTool />}
-      {shown === "theory" && <TheoryTool />}
+      <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
+        {shown === "ringtone" && <RingtoneTool />}
+        {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
+        {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+        {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
+        {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
+        {shown === "piano" && <PianoTool />}
+        {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+        {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
+        {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
+        {shown === "identify" && <IdentifyTool />}
+        {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
+        {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+        {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+        {shown === "pads" && <PadTool />}
+        {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+        {shown === "video" && <VideoTool />}
+        {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+        {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
+        {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
+        {shown === "beats" && <BeatMakerTool />}
+        {shown === "theory" && <TheoryTool />}
+        {shown === "progressions" && <ProgressionTool />}
+        {shown === "changes" && <ChangesTool />}
+      </Suspense>
 
       {tool && (
         <>

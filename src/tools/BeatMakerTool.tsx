@@ -24,6 +24,7 @@ import {
   countHits,
   defaultMix,
   emptyPattern,
+  midiToVoice,
   normalizePattern,
   randomPattern,
   renderPattern,
@@ -32,7 +33,9 @@ import {
   type Pattern,
   type VoiceId,
 } from "../lib/drums";
+import { MidiButton } from "../components/MidiButton";
 import { downloadFile } from "../lib/export";
+import { useMidiInput } from "../lib/midiInput";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav, fromAudioBuffer } from "../lib/wav";
@@ -207,6 +210,22 @@ export function BeatMakerTool() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [toggle]);
+
+  // A pad controller plays the voices; while the beat runs, each hit is also
+  // written into the step under the playhead, so a groove can be played in.
+  const midi = useMidiInput({
+    onNoteOn: (note, velocity) => {
+      const voice = midiToVoice(note);
+      void player().preview(voice);
+      const step = playerRef.current?.currentStep() ?? -1;
+      if (step < 0) return;
+      setPattern((previous) => {
+        const row = [...previous[voice]];
+        row[step] = velocity > 0.85 ? 2 : Math.max(row[step], 1) as Cell;
+        return { ...previous, [voice]: row };
+      });
+    },
+  });
 
   const cycle = (voice: VoiceId, step: number) => {
     setPattern((previous) => {
@@ -388,6 +407,12 @@ export function BeatMakerTool() {
           </label>
         </div>
       </div>
+
+      {midi.supported && (
+        <div className="tool-inline-actions">
+          <MidiButton midi={midi} />
+        </div>
+      )}
 
       <div className="preset-strip">
         <span>סגנונות</span>

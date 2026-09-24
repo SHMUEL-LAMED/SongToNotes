@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CircleStop, Mic2, Play, RotateCcw } from "lucide-react";
+import { MidiButton } from "../components/MidiButton";
+import { useMidiInput } from "../lib/midiInput";
 import "./pad.css";
 
 type Pad = { name: string; key: string; color: string; kind: "kick" | "snare" | "hat" | "clap" | "tom" | "perc" };
@@ -42,9 +44,11 @@ export function PadTool() {
     if (shouldRecord && recording) setEvents((current) => [...current, { pad: index, at: performance.now() - started.current }]);
   };
   useEffect(() => { const onKey = (event: KeyboardEvent) => { const index = PADS.findIndex((pad) => pad.key === event.key.toLowerCase()); if (index >= 0 && !event.repeat) { event.preventDefault(); play(index); } }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); });
+  // Pad controllers start at note 36; sixteen notes up from there are the sixteen pads.
+  const midi = useMidiInput({ onNoteOn: (note) => play((((note - 36) % PADS.length) + PADS.length) % PADS.length) });
   useEffect(() => () => { void ctx.current?.close(); }, []);
   const toggleRecord = () => { if (recording) setRecording(false); else { setEvents([]); started.current = performance.now(); setRecording(true); } };
   const replay = () => { if (!events.length) return; const base = performance.now(); events.forEach((event) => window.setTimeout(() => play(event.pad, false), event.at)); void base; };
 
-  return <section className="pad-tool" dir="rtl"><div className="tool-intro"><h1>פדים לדי־ג׳יי</h1><p>לוח פדים צבעוני לנגינת ביטים ואפקטים. אפשר ללחוץ או לנגן מהמקלדת.</p></div><div className="pad-actions"><button type="button" onClick={toggleRecord}>{recording ? <><CircleStop size={17} /> עצור הקלטה</> : <><Mic2 size={17} /> הקלט רצף</>}</button><button type="button" className="secondary-button" onClick={replay} disabled={!events.length}><Play size={17} /> נגן רצף</button><button type="button" className="secondary-button" onClick={() => setEvents([])} disabled={!events.length}><RotateCcw size={17} /> נקה</button></div>{recording && <p className="pad-recording"><span /> מקליט…</p>}<div className="pad-grid">{PADS.map((pad, index) => <button type="button" key={pad.key} className={`pad ${active === index ? "is-active" : ""}`} style={{ "--pad-color": pad.color } as React.CSSProperties} onPointerDown={() => play(index)} aria-label={`${pad.name}, מקש ${pad.key}`}><strong>{pad.name}</strong><kbd>{pad.key}</kbd></button>)}</div><p className="pad-help">אפשר להשתמש במקשים 1–4, Q–R, A–F ו־Z–V.</p></section>;
+  return <section className="pad-tool" dir="rtl"><div className="tool-intro"><h1>פדים לדי־ג׳יי</h1><p>לוח פדים צבעוני לנגינת ביטים ואפקטים. אפשר ללחוץ או לנגן מהמקלדת.</p></div><div className="pad-actions"><button type="button" onClick={toggleRecord}>{recording ? <><CircleStop size={17} /> עצור הקלטה</> : <><Mic2 size={17} /> הקלט רצף</>}</button><button type="button" className="secondary-button" onClick={replay} disabled={!events.length}><Play size={17} /> נגן רצף</button><button type="button" className="secondary-button" onClick={() => setEvents([])} disabled={!events.length}><RotateCcw size={17} /> נקה</button><MidiButton midi={midi} /></div>{recording && <p className="pad-recording"><span /> מקליט…</p>}<div className="pad-grid">{PADS.map((pad, index) => <button type="button" key={pad.key} className={`pad ${active === index ? "is-active" : ""}`} style={{ "--pad-color": pad.color } as React.CSSProperties} onPointerDown={() => play(index)} aria-label={`${pad.name}, מקש ${pad.key}`}><strong>{pad.name}</strong><kbd>{pad.key}</kbd></button>)}</div><p className="pad-help">אפשר להשתמש במקשים 1–4, Q–R, A–F ו־Z–V.</p></section>;
 }

@@ -76,7 +76,31 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
 // The language model
 // ---------------------------------------------------------------------------
 
-export type AiAction = "polish" | "summarize" | "translate" | "speakers" | "chat";
+export type LyricGloss = { transliteration: string; translation: string };
+
+/**
+ * The model's answer to "lyrics": one "transliteration || translation" line
+ * per line of the song. Null when the lines do not match up, so the page
+ * never pins a translation to the wrong line.
+ */
+export function parseLyricGloss(reply: string, lines: string[]): LyricGloss[] | null {
+  const out = reply.replace(/\r/g, "").split("\n").map((line) => line.trim());
+  while (out.length && !out[0]) out.shift();
+  while (out.length && !out[out.length - 1]) out.pop();
+  const split = (raw: string): LyricGloss => {
+    const [left, ...rest] = raw.split("||");
+    return rest.length ? { transliteration: left.trim(), translation: rest.join("||").trim() } : { transliteration: "", translation: left.trim() };
+  };
+  const blank = { transliteration: "", translation: "" };
+  if (out.length === lines.length) return out.map((raw) => (raw ? split(raw) : blank));
+  // The model dropped (or added) blank lines: line the sung lines up in order.
+  const answers = out.filter(Boolean);
+  if (answers.length !== lines.filter((line) => line.trim()).length) return null;
+  let cursor = 0;
+  return lines.map((line) => (line.trim() ? split(answers[cursor++]) : blank));
+}
+
+export type AiAction = "polish" | "summarize" | "translate" | "speakers" | "explain" | "lyrics" | "chat";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 /** Answer only; write a plan and wait; or carry the task out as an agent. */
 export type AssistantMode = "question" | "plan" | "execute";
@@ -90,7 +114,7 @@ export type AiReply = {
   action?: AssistantAction | null;
 };
 
-/** Tidies, summarises or translates a text. */
+/** Tidies, summarises or translates a text; explains a song; translates lyrics line by line. */
 export function transformText(
   action: Exclude<AiAction, "chat">,
   text: string,

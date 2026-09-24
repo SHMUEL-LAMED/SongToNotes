@@ -1,6 +1,7 @@
 import { BookOpen, Check, Copy, Download, Guitar, Music3, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { ExplainSong } from "../components/ExplainSong";
 import { ChordDiagram } from "../components/ChordDiagram";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -417,6 +418,29 @@ export function ChordsTool({ initial = null }: Props) {
           </>
         )}
       </div>
+
+      {result && shown.length > 0 && (
+        <ExplainSong
+          songKey={`${title}|${result.segments.length}|${transpose}`}
+          describe={() => {
+            // Consecutive repeats collapse, so the model reads the harmony, not the timing.
+            const names: string[] = [];
+            // The chords as they sound, not the shapes fingered under a capo.
+            for (const segment of result.segments) {
+              const name = chordName(transposeRoot(segment.root, transpose), segment.quality, flats);
+              if (names[names.length - 1] !== name) names.push(name);
+            }
+            return [
+              `שם הקובץ: ${title}`,
+              `אורך: ${Math.round(result.duration)} שניות`,
+              transpose ? `הועבר ב־${transpose} חצאי טונים מהמקור` : "",
+              `רצף האקורדים לאורך השיר (זוהה אוטומטית מההקלטה, ייתכנו טעויות): ${names.join(" ")}`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+          }}
+        />
+      )}
     </section>
   );
 }

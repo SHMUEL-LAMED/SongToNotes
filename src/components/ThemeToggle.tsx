@@ -3,7 +3,7 @@ import type { ThemePreference } from "../lib/theme";
 
 type Props = {
   preference: ThemePreference;
-  onCycle: () => void;
+  onOpen: () => void;
 };
 
 const LABELS: Record<ThemePreference, string> = {
@@ -12,15 +12,16 @@ const LABELS: Record<ThemePreference, string> = {
   dark: "מצב כהה",
 };
 
-export function ThemeToggle({ preference, onCycle }: Props) {
+/** Opens the appearance sheet: light or dark, and the site's colour. */
+export function ThemeToggle({ preference, onOpen }: Props) {
   const Icon = preference === "light" ? Sun : preference === "dark" ? Moon : Monitor;
   return (
     <button
       className="icon-button theme-toggle"
       type="button"
-      onClick={onCycle}
-      aria-label={`ערכת נושא: ${LABELS[preference]}. לחצו להחלפה`}
-      title={LABELS[preference]}
+      onClick={onOpen}
+      aria-label={`מראה וצבעים (ערכת נושא: ${LABELS[preference]})`}
+      title="מראה וצבעים"
     >
       <Icon size={17} />
     </button>

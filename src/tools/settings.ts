@@ -14,6 +14,10 @@ export type Settings = {
   withChords: boolean;
   /** Which detector runs: the instant one, or the slow neural model. */
   engine: NoteEngineId;
+  /** 0..1 — how far notes are pulled onto the beat grid. */
+  quantize: number;
+  /** 0..0.6 — how late every second grid step lands. */
+  swing: number;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -26,6 +30,8 @@ const DEFAULT_SETTINGS: Settings = {
   transpose: 0,
   withChords: true,
   engine: "fast",
+  quantize: 0,
+  swing: 0,
 };
 
 /** Persists the detection settings so a return visit starts where it left off. */
@@ -65,6 +71,8 @@ export function normalizeSettings(parsed: Partial<Settings> | null | undefined):
     withChords:
       typeof parsed.withChords === "boolean" ? parsed.withChords : DEFAULT_SETTINGS.withChords,
     engine: parsed.engine === "deep" ? "deep" : DEFAULT_SETTINGS.engine,
+    quantize: numberInRange(parsed.quantize, DEFAULT_SETTINGS.quantize, 0, 1),
+    swing: numberInRange(parsed.swing, DEFAULT_SETTINGS.swing, 0, 0.6),
   };
 }
 

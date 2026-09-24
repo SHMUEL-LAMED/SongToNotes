@@ -624,3 +624,51 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
 }
+
+/* ---- appearance ---- */
+
+.appearance-dialog { display: flex; flex-direction: column; gap: 18px; }
+.appearance-dialog > p { margin-bottom: 0; }
+.appearance-section { display: flex; flex-direction: column; gap: 10px; }
+.appearance-label { font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.appearance-section .segmented-control button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.appearance-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.appearance-swatch {
+  inline-size: 42px;
+  block-size: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, oklch(0.64 0.2 var(--swatch-hue)), oklch(0.55 0.21 calc(var(--swatch-hue) + 35)));
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s var(--ease);
+}
+.appearance-swatch:hover { transform: scale(1.06); }
+.appearance-swatch.is-on { border-color: var(--text); }
+.appearance-swatch.is-default {
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text);
+  inline-size: auto;
+  padding-inline: 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.appearance-swatch.is-default.is-on { border-color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .appearance-swatch { transition: none; } }
+
+/* A colour picked for the whole site wins over each tool's own, inline hues included. */
+:root[data-accent-lock] .tool-page,
+:root[data-accent-lock] .tool-card,
+:root[data-accent-lock] .admin-page,
+:root[data-accent-lock] .me-tile,
+:root[data-accent-lock] [style*="--accent-hue"] {
+  --accent-hue: var(--user-hue) !important;
+}
