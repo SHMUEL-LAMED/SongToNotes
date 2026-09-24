@@ -171,7 +171,8 @@ export function IdentifyTool() {
       <div className="workspace-card">
         {configured === false && (
           <div className="notice-message" role="status">
-            זיהוי השירים עדיין לא הופעל באתר. מנהל האתר צריך להזין מפתח לשירות הזיהוי (IDENTIFY_API_KEY).
+            היכולת הזאת עדיין לא הופעלה באתר. מנהל האתר צריך להזין מפתח לשירות.{" "}
+            <code dir="ltr">ACRCLOUD_HOST · ACRCLOUD_ACCESS_KEY · ACRCLOUD_ACCESS_SECRET</code>
           </div>
         )}
         {!user ? (

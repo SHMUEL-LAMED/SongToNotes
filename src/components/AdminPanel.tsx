@@ -322,7 +322,7 @@ function ToolsTab({ snapshot, focus, setFocus }: { snapshot: AdminSnapshot; focu
   const exportRows = () =>
     downloadFile(
       // A BOM, so a spreadsheet opens the Hebrew headings as Hebrew.
-      `\ufeff${toCsv(
+      `${String.fromCharCode(0xfeff)}${toCsv(
         tools.map((tool) => ({
           כלי: toolLabel(tool.tool),
           כניסות: tool.views,
@@ -823,6 +823,7 @@ function SystemTab({
                   <th scope="row">
                     <code>{setting.key}</code>
                     {setting.preview && <span className="setting-preview" dir="ltr">{setting.preview}</span>}
+                    {SETTING_HINTS[setting.key] && <small className="setting-hint">{SETTING_HINTS[setting.key]}</small>}
                   </th>
                   <td>
                     <span className={`pill ${setting.set ? "is-on" : "is-off"}`}>
@@ -834,9 +835,12 @@ function SystemTab({
                     {editing === setting.key ? (
                       <span className="control-input">
                         <input
-                          type="text"
+                          type={/KEY|TOKEN|SECRET|PASSWORD/.test(setting.key) ? "password" : "text"}
                           value={draft}
                           dir="ltr"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={SETTING_PLACEHOLDERS[setting.key]}
                           autoFocus
                           aria-label={`ערך ל־${setting.key}`}
                           onChange={(event) => setDraft(event.target.value)}
@@ -968,6 +972,22 @@ function SystemTab({
     </div>
   );
 }
+
+/** Where to copy a setting from, shown under its name in the keys table. */
+const SETTING_HINTS: Record<string, string> = {
+  ACRCLOUD_HOST:
+    "זיהוי שירים. בלוח הבקרה של ACRCloud: Audio & Video Recognition → Projects → הפרויקט שלך → Host (למשל identify-eu-west-1.acrcloud.com, בלי https://)",
+  ACRCLOUD_ACCESS_KEY:
+    "זיהוי שירים. באותו פרויקט ב־ACRCloud: השורה Access Key (לחץ על סמל ההעתקה שלידה)",
+  ACRCLOUD_ACCESS_SECRET:
+    "זיהוי שירים. באותו פרויקט ב־ACRCloud: השורה Access Secret (לחץ על סמל העין או ההעתקה שלידה)",
+  IDENTIFY_DAILY: "כמה זיהויים מותרים לכל חשבון ביום (ברירת מחדל 30)",
+};
+
+const SETTING_PLACEHOLDERS: Record<string, string> = {
+  ACRCLOUD_HOST: "identify-eu-west-1.acrcloud.com",
+  IDENTIFY_DAILY: "30",
+};
 
 /* ------------------------------------------------------------------ page */
 

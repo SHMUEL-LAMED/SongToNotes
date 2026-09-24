@@ -250,7 +250,8 @@ const KNOWN_KEYS = [
   "HF_TOKEN", "TOGETHER_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY",
   "SEPARATION_API_KEY", "SEPARATION_MODEL", "SEPARATION_INPUT", "SEPARATION_STEMS_INPUT", "SEPARATION_DAILY",
   "TTS_API_KEY", "TTS_BASE_URL", "TTS_MODEL", "TTS_VOICE", "TTS_DAILY_CHARS",
-  "IDENTIFY_API_KEY", "ADMIN_EMAILS", "STORAGE_SOFT_GB",
+  "ACRCLOUD_HOST", "ACRCLOUD_ACCESS_KEY", "ACRCLOUD_ACCESS_SECRET", "IDENTIFY_DAILY",
+  "ADMIN_EMAILS", "STORAGE_SOFT_GB",
 ];
 
 const OPEN_KEYS = new Set(KNOWN_KEYS.filter((key) => !/KEY|TOKEN|SECRET|PASSWORD/.test(key)));
@@ -467,14 +468,29 @@ async function health(admin: SupabaseClient) {
     });
   }
 
-  const identify = read("IDENTIFY_API_KEY");
-  checks.push({
-    service: "identify",
-    label: "זיהוי שירים",
-    state: identify ? "good" : "off",
-    note: identify ? "מפתח מוגדר" : "אין IDENTIFY_API_KEY",
-    ms: 0,
-  });
+  const acrMissing = ["ACRCLOUD_HOST", "ACRCLOUD_ACCESS_KEY", "ACRCLOUD_ACCESS_SECRET"].filter((key) => !read(key));
+  if (acrMissing.length) {
+    checks.push({
+      service: "identify",
+      label: "זיהוי שירים (ACRCloud)",
+      state: "off",
+      note: `חסר: ${acrMissing.join(", ")}`,
+      ms: 0,
+    });
+  } else {
+    const host = read("ACRCLOUD_HOST").toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    const valid = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.acrcloud\.(com|cn)$/.test(host);
+    // Any HTTP answer from the host means it is reachable; the keys are checked on a real lookup.
+    const result = valid ? await ping(`https://${host}/v1/identify`, {}) : { ok: false, status: 0, ms: 0 };
+    const reachable = valid && (result.ok || result.status > 0);
+    checks.push({
+      service: "identify",
+      label: "זיהוי שירים (ACRCloud)",
+      state: reachable ? "good" : "bad",
+      note: !valid ? "ACRCLOUD_HOST אינו כתובת של ACRCloud" : reachable ? "השרת עונה · המפתחות נבדקים בזיהוי אמיתי" : "השרת לא נענה",
+      ms: result.ms,
+    });
+  }
 
   return checks;
 }
