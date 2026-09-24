@@ -79,7 +79,8 @@ const PROVIDERS: Provider[] = [
     label: "Groq",
     base: "https://api.groq.com/openai/v1",
     keys: ["GROQ_API_KEY", "AI_GROQ_KEY", "STT_API_KEY"],
-    models: ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"],
+    // llama-3.3-70b-versatile was retired by Groq (it answers 404 now).
+    models: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"],
     free: true,
   },
   {
@@ -512,6 +513,7 @@ Deno.serve(async (req: Request) => {
   let endpoint: Endpoint | null = null;
   let model = "";
   let retryAfterMs = 0;
+  let sawBusy = false;
   const failures: string[] = [];
   try {
     outer: for (const service of services) {
@@ -541,6 +543,7 @@ Deno.serve(async (req: Request) => {
         const detail = (await attempt.text().catch(() => "")).slice(0, 200);
         failures.push(`${service.id}/${model}: ${attempt.status} ${detail.slice(0, 90)}`);
         if (BUSY(attempt.status)) {
+          sawBusy = true;
           const match = /try again in ([\d.]+)\s*(ms|s)/i.exec(detail);
           if (match && !retryAfterMs) retryAfterMs = Math.min(8000, Number(match[1]) * (match[2] === "ms" ? 1 : 1000));
           // Another model on the same service has its own bucket; after that,
@@ -583,9 +586,14 @@ Deno.serve(async (req: Request) => {
     console.error("language models unavailable:", failures.join(" | "));
     return json(502, { error: failures.some((item) => /: 40[13]/.test(item)) ? "provider_key" : "provider_unreachable" });
   }
-  // The model that answered is where the next request starts.
-  if (model && setting("AI_MODEL") !== model) {
-    await admin.rpc("stt_set_setting", { setting_key: "AI_MODEL", setting_value: model }).catch(() => undefined);
+  // The model that answered is where the next request starts — but only when
+  // the ones before it are gone for good. A model that stood in while a better
+  // one was merely busy for a minute must not become the default.
+  // (The RPC builder is thenable but has no .catch(); calling it threw after
+  // the answer was ready and turned a good reply into a 500.)
+  if (model && !sawBusy && setting("AI_MODEL") !== model) {
+    const { error: rememberError } = await admin.rpc("stt_set_setting", { setting_key: "AI_MODEL", setting_value: model });
+    if (rememberError) console.warn("could not remember the model", rememberError.message);
   }
   if (failures.length) console.warn(`answered by ${endpoint.id}/${model} after:`, failures.join(" | "));
 

@@ -72,11 +72,12 @@ jobs:
               --use-api \
               --no-verify-jwt
           else
-            # Deploy every local function and remove remote functions that no
-            # longer exist in this repository, keeping Supabase in sync with main.
+            # Deploy every local function. No --prune: the project also hosts
+            # functions that live outside this repository (ivr-announcer), and
+            # pruning stops to ask about deleting them, which fails the job in
+            # CI — and answering yes would take a live function down.
             supabase functions deploy \
               --project-ref "$PROJECT_REF" \
               --use-api \
-              --no-verify-jwt \
-              --prune
+              --no-verify-jwt
           fi
