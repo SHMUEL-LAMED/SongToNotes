@@ -18,6 +18,7 @@ import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analyt
 import { useAuth } from "./lib/auth";
 import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
+import { langForModel } from "./lib/i18n";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
@@ -238,7 +239,7 @@ function WorkspaceApp() {
   // What the assistant may do on the site itself, from any page.
   useAssistantTool("site", {
     state: () =>
-      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; שפת הממשק: ${langForModel()} (ענה בשפה הזאת); צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
     handlers: {
       navigate: ({ tool: target }) => {
         const id = String(target);

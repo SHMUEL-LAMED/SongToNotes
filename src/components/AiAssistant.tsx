@@ -776,7 +776,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     if (message.role === "user") {
       return (
         <div key={`u${index}`} className="assistant-turn is-user">
-          <div className="assistant-bubble is-user" dir="auto">
+          <div className="assistant-bubble is-user" dir="auto" translate="no">
             {message.content}
           </div>
         </div>
@@ -794,7 +794,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
           <Sparkles size={14} />
         </span>
         <div className={`assistant-bubble is-assistant ${live ? "is-live" : ""}`} dir="auto">
-          {text && <div className="assistant-markdown">{renderMarkdown(text)}</div>}
+          {text && <div className="assistant-markdown" translate="no">{renderMarkdown(text)}</div>}
           {parsed.plan && <PlanCard steps={parsed.plan} compact={!live && (busy || index !== lastPlanIndex)} />}
           {!live && message.actions && message.actions.length > 0 && (
             <ol className="assistant-actions" aria-label="פעולות שבוצעו">

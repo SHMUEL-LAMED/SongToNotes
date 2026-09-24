@@ -1,6 +1,7 @@
 import { Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AiError, transformText } from "../lib/aiApi";
+import { langForModel } from "../lib/i18n";
 import { renderMarkdown } from "../lib/markdown";
 
 type Props = {
@@ -38,7 +39,7 @@ export function ExplainSong({ describe, songKey }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const reply = await transformText("explain", describe().slice(0, 12_000), { signal: controller.signal });
+      const reply = await transformText("explain", describe().slice(0, 12_000), { language: langForModel(), signal: controller.signal });
       setText(reply.text.trim() || "לא התקבל הסבר. נסה שוב.");
     } catch (caught) {
       if (caught instanceof AiError && caught.code === "cancelled") return;
@@ -69,7 +70,7 @@ export function ExplainSong({ describe, songKey }: Props) {
         </p>
       )}
       {text && (
-        <div className="assistant-markdown explain-body" dir="auto" aria-live="polite">
+        <div className="assistant-markdown explain-body" dir="auto" aria-live="polite" translate="no">
           {renderMarkdown(text)}
         </div>
       )}

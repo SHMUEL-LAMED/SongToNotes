@@ -2,6 +2,7 @@ import { BookOpen, ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, La
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
 import { ExplainSong } from "../components/ExplainSong";
+import { langForModel } from "../lib/i18n";
 import { AiError, parseLyricGloss, transformText, type LyricGloss } from "../lib/aiApi";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -174,7 +175,8 @@ export function SongbookTool({ initial = null }: Props) {
   const hasLyrics = sungLyrics.some((line) => /\p{L}{2,}/u.test(line));
   // Hebrew lyrics go to English by default, anything else to Hebrew.
   const mostlyHebrew = (lyricSource.match(/[\u0590-\u05FF]/g)?.length ?? 0) > lyricSource.replace(/\s/g, "").length / 2;
-  const targetLanguage = glossLanguage ?? (mostlyHebrew ? "אנגלית" : "עברית");
+  const interfaceLanguage = langForModel();
+  const targetLanguage = glossLanguage ?? (interfaceLanguage !== "עברית" ? interfaceLanguage : mostlyHebrew ? "אנגלית" : "עברית");
   const glossItems = gloss && gloss.source === lyricSource && glossShown ? gloss.items : null;
 
   const translateLyrics = async () => {
@@ -469,7 +471,7 @@ export function SongbookTool({ initial = null }: Props) {
               </div>
             )}
 
-            <div className={`songbook-sheet ${currentLine >= 0 ? "is-prompting" : ""}`} ref={sheetRef} style={{ fontSize }} dir="auto">
+            <div className={`songbook-sheet ${currentLine >= 0 ? "is-prompting" : ""}`} ref={sheetRef} style={{ fontSize }} dir="auto" translate="no">
               {title && <h2>{title}</h2>}
               {lines.map((line, index) => {
                 if (line.kind === "blank") return <div key={index} className="songbook-blank" />;
@@ -477,7 +479,7 @@ export function SongbookTool({ initial = null }: Props) {
                 const sungIndex = sungIndexes.get(index) ?? -1;
                 const glossLine = glossItems?.[sungIndex];
                 const under = glossLine && (glossLine.transliteration || glossLine.translation) ? (
-                  <span className="songbook-gloss">
+                  <span className="songbook-gloss" translate="no">
                     {glossLine.transliteration && <span className="songbook-gloss-sound">{glossLine.transliteration}</span>}
                     {glossLine.translation && <span className="songbook-gloss-meaning">{glossLine.translation}</span>}
                   </span>
