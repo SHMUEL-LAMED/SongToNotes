@@ -1,5 +1,5 @@
 /**
- * The site in Yiddish and English.
+ * The site in English.
  *
  * The interface is written in Hebrew, in the components themselves. Rather
  * than thread a translation function through every one of them, the page is
@@ -14,16 +14,15 @@
  * Hebrew visitors download none of this.
  */
 
-export type Lang = "he" | "yi" | "en";
+export type Lang = "he" | "en";
 
 export const LANGUAGES: { id: Lang; label: string; short: string; dir: "rtl" | "ltr" }[] = [
   { id: "he", label: "עברית", short: "עב", dir: "rtl" },
-  { id: "yi", label: "ייִדיש", short: "ייִ", dir: "rtl" },
   { id: "en", label: "English", short: "EN", dir: "ltr" },
 ];
 
 /** The languages whose dictionaries are complete enough to offer. */
-export const OFFERED: Lang[] = ["he", "yi", "en"];
+export const OFFERED: Lang[] = ["he", "en"];
 
 const LANG_KEY = "musictools.lang.v1";
 const HEBREW = /[֐-׿]/;
@@ -32,7 +31,8 @@ const ATTRIBUTES = ["aria-label", "title", "placeholder", "alt"];
 export function currentLang(): Lang {
   try {
     const stored = localStorage.getItem(LANG_KEY);
-    if ((stored === "yi" || stored === "en") && OFFERED.includes(stored)) return stored;
+    // A visitor who had picked Yiddish, which is no longer offered, is back in Hebrew.
+    if (stored === "en" && OFFERED.includes(stored)) return stored;
   } catch {
     // Hebrew, then.
   }
@@ -52,7 +52,7 @@ export function setLang(lang: Lang) {
 
 /** What the language model is asked to answer in, named in Hebrew for the prompt. */
 export function langForModel(lang: Lang = currentLang()) {
-  return lang === "yi" ? "יידיש" : lang === "en" ? "אנגלית" : "עברית";
+  return lang === "en" ? "אנגלית" : "עברית";
 }
 
 type Dictionary = Record<string, string>;
@@ -174,8 +174,7 @@ function skip(element: Element | null) {
 
 /** Translates a document and keeps translating what is added to it. */
 export function translateDocument(root: HTMLElement, translate: Translator) {
-  // What we wrote, so our own writes are not taken for new Hebrew — Yiddish
-  // is written in the same letters.
+  // What we wrote, so our own writes are never taken for new text to translate.
   const written = new WeakMap<Node, string>();
   const writtenAttr = new WeakMap<Element, Map<string, string>>();
 
@@ -236,7 +235,6 @@ export function translateDocument(root: HTMLElement, translate: Translator) {
 }
 
 const LOADERS: Record<Exclude<Lang, "he">, () => Promise<{ default: Dictionary }>> = {
-  yi: () => import("../i18n/yi.json"),
   en: () => import("../i18n/en.json"),
 };
 
