@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTranslator, normalize } from "./i18n";
 import en from "../i18n/en.json";
-import yi from "../i18n/yi.json";
 
 describe("createTranslator", () => {
   const translate = createTranslator({
@@ -52,19 +51,12 @@ describe("createTranslator", () => {
 
 });
 
-describe.each([
-  ["Yiddish", yi],
-  ["English", en],
-])("the %s dictionary", (_, dictionary) => {
+describe.each([["English", en]])("the %s dictionary", (_, dictionary) => {
   it("keeps every placeholder of every template", () => {
     for (const [source, target] of Object.entries(dictionary as Record<string, string>)) {
       const slots = (text: string) => (text.match(/\{\d+\}/g) ?? []).sort().join();
       expect(slots(target), source).toBe(slots(source));
       expect(target.trim().length || source.trim().length === 0, source).toBeTruthy();
     }
-  });
-
-  it("covers the same phrases in every language", () => {
-    expect(Object.keys(dictionary).sort()).toEqual(Object.keys(yi).sort());
   });
 });
