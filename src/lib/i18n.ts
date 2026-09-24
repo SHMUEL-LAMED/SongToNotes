@@ -23,7 +23,7 @@ export const LANGUAGES: { id: Lang; label: string; short: string; dir: "rtl" | "
 ];
 
 /** The languages whose dictionaries are complete enough to offer. */
-export const OFFERED: Lang[] = ["he", "yi"];
+export const OFFERED: Lang[] = ["he", "yi", "en"];
 
 const LANG_KEY = "musictools.lang.v1";
 const HEBREW = /[֐-׿]/;
@@ -71,14 +71,17 @@ export function createTranslator(dictionary: Dictionary): Translator {
     if (/\{\d+\}/.test(source)) {
       const pieces = source.split(/\{(\d+)\}/);
       const order: number[] = [];
-      // Two regexes: every slot non-empty first, so "{1}{2}" splits "1, מודגש"
-      // as 1 + ", מודגש"; then empty slots allowed, so "2" still fits.
-      const build = (slot: string) =>
-        new RegExp(`^${pieces.map((piece, index) => (index % 2 === 0 ? escape(piece) : slot)).join("")}$`);
+      // Several readings: every slot non-empty first, so "{1}{2}" splits
+      // "1, מודגש" as 1 + ", מודגש"; then empty slots allowed, so "2" fits.
+      const last = pieces.length - 2;
+      const build = (slot: string, lastSlot = slot) =>
+        new RegExp(`^${pieces.map((piece, index) => (index % 2 === 0 ? escape(piece) : index === last ? lastSlot : slot)).join("")}$`);
       pieces.forEach((piece, index) => {
         if (index % 2 === 1) order.push(Number(piece));
       });
-      const regexes = [build("([\\s\\S]+?)"), build("([\\s\\S]*?)")];
+      // A third reading lets each slot run up to the next separator, so
+      // "13, מודגש" can split as 13 + ", מודגש".
+      const regexes = [build("([\\s\\S]+?)"), build("([\\s\\S]*?)"), build("([^,·:—–]*)", "([\\s\\S]*?)")];
       // The target names its slots by the source's numbers; the regex
       // captures them in source order.
       const literal = pieces.filter((_, index) => index % 2 === 0).join("");
@@ -119,18 +122,30 @@ export function createTranslator(dictionary: Dictionary): Translator {
     return null;
   };
 
+  // The first reading in which every Hebrew value is itself translatable
+  // wins; failing that, the first reading at all.
   const matchPattern = (text: string): string | null => {
+    let fallback: string | null = null;
     for (const pattern of patterns) {
       for (const regex of pattern.regexes) {
         const match = regex.exec(text);
         if (!match) continue;
-        return pattern.target.replace(/\uE000(\d+)\uE000/g, (_, at: string) => {
+        let complete = true;
+        const filled = pattern.target.replace(/\uE000(\d+)\uE000/g, (_, at: string) => {
           const value = match[Number(at) + 1] ?? "";
-          return HEBREW.test(value) ? (translate(value.trim()) ?? value) : value;
+          if (!HEBREW.test(value)) return value;
+          const done = translate(value.trim());
+          if (done === null) {
+            complete = false;
+            return value;
+          }
+          return value.replace(value.trim(), done);
         });
+        if (complete) return filled;
+        fallback ??= filled;
       }
     }
-    return null;
+    return fallback;
   };
 
   const translate: Translator = (text) => {

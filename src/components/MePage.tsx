@@ -1,3 +1,4 @@
+import { currentLang } from "../lib/i18n";
 import {
   Archive,
   ArrowRight,
@@ -206,6 +207,8 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [tracking, setTracking] = useState(() => analyticsEnabled());
   const [deleteWord, setDeleteWord] = useState("");
+  // The word to type is shown untranslated, so it is the one this language types.
+  const confirmWord = currentLang() === "en" ? "delete" : "מחק";
   const [canShare] = useState(() =>
     canShareFiles(new File([new Uint8Array(1)], "probe.wav", { type: "audio/wav" })),
   );
@@ -1128,10 +1131,10 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
                 בו. כדאי להוריד עותק קודם.
               </p>
               <label className="me-confirm-word">
-                <span>כדי לאשר, כתוב <b>מחק</b></span>
+                <span>כדי לאשר, כתוב <b translate="no">{confirmWord}</b></span>
                 <input value={deleteWord} onChange={(event) => setDeleteWord(event.target.value)} aria-label="מילת אישור" />
               </label>
-              <ConfirmButton confirmLabel="למחוק את החשבון לצמיתות?" disabled={deleteWord.trim() !== "מחק" || Boolean(busy)} onConfirm={() => void eraseAccount()}>
+              <ConfirmButton confirmLabel="למחוק את החשבון לצמיתות?" disabled={deleteWord.trim().toLowerCase() !== confirmWord || Boolean(busy)} onConfirm={() => void eraseAccount()}>
                 <UserX size={15} /> מחיקת החשבון
               </ConfirmButton>
             </Card>
