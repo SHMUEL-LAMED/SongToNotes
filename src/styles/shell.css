@@ -334,6 +334,28 @@
 .privacy-pill svg { color: var(--success); }
 .privacy-pill.is-server svg { color: var(--accent); }
 
+/* Tinted rather than grey: it asks for something, where its neighbours only offer. */
+.share-site-button {
+  flex: none;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.share-site-button:hover { border-color: var(--accent); }
+.share-site-button:active { transform: scale(0.96); }
+
 /* ---- small square buttons ---- */
 
 .icon-button {
@@ -619,6 +641,19 @@
   .account-button-copy { display: none; }
   .account-button { padding: 3px; }
   .topbar-brand .brand-text small { display: none; }
+  /* A phone has search in the tab bar, so the top bar gives its place to sharing. */
+  .topbar .topbar-search { display: none; }
+  .share-site-button { width: 38px; padding: 0; border-radius: 11px; }
+  .share-site-button span { display: none; }
+}
+
+/* Too narrow for the name beside the buttons (a tool page adds its star): the
+   mark stands for the site alone, rather than the name breaking in two. */
+@media (max-width: 460px) {
+  .tool-page .topbar-brand .brand-text { display: none; }
+}
+@media (max-width: 400px) {
+  .topbar-brand .brand-text { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -663,6 +698,46 @@
 }
 .appearance-swatch.is-default.is-on { border-color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .appearance-swatch { transition: none; } }
+
+/* ---- sharing the site ---- */
+
+.share-site-dialog { display: flex; flex-direction: column; gap: 18px; }
+.share-site-dialog > p { margin-bottom: 0; }
+/* Three to a row, the last row centred: five apps, or six with the system's own sheet. */
+.share-site-targets { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.share-site-target {
+  flex: 0 0 calc((100% - 20px) / 3);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.share-site-target:hover { border-color: var(--line-strong); background: var(--surface-2); transform: translateY(-1px); }
+.share-site-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--share-brand, var(--surface-2));
+  color: var(--share-ink, var(--text));
+}
+.share-site-link { display: flex; gap: 8px; }
+.share-site-link .field { flex: 1; min-width: 0; font-size: 13px; color: var(--text-soft); }
+.share-site-dialog > .share-site-note { margin: -8px 0 0; font-size: 12.5px; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .share-site-target { transition: none; } }
 
 /* A colour picked for the whole site wins over each tool's own, inline hues included. */
 :root[data-accent-lock] .tool-page,

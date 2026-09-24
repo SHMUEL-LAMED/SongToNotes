@@ -1083,6 +1083,43 @@ input[type="radio"] { accent-color: var(--accent); }
 }
 .app-notice-action:hover { filter: brightness(1.07); }
 
+/* The request to share the site: a line of thanks, and two ways to act on it. */
+.app-notice.share-prompt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "icon text close" "icon actions close";
+  align-items: start;
+  row-gap: 10px;
+}
+.share-prompt-icon { grid-area: icon; color: #fff; background: var(--brand-gradient); }
+.share-prompt > p { grid-area: text; }
+.share-prompt .app-notice-close { grid-area: close; }
+.share-prompt-actions { grid-area: actions; display: flex; flex-wrap: wrap; gap: 8px; }
+.share-prompt-whatsapp,
+.share-prompt-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+/* WhatsApp's own green, with dark ink: white on it would be too faint to read. */
+.share-prompt-whatsapp { border: 0; background: #25d366; color: #062e18; }
+.share-prompt-whatsapp:hover { filter: brightness(1.06); }
+.share-prompt-more { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
+.share-prompt-more:hover { border-color: var(--accent); color: var(--accent-text); }
+/* On a phone the two buttons take a row of their own, the card's full width. */
+@media (max-width: 560px) {
+  .app-notice.share-prompt { grid-template-areas: "icon text close" "actions actions actions"; }
+  .share-prompt-actions > * { flex: 1 1 auto; justify-content: center; }
+}
+
 /* ---- Ctrl+K ---- */
 
 .palette-overlay {
