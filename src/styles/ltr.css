@@ -1,0 +1,25 @@
+/* ==========================================================================
+   Left to right
+   The layout is written with logical properties, so it mirrors by itself;
+   these are the few places that move or point in a physical direction.
+   ========================================================================== */
+
+/* The "forward" and "back" arrows were drawn for a right-to-left page. */
+:root[dir="ltr"] .lucide-chevron-left,
+:root[dir="ltr"] .lucide-chevron-right,
+:root[dir="ltr"] .lucide-arrow-left,
+:root[dir="ltr"] .lucide-arrow-right {
+  transform: scaleX(-1);
+}
+:root[dir="ltr"] .quick-action:hover .quick-action-go { transform: translateX(3px) scaleX(-1); }
+:root[dir="ltr"] .tool-card:hover .tool-card-arrow { transform: translateX(4px) scaleX(-1); }
+:root[dir="ltr"] .next-step:hover .next-step-go { transform: translateX(3px) scaleX(-1); }
+
+/* The phone menu hides off the start edge, which is now the left. */
+@media (max-width: 960px) {
+  :root[dir="ltr"] .sidebar { transform: translateX(-105%); }
+  :root[dir="ltr"] .app[data-nav-open="true"] .sidebar { transform: none; }
+}
+
+:root[dir="ltr"] .account-drawer { animation-name: drawer-in-ltr; }
+@keyframes drawer-in-ltr { from { transform: translateX(100%); } to { transform: none; } }

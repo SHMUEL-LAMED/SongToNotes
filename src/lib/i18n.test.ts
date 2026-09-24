@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTranslator, normalize } from "./i18n";
+import en from "../i18n/en.json";
 import yi from "../i18n/yi.json";
 
 describe("createTranslator", () => {
@@ -35,6 +36,7 @@ describe("createTranslator", () => {
   it("matches short values in slots that sit side by side", () => {
     expect(translate("סנר, צעד 2")).toBe("Snare, step 2");
     expect(translate("סנר, צעד 1, מודגש")).toBe("Snare, step 1, accented");
+    expect(translate("סנר, צעד 13, מודגש")).toBe("Snare, step 13, accented");
   });
 
   it("translates labels glued together in code, piece by piece", () => {
@@ -47,14 +49,22 @@ describe("createTranslator", () => {
   it("normalises whitespace the way the page does", () => {
     expect(normalize("  דף\n  הבית ")).toBe("דף הבית");
   });
+
 });
 
-describe("the Yiddish dictionary", () => {
+describe.each([
+  ["Yiddish", yi],
+  ["English", en],
+])("the %s dictionary", (_, dictionary) => {
   it("keeps every placeholder of every template", () => {
-    for (const [source, target] of Object.entries(yi as Record<string, string>)) {
+    for (const [source, target] of Object.entries(dictionary as Record<string, string>)) {
       const slots = (text: string) => (text.match(/\{\d+\}/g) ?? []).sort().join();
       expect(slots(target), source).toBe(slots(source));
       expect(target.trim().length || source.trim().length === 0, source).toBeTruthy();
     }
+  });
+
+  it("covers the same phrases in every language", () => {
+    expect(Object.keys(dictionary).sort()).toEqual(Object.keys(yi).sort());
   });
 });
