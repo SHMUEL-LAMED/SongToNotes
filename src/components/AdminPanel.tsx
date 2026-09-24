@@ -322,7 +322,7 @@ function ToolsTab({ snapshot, focus, setFocus }: { snapshot: AdminSnapshot; focu
   const exportRows = () =>
     downloadFile(
       // A BOM, so a spreadsheet opens the Hebrew headings as Hebrew.
-      `﻿${toCsv(
+      `${String.fromCharCode(0xfeff)}${toCsv(
         tools.map((tool) => ({
           כלי: toolLabel(tool.tool),
           כניסות: tool.views,
