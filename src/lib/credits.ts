@@ -49,9 +49,9 @@ export type CreditRules = {
 export const DEFAULT_RULES: CreditRules = {
   enabled: true,
   daily: 20,
-  signupBonus: 30,
-  friendDaily: 2,
-  friendDailyMax: 40,
+  signupBonus: 50,
+  friendDaily: 5,
+  friendDailyMax: 100,
   welcomeBonus: 10,
   visitBonus: 1,
   visitDailyMax: 10,
