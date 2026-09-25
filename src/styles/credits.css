@@ -361,6 +361,47 @@
 }
 .credits-admin-field small { color: var(--text-muted); font-size: 11.5px; line-height: 1.4; }
 
+.credits-admin-pay { display: flex; flex-direction: column; gap: 6px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.credits-admin-pay > h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 14px; color: var(--text-soft); }
+.credits-admin-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.credits-admin-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  cursor: pointer;
+}
+.credits-admin-mode input { margin-top: 3px; }
+.credits-admin-mode b { display: block; font-size: 14px; }
+.credits-admin-mode small { display: block; margin-top: 2px; font-size: 12px; }
+.credits-admin-mode small.is-ready { color: var(--success); }
+.credits-admin-mode small.is-missing { color: var(--warning); }
+.credits-admin-mode.is-on { border-color: oklch(0.65 0.17 300 / 0.55); box-shadow: 0 0 0 3px oklch(0.7 0.15 300 / 0.12); }
+.credits-admin-purchases { margin-top: 12px; }
+.credits-admin-purchases td .credits-history-badge { margin-inline-start: 6px; }
+.credits-admin-purchases code { font-size: 12px; }
+.credits-admin-purchases tr:is(.is-failed, .is-refunded) td { color: var(--text-muted); }
+.credits-admin-guide { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.credits-admin-guide summary { cursor: pointer; font-weight: 700; }
+.credits-admin-guide ol { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 8px; padding-inline-start: 22px; font-size: 13.5px; line-height: 1.7; }
+.credits-admin-guide a { color: var(--accent-text); font-weight: 600; }
+.credits-admin-url { display: block; width: 100%; margin: 6px 0; font-size: 12.5px; }
+.credits-admin-guide li > code {
+  display: block;
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-solid);
+  direction: ltr;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.credits-admin-guide .admin-muted { margin: 0; font-size: 12.5px; }
+
 @media (prefers-reduced-motion: reduce) {
   .credits-pill-count,
   .credits-steps li,
@@ -387,3 +428,115 @@
 .primary-button + .credit-cost { justify-content: center; }
 .identify-actions .credit-cost { flex-basis: 100%; justify-content: center; }
 .assistant-cost { white-space: nowrap; }
+
+/* ---- passes ("חופשי") ----
+   Violet over the gold: the one thing here that is bought rather than counted. */
+
+.credits-pill.is-pass {
+  border-color: oklch(0.62 0.17 300 / 0.45);
+  background: linear-gradient(135deg, oklch(0.93 0.05 300 / 0.7), oklch(0.94 0.06 85 / 0.55));
+  color: oklch(0.42 0.15 300);
+}
+:root[data-theme="dark"] .credits-pill.is-pass {
+  border-color: oklch(0.75 0.14 300 / 0.4);
+  background: oklch(0.7 0.14 300 / 0.16);
+  color: oklch(0.88 0.08 300);
+}
+
+.credits-balance-pass {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid oklch(0.7 0.12 300 / 0.3);
+  background: linear-gradient(135deg, oklch(0.94 0.04 300 / 0.8), oklch(0.95 0.05 85 / 0.6));
+}
+:root[data-theme="dark"] .credits-balance-pass { background: oklch(0.7 0.14 300 / 0.12); border-color: oklch(0.75 0.14 300 / 0.3); }
+.credits-balance-pass-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
+.credits-balance-pass-title b { font-size: 16px; }
+.credits-balance-pass-title span { color: var(--text-muted); font-size: 13px; }
+.credits-balance-pass-title svg { flex: none; color: oklch(0.55 0.17 300); }
+:root[data-theme="dark"] .credits-balance-pass-title svg { color: oklch(0.82 0.1 300); }
+
+.credits-pass .me-panel-head { align-items: flex-start; }
+.credits-test-badge {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.credits-pass-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 14px;
+  font-weight: 600;
+}
+.credits-pass-active span:last-child { color: var(--text-soft); font-weight: 400; }
+.credits-pass-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 6px 0 14px; }
+.credits-pass-plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 16px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  text-align: center;
+}
+.credits-pass-plan.is-best { border-color: oklch(0.65 0.17 300 / 0.55); box-shadow: 0 0 0 3px oklch(0.7 0.15 300 / 0.12); }
+.credits-pass-plan > b { font-size: 16px; }
+.credits-pass-price { margin: 2px 0 0; font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.credits-pass-plan small { margin-bottom: 10px; color: var(--text-muted); font-size: 13px; }
+/* Two classes and an element: the site's compact button is width: auto. */
+.credits-pass-plan button.primary-button,
+.credits-pass-plan button.secondary-button { width: 100%; justify-content: center; }
+.credits-pass-ribbon {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-gradient);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.credits-test-note { margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.credits-purchases { margin-top: 14px; }
+.credits-purchases td small { color: var(--text-muted); font-size: 12px; }
+/* A date and a time, read in their own order inside a Hebrew row. */
+.credits-purchases td:first-child,
+.credits-admin-purchases td:first-child { unicode-bidi: plaintext; font-variant-numeric: tabular-nums; }
+.credits-purchases td .credits-history-badge { margin-inline-start: 6px; }
+.credits-purchases tr.is-refunded td { color: var(--text-muted); }
+
+.credits-history-delta.is-pass { display: inline-flex; align-items: center; gap: 4px; color: oklch(0.52 0.16 300); font-size: 13px; }
+:root[data-theme="dark"] .credits-history-delta.is-pass { color: oklch(0.82 0.1 300); }
+.credit-cost.is-pass { color: oklch(0.5 0.15 300); }
+.credit-cost.is-pass svg { color: currentColor; }
+:root[data-theme="dark"] .credit-cost.is-pass { color: oklch(0.82 0.1 300); }
+
+.credits-notice.is-payment.is-done .app-notice-icon { color: #fff; background: var(--brand-gradient); }
+.credits-notice.is-payment.is-pending .app-notice-icon { color: var(--warning); background: var(--warning-soft); }
+.credits-notice.is-payment.is-error .app-notice-icon { color: var(--danger); background: var(--danger-soft); }
+.credits-notice.is-payment.is-info .app-notice-icon { color: var(--text-soft); background: var(--surface-sunken); }
+
+@media (max-width: 520px) {
+  .credits-pass-plans { grid-template-columns: 1fr; gap: 18px; }
+}

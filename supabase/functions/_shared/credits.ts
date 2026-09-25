@@ -6,7 +6,8 @@
  * price from the account in one step — the day's allowance, then the earned
  * bonus — or says no, and the function answers 402 with what was missing.
  * When the service then fails, `refund()` gives the credits back, so nobody
- * pays for an error. The site's owner is never refused.
+ * pays for an error. The site's owner is never refused. An account with a
+ * bought pass pays nothing, up to the pass's fair use for the day.
  *
  * If the credits ledger cannot be reached at all (a project that has not run
  * credits.sql yet), the work goes on uncharged: each function's own daily
@@ -31,6 +32,11 @@ export type Charge = {
   allowance: number;
   needed: number;
   resetsAt: string | null;
+  /** An active pass: until when, and what it still covers today. */
+  passUntil: string | null;
+  passLeft: number | null;
+  /** What the pass covered of this action. */
+  passUsed: number;
 };
 
 const UNCHARGED: Charge = {
@@ -43,6 +49,9 @@ const UNCHARGED: Charge = {
   allowance: 0,
   needed: 0,
   resetsAt: null,
+  passUntil: null,
+  passLeft: null,
+  passUsed: 0,
 };
 
 function toCharge(raw: Record<string, unknown>): Charge {
@@ -57,6 +66,9 @@ function toCharge(raw: Record<string, unknown>): Charge {
     allowance: number(raw.allowance),
     needed: number(raw.needed),
     resetsAt: typeof raw.resets_at === "string" ? raw.resets_at : null,
+    passUntil: typeof raw.pass_until === "string" ? raw.pass_until : null,
+    passLeft: raw.pass_left === null || raw.pass_left === undefined ? null : number(raw.pass_left),
+    passUsed: number(raw.pass_used),
   };
 }
 
@@ -96,7 +108,7 @@ export async function refund(admin: SupabaseClient, user: User, paid: Charge | n
     return paid;
   }
   const back = toCharge(data as Record<string, unknown>);
-  return { ...back, ok: true, entry: null, charged: 0 };
+  return { ...back, ok: true, entry: null, charged: 0, passUsed: 0 };
 }
 
 /** The refund for a job that failed after it was started — a separation, found by its id. */
@@ -123,6 +135,7 @@ export function creditSummary(paid: Charge | null) {
     charged: paid.charged,
     ...(paid.ok ? {} : { needed: paid.needed }),
     resetsAt: paid.resetsAt,
+    ...(paid.passUntil ? { passUntil: paid.passUntil, passLeft: paid.passLeft ?? 0, passUsed: paid.passUsed } : {}),
   };
 }
 
