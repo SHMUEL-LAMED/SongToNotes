@@ -701,6 +701,7 @@ function SystemTab({
   onScan,
   onClean,
   onPrune,
+  onResetUsage,
   orphans,
 }: {
   snapshot: AdminSnapshot;
@@ -717,6 +718,7 @@ function SystemTab({
   onScan: () => void;
   onClean: () => void;
   onPrune: () => void;
+  onResetUsage: () => void;
   orphans: { count: number; bytes: number } | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -791,6 +793,11 @@ function SystemTab({
               format={compactNumber}
             />
           ))}
+          <div className="row-actions">
+            <ConfirmButton confirmLabel="לאפס את מכסות היום לכל החשבונות?" onConfirm={onResetUsage} disabled={busy}>
+              <RefreshCw size={15} /> איפוס מכסות היום
+            </ConfirmButton>
+          </div>
           <Meter
             label="אחסון בענן"
             value={snapshot.totals.bytes}
@@ -975,17 +982,13 @@ function SystemTab({
 
 /** Where to copy a setting from, shown under its name in the keys table. */
 const SETTING_HINTS: Record<string, string> = {
-  ACRCLOUD_HOST:
-    "זיהוי שירים. בלוח הבקרה של ACRCloud: Audio & Video Recognition → Projects → הפרויקט שלך → Host (למשל identify-eu-west-1.acrcloud.com, בלי https://)",
-  ACRCLOUD_ACCESS_KEY:
-    "זיהוי שירים. באותו פרויקט ב־ACRCloud: השורה Access Key (לחץ על סמל ההעתקה שלידה)",
-  ACRCLOUD_ACCESS_SECRET:
-    "זיהוי שירים. באותו פרויקט ב־ACRCloud: השורה Access Secret (לחץ על סמל העין או ההעתקה שלידה)",
+  IDENTIFY_API_KEY: "זיהוי שירים (AudD). ה־API Token מ־dashboard.audd.io, או test לבדיקה (מכסה קטנה)",
+  IDENTIFY_API_KEY_2: "מפתח AudD נוסף, לא חובה: כשהמכסה של המפתח הראשון נגמרת, הזיהוי עובר לכאן לבד",
+  IDENTIFY_API_KEY_3: "מפתח AudD שלישי, לא חובה",
   IDENTIFY_DAILY: "כמה זיהויים מותרים לכל חשבון ביום (ברירת מחדל 30)",
 };
 
 const SETTING_PLACEHOLDERS: Record<string, string> = {
-  ACRCLOUD_HOST: "identify-eu-west-1.acrcloud.com",
   IDENTIFY_DAILY: "30",
 };
 
@@ -1133,6 +1136,16 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     [act],
   );
 
+  const onResetUsage = useCallback(
+    () =>
+      void act(async () => {
+        const result = await runAdminAction("usage.reset");
+        setNote(`המכסות של היום אופסו (${formatNumber(result.removed ?? 0)} רשומות).`);
+        await load(days);
+      }),
+    [act, load, days],
+  );
+
   const openTool = useCallback((tool: string) => {
     setFocusTool(tool);
     setTab("tools");
@@ -1275,6 +1288,7 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
           onScan={onScan}
           onClean={onClean}
           onPrune={onPrune}
+          onResetUsage={onResetUsage}
           orphans={orphans}
         />
       )}
