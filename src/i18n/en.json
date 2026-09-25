@@ -2702,5 +2702,8 @@
  "ב־developer.paypal.com, תחת Sandbox → Accounts, יש חשבון Personal עם סיסמה.": "on developer.paypal.com, under Sandbox → Accounts, there is a Personal account with a password.",
  "כשהכול עובד: עוברים ל־Live ב־developer.paypal.com, וחוזרים על שני השלבים עם הכתובת:": "When everything works: switch to Live on developer.paypal.com, and repeat both steps with the address:",
  "ובשמות:": "and the names:",
- "ואז בוחרים כאן \"תשלומים אמיתיים\".": "Then choose \"Real payments\" here."
+ "ואז בוחרים כאן \"תשלומים אמיתיים\".": "Then choose \"Real payments\" here.",
+ "הסרטון לא נפתח כאן": "The video didn't open here",
+ "ברשת מסוננת (כמו נטפרי) ייתכן שהסרטון עוד לא אושר, ובדף שלו ב־YouTube אפשר לבקש לאשר אותו.": "On a filtered connection (such as NetFree) the video may not be approved yet; on its YouTube page you can ask for it to be approved.",
+ "לצפייה ב־YouTube": "Watch on YouTube"
 }

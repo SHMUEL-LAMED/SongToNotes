@@ -2,7 +2,7 @@ import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Sq
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
 import { CreditCost } from "../components/CreditCost";
-import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
+import { AiError, findSongVideo, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
 import { useCredits } from "../lib/creditsContext";
@@ -13,7 +13,7 @@ import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { findTool } from "../lib/tools";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { listLocalWorks, listWorks, saveWork, type SavedWork } from "../lib/works";
-import { youtubeEmbedUrl, youtubeStillUrl, youtubeVideoId } from "../lib/youtube";
+import { LISTENING, PLAYER_HOSTS, isVideoError, playerMessage, youtubeEmbedUrl, youtubeStillUrl, youtubeVideoId } from "../lib/youtube";
 
 /** A message shown while a further clip of the same song is tried. */
 const TRYING_ANOTHER = "מנסה קטע נוסף…";
@@ -45,27 +45,112 @@ export function YouTubeLink({ href }: { href?: string | null }) {
 }
 
 /**
+ * Videos asked for again on this visit, by song page: one request each,
+ * however often the identifier opens. A lookup that failed counts as none.
+ */
+const videoLookups = new Map<string, Promise<string | null>>();
+function lookUpVideo(page: string) {
+  let pending = videoLookups.get(page);
+  if (!pending) {
+    pending = findSongVideo(page).catch(() => null);
+    videoLookups.set(page, pending);
+  }
+  return pending;
+}
+
+/** How long a player may take to answer before the next address is tried. */
+const PLAYER_READY_MS = 8000;
+
+type PlayerPhase = "still" | "trying" | "failed";
+
+/**
  * The song's video, played inside the result. Until the visitor presses play
  * it is only the video's still, so the player loads when it is wanted.
+ *
+ * The player then has to answer: YouTube's player tells the page it is ready,
+ * or that the video cannot play. One that stays silent — a filter's block
+ * page in its place, a network that drops it — or that reports an error, gives
+ * way to the next address; when none works, or the video allows no player
+ * outside YouTube, the frame says so and offers the video on YouTube itself.
  */
 export function YouTubePlayer({ href, title }: { href?: string | null; title: string }) {
-  const [playing, setPlaying] = useState(false);
+  const [phase, setPhase] = useState<PlayerPhase>("still");
+  const [attempt, setAttempt] = useState(0);
   // A still that does not load (blocked, offline) leaves the black frame and its play button.
   const [stillFailed, setStillFailed] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const id = youtubeVideoId(href);
+
+  useEffect(() => {
+    if (phase !== "trying") return;
+    const frame = frameRef.current;
+    const host = PLAYER_HOSTS[attempt];
+    let answered = false;
+    const giveWay = () => {
+      if (attempt + 1 < PLAYER_HOSTS.length) setAttempt(attempt + 1);
+      else setPhase("failed");
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (!frame || event.source !== frame.contentWindow) return;
+      const message = playerMessage(event.data);
+      if (!message) return;
+      if (message.event === "onError") {
+        if (isVideoError(message.info)) setPhase("failed");
+        else giveWay();
+        return;
+      }
+      // Any report at all: the player is there.
+      if (!answered) {
+        answered = true;
+        window.clearInterval(knock);
+        window.clearTimeout(deadline);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    // The player starts reporting once told that someone listens; only to its own address.
+    const knock = window.setInterval(() => frame?.contentWindow?.postMessage(LISTENING, `https://${host}`), 250);
+    const deadline = window.setTimeout(() => {
+      if (!answered) giveWay();
+    }, PLAYER_READY_MS);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(knock);
+      window.clearTimeout(deadline);
+    };
+  }, [attempt, phase]);
+
   if (!id) return null;
+  const play = () => {
+    setAttempt(0);
+    setPhase("trying");
+  };
   return (
     <div className="identify-video">
-      {playing ? (
+      {phase === "trying" ? (
         <iframe
-          src={youtubeEmbedUrl(id)}
+          key={attempt}
+          ref={frameRef}
+          src={youtubeEmbedUrl(id, { host: PLAYER_HOSTS[attempt], origin: window.location.origin })}
           title={title}
           allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
         />
+      ) : phase === "failed" ? (
+        <div className="identify-video-failed" role="status">
+          <strong>הסרטון לא נפתח כאן</strong>
+          <p>ברשת מסוננת (כמו נטפרי) ייתכן שהסרטון עוד לא אושר, ובדף שלו ב־YouTube אפשר לבקש לאשר אותו.</p>
+          <div className="identify-video-actions">
+            <a href={href ?? undefined} target="_blank" rel="noreferrer noopener" className="primary-button compact">
+              <ExternalLink size={16} /> לצפייה ב־YouTube
+            </a>
+            <button type="button" className="secondary-button compact" onClick={play}>
+              <RefreshCw size={15} /> לנסות שוב
+            </button>
+          </div>
+        </div>
       ) : (
-        <button type="button" className="identify-video-still" onClick={() => setPlaying(true)} aria-label={`נגן כאן: ${title}`}>
+        <button type="button" className="identify-video-still" onClick={play} aria-label={`נגן כאן: ${title}`}>
           {!stillFailed && <img src={youtubeStillUrl(id)} alt="" onError={() => setStillFailed(true)} />}
           <span aria-hidden="true">
             <Play size={30} />
@@ -106,6 +191,8 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
   const history = identified.reduceRight((list, song) => pushSong(list, song), saved).slice(0, HISTORY_SIZE);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
+  // Song pages whose video was already asked for again on this visit, found or not.
+  const [videoChecked, setVideoChecked] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
     if (!userId) return;
@@ -119,6 +206,35 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
       active = false;
     };
   }, [userId]);
+
+  // A song shown without its video — its page on AudD did not answer in time
+  // during the identification — gets it asked for again, in the background:
+  // the one on screen first, then the recent ones. The player appears when it
+  // arrives; a page with no video leaves things as they are.
+  const shown = result?.found ? result : null;
+  const nextPage = userId
+    ? ([...(shown ? [shown] : []), ...history]
+        .map((song) => (!song.links.youtube && song.links.song?.startsWith("https://lis.tn/") ? song.links.song : null))
+        .find((page): page is string => page !== null && !videoChecked.has(page)) ?? null)
+    : null;
+  useEffect(() => {
+    if (!nextPage) return;
+    let active = true;
+    const withVideo = (youtube: string) => (item: FoundSong): FoundSong =>
+      item.links.song === nextPage && !item.links.youtube ? { ...item, links: { ...item.links, youtube } } : item;
+    void lookUpVideo(nextPage).then((youtube) => {
+      if (!active) return;
+      if (youtube) {
+        setResult((current) => (current?.found ? withVideo(youtube)(current) : current));
+        setIdentified((list) => list.map(withVideo(youtube)));
+        setSaved((list) => list.map(withVideo(youtube)));
+      }
+      setVideoChecked((current) => new Set(current).add(nextPage));
+    });
+    return () => {
+      active = false;
+    };
+  }, [nextPage]);
 
   useEffect(() => {
     const controller = new AbortController();
