@@ -55,6 +55,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === "GET" && new URL(req.url).searchParams.get("availability")) {
     return json(200, { configured: apiKeys.length > 0 });
   }
+  // The video, looked up again for a song whose page did not answer in time
+  // during the identification: signed in, free, and only ever AudD's page.
+  const songPage = req.method === "GET" ? new URL(req.url).searchParams.get("video") : null;
+  if (songPage !== null) {
+    if (!(await visitor(req))) return json(401, { error: "signed_out" });
+    return json(200, { youtube: await videoFromSongLink(songPage, { timeoutMs: 10_000, retries: 1 }) });
+  }
   if (req.method !== "POST") return json(405, { error: "method" });
   if (!apiKeys.length) return json(503, { error: "not_configured" });
   const limit = Number(setting("IDENTIFY_DAILY")) || DEFAULT_DAILY;
