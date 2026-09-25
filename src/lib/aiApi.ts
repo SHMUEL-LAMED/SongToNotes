@@ -5,7 +5,7 @@
  * result, and nothing is installed or fetched onto the device.
  */
 import { announceCredits, announceCreditsFrom, announceEmpty } from "./credits";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 
 const FUNCTIONS = `${SUPABASE_URL}/functions/v1`;
 
@@ -40,7 +40,7 @@ export function describeAiError(code: string, status?: number) {
 }
 
 async function token() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const value = data.session?.access_token;
   if (!value) throw new AiError("signed_out", MESSAGES.signed_out);
   return value;

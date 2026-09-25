@@ -15,7 +15,7 @@
  * Only the server functions spend. Nothing in the browser can add a credit:
  * the page asks, and the database decides.
  */
-import { supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 
 /* -------------------------------------------------------------- the rules */
 
@@ -450,13 +450,22 @@ export function browserId() {
 
 /* ------------------------------------------------------------ the server */
 
+/**
+ * The rules are for everybody, and read on every visit: a plain request with
+ * the site's public key, so a visitor who is not signed in never waits on the
+ * client library for them.
+ */
 export async function fetchRules(): Promise<CreditRules> {
-  const { data, error } = await supabase.from("credit_settings").select("*").maybeSingle();
-  if (error) throw error;
-  return normalizeRules(data);
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/credit_settings?select=*&limit=1`, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY },
+  });
+  if (!response.ok) throw new Error(`credit_settings: HTTP ${response.status}`);
+  const rows = (await response.json()) as unknown;
+  return normalizeRules(Array.isArray(rows) ? (rows[0] ?? null) : null);
 }
 
 export async function fetchStatus(): Promise<CreditStatus | null> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase.rpc("credit_status");
   if (error) throw error;
   return normalizeStatus(data);
@@ -465,6 +474,7 @@ export async function fetchStatus(): Promise<CreditStatus | null> {
 export type VisitReply = { ok: boolean; self: boolean; name: string | null; counted: boolean; rewarded: boolean };
 
 export async function recordVisit(code: string, visitor: string): Promise<VisitReply> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase.rpc("credit_visit", { p_code: code, p_visitor: visitor });
   if (error) throw error;
   const row = (data ?? {}) as Row;
@@ -481,6 +491,7 @@ export type ClaimReason = "signed_out" | "unknown" | "self" | "already" | "too_l
 export type ClaimReply = { ok: boolean; reason: ClaimReason | null; welcome: number; name: string | null };
 
 export async function claimReferral(code: string): Promise<ClaimReply> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase.rpc("credit_claim", { p_code: code });
   if (error) throw error;
   const row = (data ?? {}) as Row;

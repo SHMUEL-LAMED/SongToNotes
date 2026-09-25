@@ -321,6 +321,70 @@
 .piano-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .piano-controls .segmented-control { flex: 0 1 auto; }
 
+/* The lesson: its bar, then the notes falling onto the keys, one piece with them. */
+.piano-stage { display: flex; flex-direction: column; }
+.piano-lesson {
+  --lesson-white: oklch(0.72 0.17 var(--accent-hue));
+  --lesson-black: oklch(0.56 0.19 var(--accent-hue));
+  --lesson-guide: #ff9f1c;
+  --lesson-grid: rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.piano-lesson-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.piano-lesson-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.piano-lesson-bar .segmented-control { flex: 0 1 auto; }
+.piano-lesson-bar .segmented-control button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+.piano-lesson-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  color: var(--accent-text);
+}
+.piano-lesson-title > * { flex: none; }
+.piano-lesson-title > .piano-lesson-song { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.piano-lesson-status {
+  display: inline-flex;
+  flex: none;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.piano-lesson-status b { color: var(--success); }
+.piano-lesson-hint { margin: 0; font-size: 13.5px; color: var(--text-muted); }
+.piano-lesson-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 22vw, 230px);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(180deg, #0d0c12, #1b1a22);
+}
+.piano-stage.has-lesson .piano-keys { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.piano-key.white.is-guide {
+  background: linear-gradient(180deg, #ffe2b8, #ffc56b);
+  box-shadow: inset 0 -6px 0 #ff9f1c;
+}
+.piano-key.black.is-guide { background: linear-gradient(180deg, #ffb44d, #d97a00 88%); }
+.piano-key.is-guide.is-active { filter: saturate(1.3) brightness(0.95); }
+.piano-lesson-tip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.piano-lesson-tip svg { color: var(--accent-text); flex: none; }
+.piano-lesson-tip a { font-weight: 700; color: var(--accent-text); }
+.results-header-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
 /* ---- key & tempo ---- */
 
 .chroma-card { padding: 20px; }

@@ -467,8 +467,7 @@
 .site-closed h1 { margin: 8px 0 0; font-size: 26px; }
 .site-closed p { margin: 0 0 10px; color: var(--text-soft); line-height: 1.7; max-width: 46ch; }
 
-.tool-loading,
-.auth-loading {
+.tool-loading {
   width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
   margin: 48px auto;
   padding: 26px 28px;
@@ -482,10 +481,9 @@
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
-.tool-loading .brand-mark,
-.auth-loading .brand-mark { animation: bob 1.4s ease-in-out infinite; }
+.tool-loading .brand-mark { animation: bob 1.4s ease-in-out infinite; }
+/* The whole-site error screen (ErrorBoundary whole): its card, centred on the page. */
 .auth-screen { display: grid; place-items: center; min-height: 100vh; }
-.auth-loading { width: auto; margin: 0; }
 
 /* ---- the footer ---- */
 

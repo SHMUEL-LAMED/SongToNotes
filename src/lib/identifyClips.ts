@@ -7,7 +7,7 @@
  */
 import { AiError, describeAiError, type Identification } from "./aiApi";
 import { announceCredits, announceEmpty } from "./credits";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 import { encodeWav } from "./wav";
 
 /** How long each clip is, in seconds (the service wants 15–20). */
@@ -105,7 +105,7 @@ export function newSession() {
  * identification share `session`, and the allowance goes down once for them.
  */
 export async function identifyClip(clip: Blob, session: string, signal?: AbortSignal): Promise<Identification> {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const access = data.session?.access_token;
   if (!access) throw new AiError("signed_out", describeAiError("signed_out"));
   const form = new FormData();

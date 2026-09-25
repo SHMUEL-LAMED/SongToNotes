@@ -17,9 +17,15 @@ export function youtubeVideoId(watch: string | null | undefined): string | null 
   return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
 }
 
-/** The player, from YouTube's privacy-enhanced domain, starting as it opens. */
+/**
+ * YouTube's own player, starting as it opens. From www.youtube.com itself, not
+ * the youtube-nocookie.com mirror: filtered connections (NetFree and the like)
+ * know YouTube's address and pass its videos through their own review, but
+ * treat the mirror as a new, unapproved site and block the player outright.
+ * Nothing loads from YouTube until the visitor asks to play.
+ */
 export function youtubeEmbedUrl(id: string) {
-  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1`;
+  return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&playsinline=1`;
 }
 
 /** The video's still. */

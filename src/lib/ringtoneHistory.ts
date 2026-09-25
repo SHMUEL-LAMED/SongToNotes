@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export const RINGTONE_HISTORY_KEY = "music-tools.ringtone-history.v1";
 
@@ -81,6 +81,7 @@ export function writeLocalRingtones(items: SavedRingtone[]) {
 export async function listRingtones(userId?: string | null): Promise<SavedRingtone[]> {
   const local = listLocalRingtones();
   if (!userId) return local;
+  const supabase = await getSupabase();
 
   const { data, error } = await supabase
     .from("ringtones")
@@ -128,6 +129,7 @@ export async function saveRingtone(
   writeLocalRingtones([entry, ...listLocalRingtones()]);
   if (!userId) return entry;
 
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("ringtones")
     .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
@@ -141,6 +143,7 @@ export async function setRingtoneFilePath(id: string, filePath: string, userId: 
   writeLocalRingtones(
     listLocalRingtones().map((item) => (item.id === id ? { ...item, filePath } : item)),
   );
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("ringtones")
     .update({ file_path: filePath })
@@ -152,6 +155,7 @@ export async function setRingtoneFilePath(id: string, filePath: string, userId: 
 export async function deleteRingtone(id: string, userId?: string | null) {
   writeLocalRingtones(listLocalRingtones().filter((item) => item.id !== id));
   if (!userId) return;
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("ringtones")
     .delete()

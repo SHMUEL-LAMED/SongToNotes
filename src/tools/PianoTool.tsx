@@ -1,12 +1,14 @@
-import { Circle, Download, Piano, Square } from "lucide-react";
+import { Circle, Download, GraduationCap, Piano, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MidiButton } from "../components/MidiButton";
+import { PianoLesson } from "../components/PianoLesson";
 import { useMidiInput } from "../lib/midiInput";
 import { SaveButton } from "../components/SaveButton";
 import { midiToFrequency } from "../lib/dsp";
 import { downloadFile, notesToMidi } from "../lib/export";
 import { plainNoteName, scientificName } from "../lib/key";
 import { parseNoteName } from "../lib/noteNames";
+import { clearPianoLesson, fitKeyboard, readPianoLesson } from "../lib/pianoLesson";
 import type { DetectedNote } from "../lib/types";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -44,10 +46,20 @@ function recordingSeconds(notes: DetectedNote[]) {
  * notes at once, and the recorder simply timestamps those transitions.
  */
 export function PianoTool() {
-  const [octave, setOctave] = useState(3);
+  // A song sent from song-to-notes to learn, on the keys that hold it.
+  const [lesson, setLesson] = useState(() => {
+    const saved = readPianoLesson();
+    if (!saved) return null;
+    const fit = fitKeyboard(saved.notes);
+    return { title: saved.title, notes: fit.notes, octave: fit.octave, octaves: fit.octaves };
+  });
+  const [octave, setOctave] = useState(() => lesson?.octave ?? 3);
   const [octaveCount, setOctaveCount] = useState(() =>
-    window.innerWidth < 720 ? 2 : 3,
+    lesson?.octaves ?? (window.innerWidth < 720 ? 2 : 3),
   );
+  // While a lesson is open its notes fall onto these keys, so they stay put.
+  const locked = lesson !== null;
+  const [guide, setGuide] = useState<number[]>([]);
   const [timbre, setTimbre] = useState<Timbre>("piano");
   const [sustain, setSustain] = useState(false);
   const [showNames, setShowNames] = useState(true);
@@ -67,6 +79,8 @@ export function PianoTool() {
   const sustainRef = useRef(sustain);
   const recordingRef = useRef<{ startedAt: number; open: Map<number, number> } | null>(null);
   const pointerNoteRef = useRef<number | null>(null);
+  const keysRef = useRef<HTMLDivElement>(null);
+  const lessonPressRef = useRef<((midi: number) => void) | null>(null);
 
   useEffect(() => {
     timbreRef.current = timbre;
@@ -204,10 +218,26 @@ export function PianoTool() {
     voicesRef.current.delete(midi);
   }, []);
 
+  // What the visitor plays, as against what the lesson or the assistant
+  // plays: a lesson being practised hears it.
+  const playerNoteOn = useCallback(
+    (midi: number) => {
+      noteOn(midi);
+      lessonPressRef.current?.(midi);
+    },
+    [noteOn],
+  );
+  const releaseLessonNote = useCallback((midi: number) => noteOff(midi, true), [noteOff]);
+  const closeLesson = useCallback(() => {
+    clearPianoLesson();
+    setLesson(null);
+    setGuide([]);
+  }, []);
+
   // A keyboard plugged into the computer plays the same voices, across its
   // whole range rather than only the octaves on screen.
   const midi = useMidiInput({
-    onNoteOn: (note) => noteOn(note),
+    onNoteOn: (note) => playerNoteOn(note),
     onNoteOff: (note) => noteOff(note),
     onSustain: setSustain,
   });
@@ -249,11 +279,11 @@ export function PianoTool() {
       if (event.repeat) return;
       const key = event.key.toLowerCase();
       if (key === "z") {
-        setOctave((value) => Math.max(0, value - 1));
+        if (!locked) setOctave((value) => Math.max(0, value - 1));
         return;
       }
       if (key === "x") {
-        setOctave((value) => Math.min(7, value + 1));
+        if (!locked) setOctave((value) => Math.min(7, value + 1));
         return;
       }
       if (event.code === "Space") {
@@ -264,7 +294,7 @@ export function PianoTool() {
       const index = KEYBOARD_ROW.indexOf(event.key);
       if (index < 0) return;
       event.preventDefault();
-      noteOn(lowest + index);
+      playerNoteOn(lowest + index);
     };
     const up = (event: KeyboardEvent) => {
       if (event.code === "Space") {
@@ -281,7 +311,7 @@ export function PianoTool() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [lowest, noteOff, noteOn]);
+  }, [locked, lowest, noteOff, playerNoteOn]);
 
   // A new take is a new recording, whatever the last one's button says.
   useEffect(() => {
@@ -340,7 +370,7 @@ export function PianoTool() {
 
   useAssistantTool("piano", {
     state: () =>
-      `פסנתר וירטואלי: מקשים C${octave}–C${octave + octaveCount}, צליל ${timbre}, הדגשת סולם ${scale.id === "none" ? "כבויה" : `${ROOT_NAMES[scaleRoot]} ${scale.label}`}, סוסטיין ${sustain ? "פועל" : "כבוי"}, עוצמה ${Math.round(volume * 100)}%${recording ? `; מקליט (${recorded.length} תווים עד כה)` : recorded.length ? `; יש הקלטה של ${recorded.length} תווים` : ""}.`,
+      `פסנתר וירטואלי: מקשים C${octave}–C${octave + octaveCount}, צליל ${timbre}, הדגשת סולם ${scale.id === "none" ? "כבויה" : `${ROOT_NAMES[scaleRoot]} ${scale.label}`}, סוסטיין ${sustain ? "פועל" : "כבוי"}, עוצמה ${Math.round(volume * 100)}%${recording ? `; מקליט (${recorded.length} תווים עד כה)` : recorded.length ? `; יש הקלטה של ${recorded.length} תווים` : ""}${lesson ? `; פתוח לימוד של „${lesson.title || "שיר"}” (${lesson.notes.length} תווים; המקשים קבועים עד שהגולש סוגר אותו)` : ""}.`,
     handlers: {
       "piano.play": async ({ notes: names, mode: how, seconds }) => {
         const list = (names as string[]).slice(0, 32);
@@ -368,6 +398,9 @@ export function PianoTool() {
       },
       "piano.set": ({ octave: nextOctave, timbre: nextTimbre, scale: nextScale, root, sustain: nextSustain, names: nextNames, volume: nextVolume, octaves }) => {
         const done: string[] = [];
+        if (locked && (typeof nextOctave === "number" || typeof octaves === "number")) {
+          return { ok: false, message: "בזמן לימוד שיר המקשים קבועים; כדי לשנות אוקטבה צריך לסגור את הלימוד" };
+        }
         if (typeof nextOctave === "number") {
           const clamped = Math.max(0, Math.min(7, Math.round(nextOctave)));
           setOctave(clamped);
@@ -456,78 +489,95 @@ export function PianoTool() {
         {recording && <span className="recording-chip"><span className="recording-dot small" /> מקליט · {recorded.length} תווים</span>}
       </div>
 
-      <div
-        className="piano-keys"
-        dir="ltr"
-        style={{ "--white-count": whiteCount } as React.CSSProperties}
-        onPointerLeave={() => {
-          if (pointerNoteRef.current !== null) noteOff(pointerNoteRef.current);
-          pointerNoteRef.current = null;
-        }}
-      >
-        {keys.map((key) => {
-          const active = held.has(key.midi);
-          const highlighted = inScale(key.midi);
-          const isRoot = scale.steps.length > 0 && ((key.midi - scaleRoot) % 12 + 12) % 12 === 0;
-          const mappedKey = KEYBOARD_ROW[key.midi - lowest];
-          return (
-            <button
-              key={key.midi}
-              type="button"
-              className={`piano-key ${key.black ? "black" : "white"} ${active ? "is-active" : ""} ${highlighted ? "in-scale" : ""} ${isRoot ? "is-root" : ""}`}
-              style={
-                key.black
-                  ? { left: `calc((${key.whiteIndex} + 0.68) * (100% / ${whiteCount}))` }
-                  : undefined
-              }
-              aria-label={plainNoteName(key.midi)}
-              aria-pressed={active}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.currentTarget.releasePointerCapture?.(event.pointerId);
-                pointerNoteRef.current = key.midi;
-                noteOn(key.midi);
-              }}
-              onPointerEnter={(event) => {
-                if (event.buttons !== 1) return;
-                if (pointerNoteRef.current !== null && pointerNoteRef.current !== key.midi) {
-                  noteOff(pointerNoteRef.current);
+      <div className={`piano-stage ${lesson ? "has-lesson" : ""}`}>
+        {lesson && (
+          <PianoLesson
+            title={lesson.title}
+            notes={lesson.notes}
+            keysRef={keysRef}
+            layout={`${lowest}-${octaveCount}`}
+            play={noteOn}
+            release={releaseLessonNote}
+            pressRef={lessonPressRef}
+            onGuide={setGuide}
+            onClose={closeLesson}
+          />
+        )}
+        <div
+          ref={keysRef}
+          className="piano-keys"
+          dir="ltr"
+          style={{ "--white-count": whiteCount } as React.CSSProperties}
+          onPointerLeave={() => {
+            if (pointerNoteRef.current !== null) noteOff(pointerNoteRef.current);
+            pointerNoteRef.current = null;
+          }}
+        >
+          {keys.map((key) => {
+            const active = held.has(key.midi);
+            const highlighted = inScale(key.midi);
+            const isRoot = scale.steps.length > 0 && ((key.midi - scaleRoot) % 12 + 12) % 12 === 0;
+            const mappedKey = KEYBOARD_ROW[key.midi - lowest];
+            return (
+              <button
+                key={key.midi}
+                type="button"
+                data-midi={key.midi}
+                className={`piano-key ${key.black ? "black" : "white"} ${active ? "is-active" : ""} ${highlighted ? "in-scale" : ""} ${isRoot ? "is-root" : ""} ${guide.includes(key.midi) ? "is-guide" : ""}`}
+                style={
+                  key.black
+                    ? { left: `calc((${key.whiteIndex} + 0.68) * (100% / ${whiteCount}))` }
+                    : undefined
                 }
-                pointerNoteRef.current = key.midi;
-                noteOn(key.midi);
-              }}
-              onPointerUp={() => {
-                noteOff(key.midi);
-                pointerNoteRef.current = null;
-              }}
-              onPointerCancel={() => {
-                noteOff(key.midi);
-                pointerNoteRef.current = null;
-              }}
-            >
-              {showNames && !key.black && (
-                <span className="piano-key-name">
-                  {scientificName(key.midi)}
-                  {mappedKey && <small>{mappedKey.toUpperCase()}</small>}
-                </span>
-              )}
-              {showNames && key.black && mappedKey && (
-                <span className="piano-key-name">
-                  <small>{mappedKey.toUpperCase()}</small>
-                </span>
-              )}
-            </button>
-          );
-        })}
+                aria-label={plainNoteName(key.midi)}
+                aria-pressed={active}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.releasePointerCapture?.(event.pointerId);
+                  pointerNoteRef.current = key.midi;
+                  playerNoteOn(key.midi);
+                }}
+                onPointerEnter={(event) => {
+                  if (event.buttons !== 1) return;
+                  if (pointerNoteRef.current !== null && pointerNoteRef.current !== key.midi) {
+                    noteOff(pointerNoteRef.current);
+                  }
+                  pointerNoteRef.current = key.midi;
+                  playerNoteOn(key.midi);
+                }}
+                onPointerUp={() => {
+                  noteOff(key.midi);
+                  pointerNoteRef.current = null;
+                }}
+                onPointerCancel={() => {
+                  noteOff(key.midi);
+                  pointerNoteRef.current = null;
+                }}
+              >
+                {showNames && !key.black && (
+                  <span className="piano-key-name">
+                    {scientificName(key.midi)}
+                    {mappedKey && <small>{mappedKey.toUpperCase()}</small>}
+                  </span>
+                )}
+                {showNames && key.black && mappedKey && (
+                  <span className="piano-key-name">
+                    <small>{mappedKey.toUpperCase()}</small>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="piano-controls">
         <div className="segmented-control" role="group" aria-label="אוקטבה">
-          <button type="button" onClick={() => setOctave((value) => Math.max(0, value - 1))}>
+          <button type="button" disabled={locked} onClick={() => setOctave((value) => Math.max(0, value - 1))}>
             אוקטבה −
           </button>
           <span className="segmented-label">C{octave}–C{octave + octaveCount}</span>
-          <button type="button" onClick={() => setOctave((value) => Math.min(7, value + 1))}>
+          <button type="button" disabled={locked} onClick={() => setOctave((value) => Math.min(7, value + 1))}>
             אוקטבה +
           </button>
         </div>
@@ -554,6 +604,14 @@ export function PianoTool() {
           </button>
         )}
       </div>
+
+      {!lesson && (
+        <p className="piano-lesson-tip">
+          <GraduationCap size={16} aria-hidden="true" />
+          <span>רוצים ללמוד שיר? זהו את התווים שלו ב„שיר לתווים” ולחצו „ללמוד בפסנתר”: התווים ייפלו על המקשים.</span>
+          <a href="#/notes">לשיר לתווים</a>
+        </p>
+      )}
 
       <div className="settings-panel">
         <div className="settings-grid">
@@ -595,10 +653,10 @@ export function PianoTool() {
           <div className="setting-field">
             <span>תצוגה</span>
             <div className="segmented-control">
-              <button className={octaveCount === 2 ? "active" : ""} onClick={() => setOctaveCount(2)} type="button">
+              <button className={octaveCount === 2 ? "active" : ""} disabled={locked} onClick={() => setOctaveCount(2)} type="button">
                 2 אוקטבות
               </button>
-              <button className={octaveCount === 3 ? "active" : ""} onClick={() => setOctaveCount(3)} type="button">
+              <button className={octaveCount === 3 ? "active" : ""} disabled={locked} onClick={() => setOctaveCount(3)} type="button">
                 3 אוקטבות
               </button>
             </div>

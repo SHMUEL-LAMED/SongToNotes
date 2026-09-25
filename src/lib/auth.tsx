@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { supabase } from "./supabase";
+import { SESSION_KEY, getSupabase } from "./supabase";
 
 export type Profile = {
   id: string;
@@ -43,12 +43,31 @@ function profileFromUser(user: User): Profile {
   };
 }
 
+/**
+ * The session supabase-js keeps in this browser, read directly, so the first
+ * paint knows who is here without waiting for the library. Once loaded, the
+ * library confirms it, refreshes it, or signs out.
+ */
+function storedSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<Session> | null) : null;
+    if (!parsed?.access_token || !parsed.user?.id) return null;
+    return { ...parsed, user: { ...parsed.user, user_metadata: parsed.user.user_metadata ?? {} } } as Session;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(storedSession);
+  const [profile, setProfile] = useState<Profile | null>(() => (session ? profileFromUser(session.user) : null));
+  // Waiting only on a stored session the library has yet to confirm; a
+  // visitor with none is signed out from the first paint.
+  const [loading, setLoading] = useState(() => session !== null);
 
   const loadProfile = useCallback(async (user: User) => {
+    const supabase = await getSupabase();
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, avatar_url")
@@ -73,8 +92,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let active = true;
-    void supabase.auth
-      .getSession()
+    // The client loads on first use; until it has, nobody is signed in yet.
+    let subscription: { unsubscribe: () => void } | null = null;
+    const ready = getSupabase();
+    void ready
+      .then((supabase) => supabase.auth.getSession())
       .then(({ data }) => {
         if (!active) return;
         setSession(data.session);
@@ -94,25 +116,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (active) setLoading(false);
       });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (nextSession?.user) {
-        window.setTimeout(() => {
-          void loadProfile(nextSession.user)
-            .catch(ignoreProfileError)
-            .finally(() => setLoading(false));
-        }, 0);
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
+    void ready
+      .then((supabase) => {
+        if (!active) return;
+        subscription = supabase.auth.onAuthStateChange((_event, nextSession) => {
+          setSession(nextSession);
+          if (nextSession?.user) {
+            window.setTimeout(() => {
+              void loadProfile(nextSession.user)
+                .catch(ignoreProfileError)
+                .finally(() => setLoading(false));
+            }, 0);
+          } else {
+            setProfile(null);
+            setLoading(false);
+          }
+        }).data.subscription;
+      })
+      // A client that did not load is reported by the getSession branch above.
+      .catch(() => undefined);
 
     return () => {
       active = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, [loadProfile]);
 
@@ -126,6 +152,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           import.meta.env.BASE_URL,
           window.location.origin,
         ).toString();
+        const supabase = await getSupabase();
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo },
@@ -133,12 +160,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (error) throw error;
       },
       signOut: async () => {
-        const { error } = await supabase.auth.signOut();
+        const { error } = await (await getSupabase()).auth.signOut();
         if (error) throw error;
       },
       updateName: async (fullName: string) => {
         const cleanName = fullName.trim().slice(0, 80);
         if (!session?.user || !cleanName) return;
+        const supabase = await getSupabase();
         const { data, error } = await supabase
           .from("profiles")
           .update({ full_name: cleanName })

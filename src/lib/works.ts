@@ -30,7 +30,7 @@ import {
   setRingtoneFilePath,
   type SavedRingtone,
 } from "./ringtoneHistory";
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export const WORK_KINDS = [
   "notes",
@@ -348,6 +348,7 @@ export async function syncLocalWorks(userId: string): Promise<SavedWork[]> {
   const pending = local.filter((item) => item.localOnly);
   let synced: SavedWork[] = [];
   if (pending.length > 0) {
+    const supabase = await getSupabase();
     const { error } = await supabase
       .from("works")
       .upsert(
@@ -394,6 +395,7 @@ export async function syncLocalFiles(userId: string) {
     if (!file) continue;
     try {
       const filePath = await uploadWorkFile(userId, item.id, file);
+      const supabase = await getSupabase();
       const { error } = await supabase
         .from("works")
         .update({ file_path: filePath })
@@ -450,6 +452,7 @@ export async function listWorks(userId?: string | null): Promise<SavedWork[]> {
   const ringtones = await listRingtones(userId)
     .then((rows) => rows.map((item) => fromRingtone(item, false)))
     .catch(() => listLocalRingtones().map((item) => fromRingtone(item, true)));
+  const supabase = await getSupabase();
   const [uploaded, remote, transcriptions] = await Promise.all([
     syncLocalWorks(userId).catch(() => [] as SavedWork[]),
     supabase
@@ -540,6 +543,7 @@ export async function saveWork(
       }
     }
   }
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("works")
     .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
@@ -568,6 +572,7 @@ export async function renameWork(
   }
   if (!userId) return updated;
 
+  const supabase = await getSupabase();
   const table =
     work.origin === "transcriptions"
       ? supabase.from("transcriptions").update({ title: clean }).eq("id", work.rowId ?? "").eq("user_id", userId)
@@ -598,6 +603,7 @@ export async function deleteWork(work: SavedWork, userId?: string | null): Promi
   }
   writeLocalWorks(listLocalWorks().filter((item) => item.id !== work.id));
   if (!userId) return;
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("works")
     .delete()
@@ -628,6 +634,7 @@ export async function restoreWork(work: SavedWork, userId?: string | null): Prom
   };
   writeLocalWorks([entry, ...listLocalWorks().filter((item) => item.id !== entry.id)]);
   if (!userId) return entry;
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("works")
     .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });

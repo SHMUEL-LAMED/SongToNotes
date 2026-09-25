@@ -4,16 +4,17 @@ import { WORKS_KEY, listLocalWorks, syncLocalWorks, type SavedWork } from "./wor
 // The server, as far as uploading works goes: it refuses any batch holding a
 // kind its check does not know yet, the way Postgres fails a whole insert.
 const server = vi.hoisted(() => ({ calls: [] as { kind: string; client_id: string }[][], unknown: new Set<string>() }));
-vi.mock("./supabase", () => ({
-  supabase: {
+vi.mock("./supabase", () => {
+  const client = {
     from: () => ({
       upsert: async (rows: { kind: string; client_id: string }[]) => {
         server.calls.push(rows);
         return { error: rows.some((row) => server.unknown.has(row.kind)) ? { message: "violates check constraint works_kind_check" } : null };
       },
     }),
-  },
-}));
+  };
+  return { getSupabase: async () => client };
+});
 
 function work(id: string, kind: SavedWork["kind"], localOnly: boolean): SavedWork {
   return {

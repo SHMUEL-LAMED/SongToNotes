@@ -13,7 +13,7 @@
  * never had any. Nothing here can be turned back into a person, by design.
  */
 import { normalizeRules, type CreditRules } from "./credits";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 import { ALL_TOOLS } from "./tools";
 
 const ADMIN_URL = `${SUPABASE_URL}/functions/v1/admin`;
@@ -200,7 +200,7 @@ export function describeAdminError(code: string) {
 }
 
 async function headers() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const access = data.session?.access_token;
   if (!access) throw new AdminError("signed_out", MESSAGES.signed_out);
   return {

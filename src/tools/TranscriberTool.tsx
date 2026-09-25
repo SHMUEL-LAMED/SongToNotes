@@ -6,10 +6,12 @@ import {
   Copy,
   Download,
   FileMusic,
+  Guitar,
   Image,
   ListMusic,
   ListMusic as ListIcon,
   Pause,
+  Piano,
   Play,
   Printer,
   Repeat,
@@ -38,6 +40,9 @@ import { detectKey, keyName, scientificName } from "../lib/key";
 import { saveTranscription } from "../lib/history";
 import { saveWork } from "../lib/works";
 import { scoreToMusicXml } from "../lib/musicxml";
+import { scoreToTab } from "../lib/tab";
+import { lessonFromScore, savePianoLesson } from "../lib/pianoLesson";
+import { currentLang } from "../lib/i18n";
 import { quantizeNotes } from "../lib/quantize";
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "../lib/refine";
 import { buildScore } from "../lib/score";
@@ -54,7 +59,7 @@ import {
   type Settings,
 } from "./settings";
 
-type Tab = "sheet" | "piano" | "notes";
+type Tab = "sheet" | "piano" | "notes" | "tab";
 
 type Props = {
   /**
@@ -203,6 +208,14 @@ export function TranscriberTool({ initial }: Props) {
     () => scoreToAbc(score, { withChords: settings.withChords }),
     [score, settings.withChords],
   );
+  // Guitar tablature of the same score, its header in the site's language.
+  const guitarTab = useMemo(() => scoreToTab(score, { lang: currentLang() }), [score]);
+
+  // The same score, handed to the virtual piano to learn: its notes fall onto the keys.
+  const learnOnPiano = () => {
+    savePianoLesson({ title, notes: lessonFromScore(score) });
+    window.location.assign("#/piano");
+  };
 
   const duration = useMemo(() => noteSpan(notes), [notes]);
   const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
@@ -483,8 +496,12 @@ export function TranscriberTool({ initial }: Props) {
 
   // ---- downloads ----
 
-  function download(kind: "midi" | "musicxml" | "abc" | "csv" | "svg") {
+  function download(kind: "midi" | "musicxml" | "abc" | "csv" | "svg" | "tab") {
     const base = safeFilename(title);
+    if (kind === "tab") {
+      downloadFile(guitarTab, `${base}-tab.txt`, "text/plain;charset=utf-8");
+      return;
+    }
     if (kind === "midi") {
       downloadFile(
         notesToMidi(notes, {
@@ -520,6 +537,16 @@ export function TranscriberTool({ initial }: Props) {
       downloadFile(svg, `${base}.svg`, "image/svg+xml;charset=utf-8");
     }
   }
+
+  const copyTab = async () => {
+    try {
+      await navigator.clipboard.writeText(guitarTab);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("הדפדפן לא איפשר העתקה. אפשר להוריד את קובץ הטאבים במקום.");
+    }
+  };
 
   const copyAbc = async () => {
     try {
@@ -687,7 +714,7 @@ export function TranscriberTool({ initial }: Props) {
       "notes.tab": ({ tab }) => {
         if (!hasResults) return { ok: false, message: "אין תוצאה להציג" };
         setActiveTab(tab as Tab);
-        return { ok: true, message: tab === "sheet" ? "מוצגים התווים" : tab === "piano" ? "מוצג ה־Piano Roll" : "מוצגת רשימת התווים" };
+        return { ok: true, message: tab === "sheet" ? "מוצגים התווים" : tab === "piano" ? "מוצג ה־Piano Roll" : tab === "tab" ? "מוצגים הטאבים לגיטרה" : "מוצגת רשימת התווים" };
       },
       "notes.download": ({ format }) => {
         if (!hasResults) return { ok: false, message: "אין תוצאה להורדה" };
@@ -696,8 +723,13 @@ export function TranscriberTool({ initial }: Props) {
           return { ok: true, message: "חלון ההדפסה נפתח" };
         }
         if (format === "svg" && !sheetSvgRef.current) return { ok: false, message: "לתמונת התווים צריך שלשונית התווים תהיה פתוחה (notes.tab sheet) ואז לנסות שוב" };
-        download(format as "midi" | "musicxml" | "abc" | "csv" | "svg");
+        download(format as "midi" | "musicxml" | "abc" | "csv" | "svg" | "tab");
         return { ok: true, message: `קובץ ${String(format).toUpperCase()} ירד` };
+      },
+      "notes.learn": () => {
+        if (!hasResults || !notes.length) return { ok: false, message: "אין תווים ללמוד" };
+        learnOnPiano();
+        return { ok: true, message: "הפסנתר הווירטואלי נפתח עם השיר: בצפייה הוא מתנגן לבד, ובתרגול הוא מחכה לכל תו" };
       },
       "notes.reset": () => {
         reset();
@@ -906,9 +938,16 @@ export function TranscriberTool({ initial }: Props) {
               </div>
               <h2>התווים של „{title}”</h2>
             </div>
-            <button className="secondary-button" onClick={reset} type="button">
-              <RotateCcw size={17} /> שיר חדש
-            </button>
+            <div className="results-header-actions">
+              {notes.length > 0 && (
+                <button className="secondary-button" onClick={learnOnPiano} type="button">
+                  <Piano size={17} /> ללמוד בפסנתר
+                </button>
+              )}
+              <button className="secondary-button" onClick={reset} type="button">
+                <RotateCcw size={17} /> שיר חדש
+              </button>
+            </div>
           </div>
 
           <div className="stats-grid">
@@ -1231,6 +1270,19 @@ export function TranscriberTool({ initial }: Props) {
               >
                 <ListMusic size={17} /> רשימת תווים
               </button>
+              <button
+                role="tab"
+                id="tab-tab"
+                aria-selected={activeTab === "tab"}
+                aria-controls="panel-tab"
+                tabIndex={activeTab === "tab" ? 0 : -1}
+                onKeyDown={moveTabFocus}
+                className={activeTab === "tab" ? "active" : ""}
+                onClick={() => setActiveTab("tab")}
+                type="button"
+              >
+                <Guitar size={17} /> טאבים
+              </button>
             </div>
             <div className="toolbar-actions">
               {activeTab === "piano" && (
@@ -1244,6 +1296,16 @@ export function TranscriberTool({ initial }: Props) {
                     onChange={(event) => setZoom(Number(event.target.value))}
                   />
                 </label>
+              )}
+              {activeTab === "tab" && (
+                <>
+                  <button className="icon-button" type="button" onClick={() => download("tab")} aria-label="הורד את הטאבים" title="הורדה כקובץ טקסט">
+                    <Download size={17} />
+                  </button>
+                  <button className="icon-button" type="button" onClick={() => void copyTab()} aria-label="העתק את הטאבים" title={copied ? "הועתק!" : "העתק את הטאבים"}>
+                    {copied ? <Check size={17} /> : <Copy size={17} />}
+                  </button>
+                </>
               )}
               {activeTab === "sheet" && (
                 <>
@@ -1271,6 +1333,14 @@ export function TranscriberTool({ initial }: Props) {
           </div>
 
           <div className="result-canvas">
+            {activeTab === "tab" && (
+              <div id="panel-tab" role="tabpanel" aria-labelledby="tab-tab" className="tab-sheet-wrap">
+                {/* Its own text, in the site's language already: nothing for the page's translation to do. */}
+                <pre className="tab-sheet" dir="ltr" translate="no">
+                  {guitarTab}
+                </pre>
+              </div>
+            )}
             {activeTab === "sheet" && (
               <div id="panel-sheet" role="tabpanel" aria-labelledby="tab-sheet">
                 <SheetMusic
@@ -1380,6 +1450,12 @@ export function TranscriberTool({ initial }: Props) {
                 <Printer size={17} />
                 <span>
                   הדפסה / PDF<small>דף תווים להדפסה</small>
+                </span>
+              </button>
+              <button onClick={() => download("tab")} type="button">
+                <Guitar size={17} />
+                <span>
+                  טאבים לגיטרה<small>קובץ טקסט לנגינה</small>
                 </span>
               </button>
               <button onClick={() => download("abc")} type="button">
