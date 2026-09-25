@@ -246,6 +246,35 @@
 .audit-what code { font-size: 12px; color: var(--text-muted); direction: ltr; }
 .audit-who { color: var(--text-muted); font-size: 12px; direction: ltr; unicode-bidi: isolate; }
 
+/* ---- feedback from visitors ---- */
+
+.admin-tab-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  display: inline-grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.feedback-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.feedback-list { list-style: none; margin: 0; padding: 0; }
+.feedback-list li { display: flex; flex-direction: column; gap: 8px; padding: 14px 2px; border-bottom: 1px solid var(--line); }
+.feedback-list li:last-child { border-bottom: 0; }
+.feedback-list li.is-handled { opacity: 0.6; }
+.feedback-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; color: var(--text-muted); }
+.feedback-kind { padding: 2px 9px; border-radius: var(--radius-pill); font-weight: 700; background: var(--surface-2); color: var(--text-soft); }
+.feedback-kind.is-problem { background: var(--danger-soft); color: var(--danger); }
+.feedback-kind.is-idea { background: var(--accent-tint); color: var(--accent-text); }
+.feedback-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.feedback-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.feedback-row-actions a { margin-inline-end: auto; font-size: 13px; color: var(--accent-text); }
+.feedback-row-actions > span { margin-inline-end: auto; font-size: 13px; color: var(--text-soft); }
+
 .admin-danger-button {
   display: inline-flex;
   align-items: center;

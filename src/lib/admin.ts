@@ -360,7 +360,59 @@ export async function fetchAudit(query = ""): Promise<AdminAuditEntry[]> {
   }));
 }
 
+/** A message a visitor sent from "משוב והצעות". */
+export type FeedbackEntry = {
+  id: number;
+  createdAt: string;
+  kind: "problem" | "idea" | "other";
+  message: string;
+  contact: string | null;
+  page: string | null;
+  language: string | null;
+  device: string | null;
+  browser: string | null;
+  os: string | null;
+  handled: boolean;
+};
+
+const optional = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
+
+/** The rows as the page shows them; anything malformed is left out. */
+export function normalizeFeedback(raw: unknown): FeedbackEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((row): FeedbackEntry[] => {
+    if (!row || typeof row !== "object") return [];
+    const item = row as Record<string, unknown>;
+    const id = Number(item.id);
+    if (!Number.isSafeInteger(id) || typeof item.message !== "string" || typeof item.created_at !== "string") return [];
+    const kind = item.kind === "idea" || item.kind === "other" ? item.kind : "problem";
+    return [
+      {
+        id,
+        createdAt: item.created_at,
+        kind,
+        message: item.message,
+        contact: optional(item.contact),
+        page: optional(item.page),
+        language: optional(item.language),
+        device: optional(item.device),
+        browser: optional(item.browser),
+        os: optional(item.os),
+        handled: item.handled === true,
+      },
+    ];
+  });
+}
+
+/** The messages, newest first; `missing` until supabase/site_feedback.sql has run. */
+export async function fetchFeedback(): Promise<{ entries: FeedbackEntry[]; missing: boolean }> {
+  const body = await call<{ entries?: unknown; missing?: boolean }>("?view=feedback");
+  return { entries: normalizeFeedback(body.entries), missing: body.missing === true };
+}
+
 export type AdminAction =
+  | "feedback.handle"
+  | "feedback.delete"
   | "control.set"
   | "setting.set"
   | "setting.delete"
