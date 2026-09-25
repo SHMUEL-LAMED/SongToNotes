@@ -7,6 +7,7 @@ import { AppShell } from "./components/AppShell";
 import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { CreditNotices } from "./components/CreditNotices";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
@@ -547,97 +548,101 @@ function WorkspaceApp() {
         </div>
       )}
 
-      {closed ? (
-        <div className="site-closed" role="status">
-          <span className="brand-mark">
-            <PowerOff size={22} />
-          </span>
-          <h1>האתר בתחזוקה</h1>
-          <p>{control.maintenanceMessage ?? "חוזרים בעוד כמה דקות. תודה על הסבלנות."}</p>
-        </div>
-      ) : null}
-      {!closed && shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
-      {!closed && me && (
-        <Suspense fallback={loading("טוען את האזור האישי…")}>
-          <MePage
-            onOpenWork={openWork}
-            onOpenAdmin={owner ? () => go("admin") : null}
-            onOpenCredits={() => go("credits")}
-            onHome={() => go("home")}
-            onSignInError={setShellError}
-            initialTab={meTab}
-          />
+      {/* A page that fails to render — or whose code did not arrive — says so
+          here, and the sidebar and the rest of the site keep working. */}
+      <ErrorBoundary resetKey={route} onHome={route === "home" ? undefined : () => go("home")}>
+        {closed ? (
+          <div className="site-closed" role="status">
+            <span className="brand-mark">
+              <PowerOff size={22} />
+            </span>
+            <h1>האתר בתחזוקה</h1>
+            <p>{control.maintenanceMessage ?? "חוזרים בעוד כמה דקות. תודה על הסבלנות."}</p>
+          </div>
+        ) : null}
+        {!closed && shareToken && <SharePage token={shareToken} onHome={() => go("home")} />}
+        {!closed && me && (
+          <Suspense fallback={loading("טוען את האזור האישי…")}>
+            <MePage
+              onOpenWork={openWork}
+              onOpenAdmin={owner ? () => go("admin") : null}
+              onOpenCredits={() => go("credits")}
+              onHome={() => go("home")}
+              onSignInError={setShellError}
+              initialTab={meTab}
+            />
+          </Suspense>
+        )}
+        {!closed && credits && (
+          <Suspense fallback={loading("טוען את הקרדיטים…")}>
+            <CreditsPage onOpen={go} onSignInError={setShellError} />
+          </Suspense>
+        )}
+        {toolOff && tool && (
+          <div className="site-closed is-tool" role="status">
+            <span className="brand-mark">
+              <CircleSlash size={22} />
+            </span>
+            <h1>{tool.title} מכובה זמנית</h1>
+            <p>הכלי הזה כבוי כרגע — בדרך כלל כי שירות שהוא נשען עליו לא זמין. שאר הכלים פתוחים.</p>
+            <button type="button" className="secondary-button" onClick={() => go("home")}>
+              לכל הכלים
+            </button>
+          </div>
+        )}
+        {admin && (
+          <Suspense fallback={loading("טוען את אזור הניהול…")}>
+            <AdminPanel onHome={() => go("home")} />
+          </Suspense>
+        )}
+        {!closed && !tool && !shareToken && !admin && !me && !credits && (
+          <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
+        )}
+        {shown === "notes" && (
+          <Suspense fallback={loading("טוען את מנוע התווים…")}>
+            <TranscriberTool
+              key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
+              initial={
+                opened && (opened.work.kind === "notes" || opened.work.kind === "piano")
+                  ? toPendingTranscription(opened.work)
+                  : null
+              }
+            />
+          </Suspense>
+        )}
+        <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
+          {shown === "ringtone" && <RingtoneTool />}
+          {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
+          {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+          {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
+          {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
+          {shown === "piano" && <PianoTool />}
+          {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+          {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
+          {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
+          {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
+          {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
+          {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+          {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+          {shown === "pads" && <PadTool />}
+          {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+          {shown === "video" && <VideoTool />}
+          {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+          {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
+          {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
+          {shown === "beats" && <BeatMakerTool />}
+          {shown === "theory" && <TheoryTool />}
+          {shown === "progressions" && <ProgressionTool />}
+          {shown === "changes" && <ChangesTool />}
         </Suspense>
-      )}
-      {!closed && credits && (
-        <Suspense fallback={loading("טוען את הקרדיטים…")}>
-          <CreditsPage onOpen={go} onSignInError={setShellError} />
-        </Suspense>
-      )}
-      {toolOff && tool && (
-        <div className="site-closed is-tool" role="status">
-          <span className="brand-mark">
-            <CircleSlash size={22} />
-          </span>
-          <h1>{tool.title} מכובה זמנית</h1>
-          <p>הכלי הזה כבוי כרגע — בדרך כלל כי שירות שהוא נשען עליו לא זמין. שאר הכלים פתוחים.</p>
-          <button type="button" className="secondary-button" onClick={() => go("home")}>
-            לכל הכלים
-          </button>
-        </div>
-      )}
-      {admin && (
-        <Suspense fallback={loading("טוען את אזור הניהול…")}>
-          <AdminPanel onHome={() => go("home")} />
-        </Suspense>
-      )}
-      {!closed && !tool && !shareToken && !admin && !me && !credits && (
-        <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
-      )}
-      {shown === "notes" && (
-        <Suspense fallback={loading("טוען את מנוע התווים…")}>
-          <TranscriberTool
-            key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
-            initial={
-              opened && (opened.work.kind === "notes" || opened.work.kind === "piano")
-                ? toPendingTranscription(opened.work)
-                : null
-            }
-          />
-        </Suspense>
-      )}
-      <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
-        {shown === "ringtone" && <RingtoneTool />}
-        {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
-        {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
-        {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
-        {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
-        {shown === "piano" && <PianoTool />}
-        {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
-        {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
-        {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-        {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
-        {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
-        {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
-        {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
-        {shown === "pads" && <PadTool />}
-        {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
-        {shown === "video" && <VideoTool />}
-        {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
-        {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
-        {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
-        {shown === "beats" && <BeatMakerTool />}
-        {shown === "theory" && <TheoryTool />}
-        {shown === "progressions" && <ProgressionTool />}
-        {shown === "changes" && <ChangesTool />}
-      </Suspense>
 
-      {tool && (
-        <>
-          {shown && <NextSteps tool={tool} onOpen={go} />}
-          <SiteFooter onOpen={go} onFeedback={openFeedback} />
-        </>
-      )}
+        {tool && (
+          <>
+            {shown && <NextSteps tool={tool} onOpen={go} />}
+            <SiteFooter onOpen={go} onFeedback={openFeedback} />
+          </>
+        )}
+      </ErrorBoundary>
     </AppShell>
   );
 }
