@@ -10,6 +10,9 @@
  * supabase/identify_sessions.sql), whatever the number of clips. A session
  * may send at most MAX_CLIPS clips.
  *
+ * With a song come links to it: Apple Music, Spotify and Deezer from AudD,
+ * and its video on YouTube, a watch address found by youtube.ts.
+ *
  * Settings (function secrets, or private.stt_settings from the admin area):
  *   IDENTIFY_API_KEY   an AudD api_token — required ("test" works for a few lookups a day)
  *   IDENTIFY_API_KEY_2, IDENTIFY_API_KEY_3
@@ -18,6 +21,7 @@
  *   IDENTIFY_DAILY     lookups per account per day, default 30
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
+import { videoFromLyricsMedia, videoFromSongLink } from "./youtube.ts";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_DAILY = 30;
@@ -93,6 +97,8 @@ Deno.serve(async (req: Request) => {
       apple_music?: { url?: string; artwork?: { url?: string } };
       spotify?: { external_urls?: { spotify?: string }; album?: { images?: { url?: string }[] } };
       deezer?: { link?: string };
+      // Asked for only for `media`, the song's video among them (a JSON string).
+      lyrics?: { media?: string } | null;
     } | null;
   };
 
@@ -107,7 +113,7 @@ Deno.serve(async (req: Request) => {
     const upstream = new FormData();
     upstream.append("api_token", apiKey);
     upstream.append("file", file, "clip.wav");
-    upstream.append("return", "apple_music,spotify,deezer");
+    upstream.append("return", "apple_music,spotify,deezer,lyrics");
     let response: Response;
     try {
       response = await fetch(AUDD, { method: "POST", body: upstream, signal: AbortSignal.timeout(25_000) });
@@ -149,6 +155,7 @@ Deno.serve(async (req: Request) => {
   const result = parsed.result;
   if (!result) return json(200, { found: false, used: usedNow, limit });
   const artwork = result.apple_music?.artwork?.url?.replace("{w}", "600").replace("{h}", "600") ?? result.spotify?.album?.images?.[0]?.url ?? null;
+  const youtube = videoFromLyricsMedia(result.lyrics?.media) ?? (await videoFromSongLink(result.song_link));
   return json(200, {
     found: true,
     artist: result.artist ?? null,
@@ -162,6 +169,7 @@ Deno.serve(async (req: Request) => {
       appleMusic: result.apple_music?.url ?? null,
       spotify: result.spotify?.external_urls?.spotify ?? null,
       deezer: result.deezer?.link ?? null,
+      youtube,
     },
     artwork,
     used: usedNow,
