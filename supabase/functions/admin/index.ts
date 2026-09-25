@@ -21,6 +21,7 @@
  */
 import { CORS, adminClient, isOwner, json, visitor } from "../_shared/common.ts";
 import { PAYPAL_KEYS, paypal, type PayPalMode } from "../_shared/paypal.ts";
+import { GEMINI_TTS_MODELS, voiceServices } from "../_shared/voice.ts";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 
 const BUCKET = "works";
@@ -471,12 +472,6 @@ const PING: Record<string, { key: string; url: (base: string) => string; base: s
     url: (base) => `${base}/models`,
     auth: (token) => ({ Authorization: `Bearer ${token}` }),
   },
-  tts: {
-    key: "TTS_API_KEY",
-    base: "https://api.openai.com/v1",
-    url: (base) => `${base}/models`,
-    auth: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
   separation: {
     key: "SEPARATION_API_KEY",
     base: "https://api.replicate.com/v1",
@@ -505,13 +500,32 @@ async function ping(url: string, headers: Record<string, string>) {
   }
 }
 
+type Check = { service: string; label: string; state: "good" | "bad" | "off"; note: string; ms: number };
+
+/** The server's voice: the first service the tts function would try. */
+async function voiceCheck(read: (key: string) => string): Promise<Check> {
+  const [first] = voiceServices((name, ...fallbacks) => [name, ...fallbacks].map(read).find(Boolean));
+  if (!first) return { service: "tts", label: "הקראה", state: "off", note: "אין GEMINI_API_KEY", ms: 0 };
+  const gemini = first.id === "gemini";
+  const result = gemini
+    ? await ping(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODELS[0]}`, { "x-goog-api-key": first.apiKey })
+    : await ping(`${first.base}/models`, { Authorization: `Bearer ${first.apiKey}` });
+  return {
+    service: "tts",
+    label: gemini ? "הקראה (Gemini)" : "הקראה",
+    state: result.ok ? "good" : "bad",
+    note: result.ok ? (gemini ? "עונה · עברית ועוד שפות רבות" : "עונה") : result.status ? `השירות החזיר ${result.status}` : "לא נענה",
+    ms: result.ms,
+  };
+}
+
 async function health(admin: SupabaseClient) {
   const { read } = await settingsMap(admin);
-  const checks: { service: string; label: string; state: "good" | "bad" | "off"; note: string; ms: number }[] = [];
+  const checks: Check[] = [];
 
   for (const [service, spec] of Object.entries(PING)) {
     const token = read(spec.key);
-    const label = service === "stt" ? "תמלול דיבור" : service === "tts" ? "הקראה" : "הפרדת שירה";
+    const label = service === "stt" ? "תמלול דיבור" : "הפרדת שירה";
     if (!token) {
       checks.push({ service, label, state: "off", note: `אין ${spec.key}`, ms: 0 });
       continue;
@@ -526,6 +540,7 @@ async function health(admin: SupabaseClient) {
       ms: result.ms,
     });
   }
+  checks.push(await voiceCheck(read));
 
   const provider = AI_PROVIDERS.find((item) => read(item.key));
   if (!provider) {

@@ -4,17 +4,22 @@ import { CreditCost } from "../components/CreditCost";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { AiError, speakToFile } from "../lib/aiApi";
+import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { encodeMp3 } from "../lib/convert";
 import { ttsCost } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
+import { decodeWav, fromAudioBuffer } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
 
 const MAX_CHARS = 4000;
 const SETTINGS_KEY = "musictools.tts.v1";
+/** Plenty for one voice, and a quarter of the size of the WAV it comes from. */
+const MP3_KBPS = 64;
 
 type Props = { initial?: SavedWork | null };
 
@@ -22,11 +27,20 @@ function languageOf(text: string) {
   return /[֐-׿]/.test(text) ? "he" : /[؀-ۿ]/.test(text) ? "ar" : "en";
 }
 
+/** The server's voice answers in WAV; the file the visitor keeps is an MP3, encoded here. */
+async function asMp3(file: File, signal: AbortSignal) {
+  if (file.type !== "audio/wav") return file;
+  const bytes = await file.arrayBuffer();
+  const pcm = decodeWav(bytes) ?? fromAudioBuffer(await decodeAudioFile(bytes.slice(0)));
+  const mp3 = await encodeMp3(pcm.channels, pcm.sampleRate, MP3_KBPS, undefined, signal);
+  return new File([mp3], file.name.replace(/\.wav$/i, ".mp3"), { type: "audio/mpeg" });
+}
+
 /**
  * Text read aloud. The browser's own voices do the reading — they are part
  * of the phone or computer, nothing is fetched — with a choice of voice,
- * pace and pitch. For a recording to keep, the server's voice makes an MP3
- * (Hebrew only where the configured provider speaks it).
+ * pace and pitch. For a recording to keep, the server's voice (Google
+ * Gemini's, in Hebrew and every other language) makes an MP3.
  */
 export function TtsTool({ initial = null }: Props) {
   const { user } = useAuth();
@@ -133,7 +147,7 @@ export function TtsTool({ initial = null }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const file = await speakToFile(text.trim(), { speed: rate, format: "mp3", signal: controller.signal });
+      const file = await asMp3(await speakToFile(text.trim(), { speed: rate, format: "mp3", signal: controller.signal }), controller.signal);
       if (controller.signal.aborted) return "בוטל";
       const named = new File([file], `${safeFilename(text.trim().slice(0, 30) || "speech")}.mp3`, { type: file.type });
       setResult((previous) => {
@@ -364,7 +378,7 @@ export function TtsTool({ initial = null }: Props) {
               <Wand2 size={17} />
               <span>
                 {busy ? "מקליט בשרת…" : "צור MP3"}
-                <small>{language === "he" ? "עברית תלויה בספק שהוגדר" : "בקול השרת"}</small>
+                <small>בקול השרת</small>
               </span>
             </button>
             {result && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeWav } from "./wav";
+import { decodeWav, encodeWav } from "./wav";
 
 async function header(blob: Blob) {
   const view = new DataView(await blob.arrayBuffer());
@@ -68,5 +68,49 @@ describe("encodeWav", () => {
     expect(wav.dataBytes).toBe(0);
     expect(blob.size).toBe(44);
     expect(blob.type).toBe("audio/wav");
+  });
+});
+
+describe("decodeWav", () => {
+  /** A WAV's bytes, with its header open for the test to change. */
+  async function bytes(blob: Blob) {
+    const buffer = await blob.arrayBuffer();
+    return { buffer, view: new DataView(buffer) };
+  }
+
+  it("reads back what encodeWav wrote, mono and stereo", async () => {
+    const { buffer } = await bytes(encodeWav({ channels: [Float32Array.from([0, 0.5, -0.5])], sampleRate: 24000 }));
+    const mono = decodeWav(buffer);
+    expect(mono?.sampleRate).toBe(24000);
+    expect(mono?.channels.length).toBe(1);
+    expect([...mono!.channels[0]].map((value) => Math.round(value * 1000) / 1000)).toEqual([0, 0.5, -0.5]);
+
+    const stereo = decodeWav((await bytes(encodeWav({ channels: [Float32Array.from([1, 0]), Float32Array.from([-1, 0])], sampleRate: 48000 }))).buffer);
+    expect(stereo?.channels.map((channel) => channel.length)).toEqual([2, 2]);
+    expect(stereo?.channels[0][0]).toBeCloseTo(1, 3);
+    expect(stereo?.channels[1][0]).toBeCloseTo(-1, 3);
+  });
+
+  it("steps over chunks it does not need, and reads a data size that claims too much", async () => {
+    const { buffer } = await bytes(encodeWav({ channels: [Float32Array.from([0.25, 0.25])], sampleRate: 16000 }));
+    // A LIST chunk between the format and the samples, as some encoders write.
+    const list = new Uint8Array([...new TextEncoder().encode("LIST"), 4, 0, 0, 0, ...new TextEncoder().encode("INFO")]);
+    const withList = new Uint8Array(buffer.byteLength + list.length);
+    withList.set(new Uint8Array(buffer, 0, 36));
+    withList.set(list, 36);
+    withList.set(new Uint8Array(buffer, 36), 36 + list.length);
+    new DataView(withList.buffer).setUint32(36 + list.length + 4, 0xffffffff, true);
+    const read = decodeWav(withList.buffer);
+    expect(read?.sampleRate).toBe(16000);
+    expect(read?.channels[0].length).toBe(2);
+    expect(read?.channels[0][1]).toBeCloseTo(0.25, 3);
+  });
+
+  it("leaves anything but 16-bit PCM to the browser", async () => {
+    const { buffer, view } = await bytes(encodeWav({ channels: [new Float32Array(4)], sampleRate: 44100 }));
+    view.setUint16(20, 3, true);
+    expect(decodeWav(buffer)).toBeNull();
+    expect(decodeWav(new TextEncoder().encode("ID3 not a wav file").buffer)).toBeNull();
+    expect(decodeWav(new ArrayBuffer(0))).toBeNull();
   });
 });

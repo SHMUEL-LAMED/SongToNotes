@@ -60,6 +60,40 @@ export function encodeWav({ channels, sampleRate }: PcmSource): Blob {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
+/**
+ * The channels of a 16-bit PCM WAV — the server's voice answers in one — or
+ * null for any other file, which the browser's own decoder can still try.
+ */
+export function decodeWav(bytes: ArrayBuffer): PcmSource | null {
+  const view = new DataView(bytes);
+  const tag = (offset: number) => String.fromCharCode(...new Uint8Array(bytes, offset, 4));
+  if (bytes.byteLength < 12 || tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+  let format: { channels: number; sampleRate: number } | null = null;
+  for (let offset = 12; offset + 8 <= bytes.byteLength; ) {
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (tag(offset) === "fmt " && size >= 16) {
+      const code = view.getUint16(body, true);
+      const channels = view.getUint16(body + 2, true);
+      if ((code !== 1 && code !== 0xfffe) || view.getUint16(body + 14, true) !== 16 || !channels) return null;
+      format = { channels, sampleRate: view.getUint32(body + 4, true) };
+    } else if (tag(offset) === "data") {
+      if (!format) return null;
+      // A WAV written as it streams claims more than it holds.
+      const frames = Math.floor((Math.min(bytes.byteLength, body + size) - body) / (2 * format.channels));
+      const channels = Array.from({ length: format.channels }, () => new Float32Array(frames));
+      for (let frame = 0; frame < frames; frame += 1) {
+        for (let channel = 0; channel < format.channels; channel += 1) {
+          channels[channel][frame] = view.getInt16(body + (frame * format.channels + channel) * 2, true) / 32768;
+        }
+      }
+      return { channels, sampleRate: format.sampleRate };
+    }
+    offset = body + size + (size % 2);
+  }
+  return null;
+}
+
 /** Renders an offline graph back into plain channel data. */
 export async function renderOffline(
   buffer: AudioBuffer,
