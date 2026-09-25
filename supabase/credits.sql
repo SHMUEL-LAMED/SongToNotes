@@ -36,9 +36,9 @@ create table if not exists public.credit_settings (
   -- Off: nothing is charged or refused — the site behaves as it did before credits.
   enabled boolean not null default true,
   daily integer not null default 20 check (daily between 0 and 100000),
-  signup_bonus integer not null default 30 check (signup_bonus between 0 and 100000),
-  friend_daily integer not null default 2 check (friend_daily between 0 and 10000),
-  friend_daily_max integer not null default 40 check (friend_daily_max between 0 and 100000),
+  signup_bonus integer not null default 50 check (signup_bonus between 0 and 100000),
+  friend_daily integer not null default 5 check (friend_daily between 0 and 10000),
+  friend_daily_max integer not null default 100 check (friend_daily_max between 0 and 100000),
   welcome_bonus integer not null default 10 check (welcome_bonus between 0 and 100000),
   visit_bonus integer not null default 1 check (visit_bonus between 0 and 10000),
   visit_daily_max integer not null default 10 check (visit_daily_max between 0 and 10000),
