@@ -1,4 +1,4 @@
-import { CircleSlash, Info, Keyboard, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House } from "lucide-react";
+import { CircleSlash, Info, Keyboard, MessageSquareText, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
@@ -14,6 +14,7 @@ import { SharePage } from "./components/SharePage";
 import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { SiteFooter } from "./components/SiteFooter";
+import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
 import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
@@ -140,6 +141,7 @@ function WorkspaceApp() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { accent, setAccent } = useAccent();
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
@@ -231,6 +233,8 @@ function WorkspaceApp() {
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
   const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
+  const closeFeedback = useCallback(() => setFeedbackOpen(false), []);
+  const openFeedback = useCallback(() => setFeedbackOpen(true), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
   // personal area is complete on the first visit rather than after one.
@@ -353,6 +357,7 @@ function WorkspaceApp() {
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
       { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
       { id: "page:share", label: "שיתוף האתר", hint: "קישור לחברים, בוואטסאפ או בכל מקום", group: "דפים", icon: <Share2 size={15} />, run: () => setShareOpen(true) },
+      { id: "page:feedback", label: "משוב והצעות", hint: "בעיה, רעיון או כל דבר אחר", group: "דפים", icon: <MessageSquareText size={15} />, run: () => setFeedbackOpen(true) },
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
@@ -442,6 +447,7 @@ function WorkspaceApp() {
         onAccent={setAccent}
       />
       <ShareSiteDialog open={shareOpen} onClose={closeShare} />
+      <FeedbackDialog open={feedbackOpen} page={route.slice(0, 40)} onClose={closeFeedback} />
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">
@@ -526,7 +532,7 @@ function WorkspaceApp() {
         </Suspense>
       )}
       {!closed && !tool && !shareToken && !admin && !me && (
-        <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} />
+        <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
       )}
       {shown === "notes" && (
         <Suspense fallback={loading("טוען את מנוע התווים…")}>
@@ -550,7 +556,7 @@ function WorkspaceApp() {
         {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
         {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
         {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-        {shown === "identify" && <IdentifyTool />}
+        {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
         {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
         {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
         {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
@@ -569,7 +575,7 @@ function WorkspaceApp() {
       {tool && (
         <>
           {shown && <NextSteps tool={tool} onOpen={go} />}
-          <SiteFooter onOpen={go} />
+          <SiteFooter onOpen={go} onFeedback={openFeedback} />
         </>
       )}
     </AppShell>

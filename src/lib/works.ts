@@ -50,6 +50,7 @@ export const WORK_KINDS = [
   "mix",
   "lyrics",
   "tts",
+  "identify",
 ] as const;
 
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -112,6 +113,7 @@ export const KIND_LABELS: Record<WorkKind, string> = {
   mix: "מיקס",
   lyrics: "מילים מסונכרנות",
   tts: "הקראה",
+  identify: "שיר שזוהה",
 };
 
 /** Which tool opens each kind. */
@@ -133,6 +135,7 @@ export const KIND_TOOL: Record<WorkKind, string> = {
   mix: "mixer",
   lyrics: "lyrics",
   tts: "tts",
+  identify: "identify",
 };
 
 export function isWorkKind(value: unknown): value is WorkKind {
@@ -351,14 +354,26 @@ export async function syncLocalWorks(userId: string): Promise<SavedWork[]> {
         pending.map((item) => toRow(item, userId)),
         { onConflict: "user_id,client_id" },
       );
+    let uploaded = new Set(pending.map((item) => item.id));
     if (error) {
-      console.warn("Local works could not be uploaded", error);
-    } else {
-      const uploaded = new Set(pending.map((item) => item.id));
+      // One entry the server refuses (a kind its check does not know yet)
+      // fails the whole batch: send them one by one, so the rest still go up.
+      console.warn("Local works could not be uploaded together", error);
+      const results = await Promise.all(
+        pending.map((item) =>
+          supabase
+            .from("works")
+            .upsert([toRow(item, userId)], { onConflict: "user_id,client_id" })
+            .then(({ error: failed }) => (failed ? null : item.id)),
+        ),
+      );
+      uploaded = new Set(results.filter((id): id is string => id !== null));
+    }
+    if (uploaded.size > 0) {
       writeLocalWorks(
         local.map((item) => (uploaded.has(item.id) ? { ...item, localOnly: false } : item)),
       );
-      synced = pending.map((item) => ({ ...item, localOnly: false }));
+      synced = pending.filter((item) => uploaded.has(item.id)).map((item) => ({ ...item, localOnly: false }));
     }
   }
   await syncLocalFiles(userId);
@@ -734,6 +749,11 @@ export function describeWork(work: SavedWork): string {
       parts.push(num("characters") !== null ? `${num("characters")} תווים` : null);
       parts.push(str("voice"));
       parts.push(seconds(num("duration")));
+      break;
+    case "identify":
+      parts.push(str("artist"));
+      parts.push(str("album"));
+      parts.push(str("year"));
       break;
   }
   return parts.filter((part): part is string => Boolean(part)).join(" · ");

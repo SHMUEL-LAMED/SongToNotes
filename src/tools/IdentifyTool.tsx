@@ -1,12 +1,17 @@
-import { Disc3, ExternalLink, FileAudio, LogIn, Mic, RefreshCw, Search, Square } from "lucide-react";
+import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
 import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { handOffTo } from "../lib/handoff";
+import { historyFromWorks, pushSong, sameSong, songOfWork, workForSong, HISTORY_SIZE, type FoundSong } from "../lib/identifyHistory";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
+import { findTool } from "../lib/tools";
 import { useAssistantTool } from "../lib/useAssistantTool";
+import { listLocalWorks, listWorks, saveWork, type SavedWork } from "../lib/works";
+import { youtubeEmbedUrl, youtubeStillUrl, youtubeVideoId } from "../lib/youtube";
 
 /** A message shown while a further clip of the same song is tried. */
 const TRYING_ANOTHER = "מנסה קטע נוסף…";
@@ -19,7 +24,10 @@ const TRYING_ANOTHER = "מנסה קטע נוסף…";
 const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_key", "provider_busy", "session_limit"]);
 
 /** Where the last identification came from, so "try another part" can go on from it. */
-type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
+type Source = { kind: "file"; file: File; buffer: AudioBuffer; round: number } | { kind: "mic" };
+
+/** Where a file identified here can go next, whole, with one click. */
+const NEXT_TOOLS = ["chords", "lyrics", "notes"];
 
 /** ▶ YouTube: the song's own video, straight from the server; nothing when it found none. */
 export function YouTubeLink({ href }: { href?: string | null }) {
@@ -35,14 +43,47 @@ export function YouTubeLink({ href }: { href?: string | null }) {
 }
 
 /**
+ * The song's video, played inside the result. Until the visitor presses play
+ * it is only the video's still, so the player loads when it is wanted.
+ */
+export function YouTubePlayer({ href, title }: { href?: string | null; title: string }) {
+  const [playing, setPlaying] = useState(false);
+  // A still that does not load (blocked, offline) leaves the black frame and its play button.
+  const [stillFailed, setStillFailed] = useState(false);
+  const id = youtubeVideoId(href);
+  if (!id) return null;
+  return (
+    <div className="identify-video">
+      {playing ? (
+        <iframe
+          src={youtubeEmbedUrl(id)}
+          title={title}
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      ) : (
+        <button type="button" className="identify-video-still" onClick={() => setPlaying(true)} aria-label={`נגן כאן: ${title}`}>
+          {!stillFailed && <img src={youtubeStillUrl(id)} alt="" onError={() => setStillFailed(true)} />}
+          <span aria-hidden="true">
+            <Play size={30} />
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * What song is this? Twenty seconds from the microphone, or up to three
  * clips of a file — its start, about 35% and about 65% — go one by one to a
  * recognition service on the server until one is recognised; back come the
  * title, the artist and where to listen. The service's key stays on the
  * server, and one identification is charged once, however many clips it took.
  */
-export function IdentifyTool() {
+export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } = {}) {
   const { user, signInWithGoogle } = useAuth();
+  const userId = user?.id ?? null;
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [recorder] = useState(() => new MicRecorder());
   const [recording, setRecording] = useState(false);
@@ -50,13 +91,31 @@ export function IdentifyTool() {
   const [level, setLevel] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Identification | null>(null);
+  // A song opened from the personal area shows as the result.
+  const [result, setResult] = useState<Identification | null>(() => (initial ? songOfWork(initial) : null));
   // Every clip was tried and none was recognised: offer another part.
   const [exhausted, setExhausted] = useState(false);
   const [source, setSource] = useState<Source | null>(null);
-  const [history, setHistory] = useState<Extract<Identification, { found: true }>[]>([]);
+  // "Recently identified": the saved songs (this device's at once, the
+  // account's once they arrive), under the ones identified on this visit.
+  const [saved, setSaved] = useState<FoundSong[]>(() => historyFromWorks(listLocalWorks()));
+  const [identified, setIdentified] = useState<FoundSong[]>([]);
+  const history = identified.reduceRight((list, song) => pushSong(list, song), saved).slice(0, HISTORY_SIZE);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    void listWorks(userId)
+      .then((works) => {
+        if (active) setSaved(historyFromWorks(works));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,7 +134,7 @@ export function IdentifyTool() {
    * fails or finds nothing moves on to the next quietly; only a failure no
    * clip can fix is shown. All the clips share one session, charged once.
    */
-  const lookup = async (clips: (() => Promise<Blob>)[]) => {
+  const lookup = async (clips: (() => Promise<Blob>)[], sourceName: string | null) => {
     setError(null);
     setResult(null);
     setExhausted(false);
@@ -90,7 +149,11 @@ export function IdentifyTool() {
         last = found;
         if (found.found) {
           setResult(found);
-          setHistory((current) => [found, ...current.filter((item) => item.title !== found.title || item.artist !== found.artist)].slice(0, 8));
+          setIdentified((current) => pushSong(current, found));
+          // Into the personal area, unless it is already among the recent ones.
+          if (!historyFromWorks(listLocalWorks()).some((item) => sameSong(item, found))) {
+            void saveWork(workForSong(found, sourceName), userId).catch(() => undefined);
+          }
           setBusy(null);
           return;
         }
@@ -109,10 +172,10 @@ export function IdentifyTool() {
     setBusy(null);
   };
 
-  const fileRound = async (buffer: AudioBuffer, round: number) => {
-    setSource({ kind: "file", buffer, round });
+  const fileRound = async (file: File, buffer: AudioBuffer, round: number) => {
+    setSource({ kind: "file", file, buffer, round });
     const starts = fileClipStarts(buffer, round);
-    await lookup(starts.map((start) => () => renderClip(buffer, start)));
+    await lookup(starts.map((start) => () => renderClip(buffer, start)), file.name);
   };
 
   const startListening = async () => {
@@ -144,7 +207,7 @@ export function IdentifyTool() {
       setSource({ kind: "mic" });
       // The whole recording, from where the sound starts: up to 20 seconds.
       const start = soundStart(buffer.getChannelData(0), buffer.sampleRate);
-      await lookup([() => renderClip(buffer, start, MIC_SECONDS)]);
+      await lookup([() => renderClip(buffer, start, MIC_SECONDS)], null);
     } catch {
       setError("ההאזנה נכשלה. נסה שוב.");
       setBusy(null);
@@ -155,7 +218,7 @@ export function IdentifyTool() {
   const tryAnother = async () => {
     if (!source) return;
     if (source.kind === "file") {
-      await fileRound(source.buffer, source.round + 1);
+      await fileRound(source.file, source.buffer, source.round + 1);
     } else {
       await startListening();
     }
@@ -173,12 +236,14 @@ export function IdentifyTool() {
     setBusy("מכין את הקטע…");
     setError(null);
     try {
-      await fileRound(await decodeAudioFile(await file.arrayBuffer()), 0);
+      await fileRound(file, await decodeAudioFile(await file.arrayBuffer()), 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "לא הצלחנו לקרוא את הקובץ.");
       setBusy(null);
     }
   };
+
+  const recent = history.filter((item) => !(result?.found && sameSong(item, result)));
 
   useAssistantTool("identify", {
     state: () =>
@@ -319,18 +384,37 @@ export function IdentifyTool() {
                   </a>
                 )}
               </div>
-              <small className="ai-status">
-                {result.timecode ? `הקטע נמצא בדקה ${result.timecode} של השיר · ` : ""}נותרו היום {Math.max(0, result.limit - result.used)} זיהויים
-              </small>
+              {/* A song opened from the personal area has no allowance to show (limit 0). */}
+              {(result.timecode || result.limit > 0) && (
+                <small className="ai-status">
+                  {result.timecode ? `הקטע נמצא בדקה ${result.timecode} של השיר${result.limit > 0 ? " · " : ""}` : ""}
+                  {result.limit > 0 && <>נותרו היום {Math.max(0, result.limit - result.used)} זיהויים</>}
+                </small>
+              )}
+              {source?.kind === "file" && (
+                <div className="identify-next">
+                  <span className="eyebrow-small">ממשיכים עם הקובץ</span>
+                  <div className="identify-links">
+                    {NEXT_TOOLS.map((id) => findTool(id))
+                      .filter((tool) => tool !== null)
+                      .map((tool) => (
+                        <button key={tool.id} type="button" className="chip-toggle" onClick={() => void handOffTo(tool.id, source.file, "הקובץ ממזהה השירים")}>
+                          <tool.icon size={14} /> {tool.title}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
+            <YouTubePlayer key={result.links.youtube ?? ""} href={result.links.youtube} title={[result.title, result.artist].filter(Boolean).join(" — ")} />
           </div>
         )}
 
-        {history.length > 1 && (
+        {recent.length > 0 && (
           <div className="identify-history">
             <span className="eyebrow-small">זוהו לאחרונה</span>
             <ul>
-              {history.slice(1).map((item, index) => (
+              {recent.map((item, index) => (
                 <li key={index}>
                   <span dir="auto">
                     {item.title} — {item.artist}

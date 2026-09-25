@@ -25,6 +25,8 @@ type Props = {
   onOpenWork: (work: SavedWork) => void;
   /** Tools the admin area switched off; shown, but not openable. */
   disabledTools?: string[];
+  /** Opens "משוב והצעות". */
+  onFeedback: () => void;
 };
 
 const FILTERS: { id: ToolCategory | "all" | "favorites"; label: string }[] = [
@@ -47,7 +49,7 @@ function greeting(now: Date) {
   return "לילה טוב";
 }
 
-export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
+export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Props) {
   const { user, profile } = useAuth();
   const { favorites, toggle, isFavorite } = useFavorites();
   const recentTools = useRecentTools();
@@ -349,7 +351,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [] }: Props) {
         </div>
       </section>
 
-      <SiteFooter onOpen={onOpen} />
+      <SiteFooter onOpen={onOpen} onFeedback={onFeedback} />
     </div>
   );
 }
