@@ -7,7 +7,6 @@ import { useAuth } from "../lib/auth";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
-import { youtubeSearchUrl } from "../lib/youtube";
 
 /** A message shown while a further clip of the same song is tried. */
 const TRYING_ANOTHER = "מנסה קטע נוסף…";
@@ -22,9 +21,8 @@ const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_k
 /** Where the last identification came from, so "try another part" can go on from it. */
 type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
 
-/** ▶ YouTube: a search there for the song, shown only when both the artist and the title are known. */
-export function YouTubeLink({ artist, title }: { artist: string | null; title: string | null }) {
-  const href = youtubeSearchUrl(artist, title);
+/** ▶ YouTube: the song's own video, straight from the server; nothing when it found none. */
+export function YouTubeLink({ href }: { href?: string | null }) {
   if (!href) return null;
   return (
     <a href={href} target="_blank" rel="noreferrer noopener" className="chip-toggle identify-youtube">
@@ -207,14 +205,7 @@ export function IdentifyTool() {
         return {
           ok: true,
           message: `${result.title} — ${result.artist}`,
-          data: {
-            found: true,
-            title: result.title,
-            artist: result.artist,
-            album: result.album,
-            releaseDate: result.releaseDate,
-            links: { ...result.links, youtube: youtubeSearchUrl(result.artist, result.title) },
-          },
+          data: { found: true, title: result.title, artist: result.artist, album: result.album, releaseDate: result.releaseDate, links: result.links },
         };
       },
     },
@@ -321,7 +312,7 @@ export function IdentifyTool() {
                     Deezer <ExternalLink size={12} />
                   </a>
                 )}
-                <YouTubeLink artist={result.artist} title={result.title} />
+                <YouTubeLink href={result.links.youtube} />
                 {result.links.song && (
                   <a href={result.links.song} target="_blank" rel="noreferrer noopener" className="chip-toggle">
                     עוד <ExternalLink size={12} />
@@ -344,7 +335,7 @@ export function IdentifyTool() {
                   <span dir="auto">
                     {item.title} — {item.artist}
                   </span>
-                  <YouTubeLink artist={item.artist} title={item.title} />
+                  <YouTubeLink href={item.links.youtube} />
                 </li>
               ))}
             </ul>

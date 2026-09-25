@@ -377,7 +377,8 @@ export type Identification =
       releaseDate: string | null;
       label: string | null;
       timecode: string | null;
-      links: { song: string | null; appleMusic: string | null; spotify: string | null; deezer: string | null };
+      // youtube: the song's video (a watch address, never a search); absent from an older server.
+      links: { song: string | null; appleMusic: string | null; spotify: string | null; deezer: string | null; youtube?: string | null };
       artwork: string | null;
       used: number;
       limit: number;
