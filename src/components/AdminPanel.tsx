@@ -15,6 +15,7 @@ import {
   KeyRound,
   Laptop,
   Megaphone,
+  MessageSquareText,
   Power,
   RefreshCw,
   ScrollText,
@@ -44,6 +45,7 @@ import {
   compactNumber,
   describeAdminError,
   fetchAudit,
+  fetchFeedback,
   fetchSettings,
   fetchSnapshot,
   formatBytes,
@@ -66,6 +68,7 @@ import {
   type AdminCredits,
   type AdminSetting,
   type AdminSnapshot,
+  type FeedbackEntry,
   type ControlState,
   type HealthCheck,
   type ToolRow,
@@ -102,12 +105,13 @@ import {
  * request it makes.
  */
 
-type Tab = "overview" | "tools" | "times" | "system";
+type Tab = "overview" | "tools" | "times" | "feedback" | "system";
 
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "סקירה", icon: ChartNoAxesColumn },
   { id: "tools", label: "כלים", icon: Activity },
   { id: "times", label: "זמנים וקהל", icon: Clock },
+  { id: "feedback", label: "משוב", icon: MessageSquareText },
   { id: "system", label: "מערכת", icon: FileCog },
 ];
 
@@ -1195,6 +1199,115 @@ const SETTING_PLACEHOLDERS: Record<string, string> = {
 
 /* ------------------------------------------------------------------ page */
 
+const FEEDBACK_KIND_LABELS: Record<FeedbackEntry["kind"], string> = { problem: "בעיה", idea: "רעיון", other: "אחר" };
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type FeedbackState = { entries: FeedbackEntry[]; missing: boolean };
+
+/** What visitors sent from "משוב והצעות": the open ones first, handled ones on request. */
+function FeedbackTab({
+  feedback,
+  busy,
+  onHandle,
+  onDelete,
+  onReload,
+}: {
+  feedback: FeedbackState | null;
+  busy: boolean;
+  onHandle: (entry: FeedbackEntry) => void;
+  onDelete: (entry: FeedbackEntry) => void;
+  onReload: () => void;
+}) {
+  const [showHandled, setShowHandled] = useState(false);
+  // Deleting takes a second press on the same message.
+  const [confirming, setConfirming] = useState<number | null>(null);
+
+  if (!feedback) {
+    return (
+      <div className="admin-skeleton" role="status">
+        <span className="admin-skeleton-bar" />
+        <p>טוען את ההודעות…</p>
+      </div>
+    );
+  }
+  const open = feedback.entries.filter((entry) => !entry.handled);
+  const shown = showHandled ? feedback.entries : open;
+
+  return (
+    <div className="admin-grid">
+      <Card
+        title="משוב מהגולשים"
+        hint={feedback.missing ? "הטבלה עוד לא קיימת" : `${formatNumber(open.length)} ממתינות · ${formatNumber(feedback.entries.length)} בסך הכול`}
+        icon={<MessageSquareText size={17} />}
+        wide
+        actions={
+          <>
+            <label className="feedback-filter">
+              <input type="checkbox" checked={showHandled} onChange={(event) => setShowHandled(event.target.checked)} /> גם כאלה שטופלו
+            </label>
+            <button type="button" className="secondary-button compact" onClick={onReload} disabled={busy}>
+              <RefreshCw size={15} /> רענון
+            </button>
+          </>
+        }
+      >
+        {feedback.missing ? (
+          <p className="notice-message">
+            כדי לקבל משוב צריך להריץ פעם אחת את <code dir="ltr">supabase/site_feedback.sql</code> בפרויקט ה־Supabase.
+          </p>
+        ) : shown.length ? (
+          <ul className="feedback-list">
+            {shown.map((entry) => (
+              <li key={entry.id} className={entry.handled ? "is-handled" : ""}>
+                <div className="feedback-meta">
+                  <span className={`feedback-kind is-${entry.kind}`}>{FEEDBACK_KIND_LABELS[entry.kind]}</span>
+                  <span title={formatDate(entry.createdAt)}>{timeAgo(entry.createdAt)}</span>
+                  {entry.page && <span>{entry.page === "home" ? "דף הבית" : toolLabel(entry.page)}</span>}
+                  {(entry.device || entry.browser || entry.os) && <span dir="ltr">{[entry.device, entry.browser, entry.os].filter(Boolean).join(" · ")}</span>}
+                </div>
+                <p className="feedback-text" dir="auto">
+                  {entry.message}
+                </p>
+                <div className="feedback-row-actions">
+                  {entry.contact &&
+                    (EMAIL.test(entry.contact) ? (
+                      <a href={`mailto:${entry.contact}`} dir="ltr">
+                        {entry.contact}
+                      </a>
+                    ) : (
+                      <span dir="auto">{entry.contact}</span>
+                    ))}
+                  <button type="button" className="secondary-button compact" onClick={() => onHandle(entry)} disabled={busy}>
+                    {entry.handled ? "החזר לטיפול" : "סמן כטופל"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`secondary-button compact ${confirming === entry.id ? "is-danger" : ""}`}
+                    onClick={() => {
+                      if (confirming !== entry.id) {
+                        setConfirming(entry.id);
+                        return;
+                      }
+                      setConfirming(null);
+                      onDelete(entry);
+                    }}
+                    onBlur={() => setConfirming((current) => (current === entry.id ? null : current))}
+                    disabled={busy}
+                  >
+                    {confirming === entry.id ? "בטוח? למחוק" : "מחיקה"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="admin-empty">{feedback.entries.length ? "כל ההודעות טופלו." : "עוד לא הגיעו הודעות."}</p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function AdminPanel({ onHome }: { onHome: () => void }) {
   const { user } = useAuth();
   const allowed = isAdmin(user);
@@ -1210,6 +1323,7 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   const [auditQuery, setAuditQuery] = useState("");
   const [checks, setChecks] = useState<HealthCheck[] | null>(null);
   const [orphans, setOrphans] = useState<{ count: number; bytes: number } | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1240,6 +1354,19 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     const timer = window.setTimeout(() => void load(days), 0);
     return () => window.clearTimeout(timer);
   }, [allowed, days, load]);
+
+  const loadFeedback = useCallback(() => {
+    void fetchFeedback()
+      .then(setFeedback)
+      .catch(() => setFeedback((current) => current ?? { entries: [], missing: false }));
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) return;
+    const timer = window.setTimeout(loadFeedback, 0);
+    return () => window.clearTimeout(timer);
+  }, [allowed, loadFeedback]);
+  const waiting = feedback ? feedback.entries.filter((entry) => !entry.handled).length : 0;
 
   useEffect(() => {
     if (!allowed || tab !== "system") return;
@@ -1333,6 +1460,24 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
       void act(async () => {
         const result = await runAdminAction("events.prune", { days: 365 });
         setNote(`נמחקו ${formatNumber(result.removed ?? 0)} מדידות ישנות.`);
+      }),
+    [act],
+  );
+
+  const onHandleFeedback = useCallback(
+    (entry: FeedbackEntry) =>
+      void act(async () => {
+        await runAdminAction("feedback.handle", { id: entry.id, handled: !entry.handled });
+        setFeedback((current) => current && { ...current, entries: current.entries.map((item) => (item.id === entry.id ? { ...item, handled: !entry.handled } : item)) });
+      }),
+    [act],
+  );
+
+  const onDeleteFeedback = useCallback(
+    (entry: FeedbackEntry) =>
+      void act(async () => {
+        await runAdminAction("feedback.delete", { id: entry.id });
+        setFeedback((current) => current && { ...current, entries: current.entries.filter((item) => item.id !== entry.id) });
       }),
     [act],
   );
@@ -1465,12 +1610,15 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
               onClick={() => setTab(item.id)}
             >
               <Icon size={16} aria-hidden="true" /> {item.label}
+              {item.id === "feedback" && waiting > 0 && <span className="admin-tab-count">{waiting}</span>}
             </button>
           );
         })}
       </nav>
 
-      {!snapshot ? (
+      {tab === "feedback" ? (
+        <FeedbackTab feedback={feedback} busy={busy} onHandle={onHandleFeedback} onDelete={onDeleteFeedback} onReload={loadFeedback} />
+      ) : !snapshot ? (
         <div className="admin-skeleton" role="status">
           <span className="admin-skeleton-bar" />
           <span className="admin-skeleton-bar" />

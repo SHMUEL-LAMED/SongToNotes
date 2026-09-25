@@ -11,6 +11,7 @@ import {
   hourLabel,
   isAdminEmail,
   normalizeControlState,
+  normalizeFeedback,
   normalizeHours,
   normalizeSnapshot,
   series,
@@ -238,5 +239,21 @@ describe("writing numbers for people", () => {
     expect(toCsv([{ tool: "notes", views: 3 }, { tool: 'a,"b', views: 1 }])).toBe(
       'tool,views\nnotes,3\n"a,""b",1',
     );
+  });
+});
+
+describe("the visitors' feedback", () => {
+  it("reads the rows as the page shows them", () => {
+    const [entry] = normalizeFeedback([
+      { id: 7, created_at: "2026-09-25T10:00:00Z", kind: "idea", message: "עוד סולמות", contact: "", page: "ear", language: "he", device: "phone", browser: "Safari", os: "iOS", handled: false },
+    ]);
+    expect(entry).toEqual({ id: 7, createdAt: "2026-09-25T10:00:00Z", kind: "idea", message: "עוד סולמות", contact: null, page: "ear", language: "he", device: "phone", browser: "Safari", os: "iOS", handled: false });
+  });
+
+  it("leaves out what is malformed and treats an unknown kind as a problem", () => {
+    const rows = normalizeFeedback([null, { id: "x", created_at: "2026-09-25T10:00:00Z", message: "a" }, { id: 3, created_at: "2026-09-25T10:00:00Z", message: "b", kind: "praise", handled: true }]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: 3, kind: "problem", handled: true });
+    expect(normalizeFeedback({})).toEqual([]);
   });
 });

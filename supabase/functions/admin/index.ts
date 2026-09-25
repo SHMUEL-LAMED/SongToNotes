@@ -664,6 +664,23 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       await log(admin, actor, action, kind || "all", { removed });
       return json(200, { ok: true, removed });
     }
+    case "feedback.handle": {
+      const id = Number(body.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return json(400, { error: "bad_request" });
+      const handled = body.handled !== false;
+      const { error } = await admin.from("site_feedback").update({ handled }).eq("id", id);
+      if (error) return json(502, { error: "storage" });
+      await log(admin, actor, action, String(id), { handled });
+      return json(200, { ok: true });
+    }
+    case "feedback.delete": {
+      const id = Number(body.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return json(400, { error: "bad_request" });
+      const { error } = await admin.from("site_feedback").delete().eq("id", id);
+      if (error) return json(502, { error: "storage" });
+      await log(admin, actor, action, String(id), {});
+      return json(200, { ok: true });
+    }
     case "events.prune": {
       const days = Math.max(30, Math.min(3650, Number(body.days) || 365));
       const { data, error } = await admin.rpc("admin_prune_events", { older_than_days: days });
@@ -706,6 +723,17 @@ Deno.serve(async (req: Request) => {
             };
           }),
         });
+      }
+      if (view === "feedback") {
+        // What visitors sent from "משוב והצעות", newest first. Before
+        // supabase/site_feedback.sql has run there is no table: say so.
+        const { data, error } = await admin
+          .from("site_feedback")
+          .select("id, created_at, kind, message, contact, page, language, device, browser, os, handled")
+          .order("created_at", { ascending: false })
+          .limit(300);
+        if (error) return json(200, { entries: [], missing: true });
+        return json(200, { entries: data ?? [] });
       }
       if (view === "audit") {
         const query = (url.searchParams.get("q") ?? "").slice(0, 60);

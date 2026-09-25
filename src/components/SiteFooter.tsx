@@ -1,7 +1,7 @@
 import { Logo } from "./Logo";
 
-/** The foot of every page: the brand, a line about the site, and a few ways in. */
-export function SiteFooter({ onOpen }: { onOpen: (route: string) => void }) {
+/** The foot of every page: the brand, a line about the site, a few ways in, and a word back. */
+export function SiteFooter({ onOpen, onFeedback }: { onOpen: (route: string) => void; onFeedback: () => void }) {
   return (
     <footer className="site-footer">
       <button type="button" className="brand brand-button" onClick={() => onOpen("home")} aria-label="לדף הבית">
@@ -14,6 +14,7 @@ export function SiteFooter({ onOpen }: { onOpen: (route: string) => void }) {
         <button type="button" onClick={() => onOpen("beats")}>מכונת תופים</button>
         <button type="button" onClick={() => onOpen("me")}>האזור האישי</button>
         <button type="button" onClick={() => onOpen("credits")}>קרדיטים והזמנת חברים</button>
+        <button type="button" onClick={onFeedback}>משוב והצעות</button>
       </nav>
     </footer>
   );
