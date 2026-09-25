@@ -19,8 +19,9 @@ describe("youtubeVideoId", () => {
 });
 
 describe("the player and its still", () => {
-  it("embeds from the privacy-enhanced domain, playing inline", () => {
-    expect(youtubeEmbedUrl("aGCdLKXNF3w")).toBe("https://www.youtube-nocookie.com/embed/aGCdLKXNF3w?autoplay=1&rel=0&playsinline=1");
+  it("embeds YouTube's own player, playing inline", () => {
+    // YouTube's own address: filtered connections such as NetFree block the nocookie mirror.
+    expect(youtubeEmbedUrl("aGCdLKXNF3w")).toBe("https://www.youtube.com/embed/aGCdLKXNF3w?autoplay=1&rel=0&playsinline=1");
     expect(youtubeStillUrl("aGCdLKXNF3w")).toBe("https://i.ytimg.com/vi/aGCdLKXNF3w/hqdefault.jpg");
   });
 });
