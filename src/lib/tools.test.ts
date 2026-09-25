@@ -14,9 +14,8 @@ describe("hidden tools", () => {
     expect(TOOLS.length + hidden.length).toBe(ALL_TOOLS.length);
   });
 
-  it("keep the song identifier out of sight", () => {
-    expect(findTool("identify")).toBeNull();
-    expect(findAnyTool("identify")?.title).toBe("מזהה שיר");
+  it("include the song identifier again", () => {
+    expect(findTool("identify")?.title).toBe("מזהה שיר");
   });
 });
 
