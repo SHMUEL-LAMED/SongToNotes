@@ -12,6 +12,9 @@
  *
  * Settings (function secrets, or private.stt_settings from the admin area):
  *   IDENTIFY_API_KEY   an AudD api_token — required ("test" works for a few lookups a day)
+ *   IDENTIFY_API_KEY_2, IDENTIFY_API_KEY_3
+ *                      further tokens, optional: when a token is refused or its
+ *                      allowance is used up, the same clip goes to the next one
  *   IDENTIFY_DAILY     lookups per account per day, default 30
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
@@ -20,6 +23,14 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_DAILY = 30;
 const AUDD = "https://api.audd.io/";
 const MAX_CLIPS = 3;
+
+/**
+ * Tokens that were out of allowance (or refused), and until when to skip
+ * them, so each clip does not first knock on a token known to be spent. Kept
+ * for the life of this function instance only.
+ */
+const resting = new Map<string, number>();
+const REST_MS = 60 * 60 * 1000;
 
 /** A session id from the site: letters, digits and dashes, as a UUID has. */
 function cleanSession(value: FormDataEntryValue | null) {
@@ -31,12 +42,12 @@ Deno.serve(async (req: Request) => {
 
   const admin = adminClient();
   const setting = await settings(admin);
-  const apiKey = setting("IDENTIFY_API_KEY");
+  const apiKeys = [...new Set(["IDENTIFY_API_KEY", "IDENTIFY_API_KEY_2", "IDENTIFY_API_KEY_3"].map((name) => setting(name)).filter((key): key is string => Boolean(key)))];
   if (req.method === "GET" && new URL(req.url).searchParams.get("availability")) {
-    return json(200, { configured: Boolean(apiKey) });
+    return json(200, { configured: apiKeys.length > 0 });
   }
   if (req.method !== "POST") return json(405, { error: "method" });
-  if (!apiKey) return json(503, { error: "not_configured" });
+  if (!apiKeys.length) return json(503, { error: "not_configured" });
   const limit = Number(setting("IDENTIFY_DAILY")) || DEFAULT_DAILY;
 
   const user = await visitor(req);
@@ -68,18 +79,7 @@ Deno.serve(async (req: Request) => {
   // A session already charged for this identification goes on without a new charge.
   if (!charged && used >= limit) return json(429, { error: "quota", used, limit });
 
-  const upstream = new FormData();
-  upstream.append("api_token", apiKey);
-  upstream.append("file", file, "clip.wav");
-  upstream.append("return", "apple_music,spotify,deezer");
-  let response: Response;
-  try {
-    response = await fetch(AUDD, { method: "POST", body: upstream, signal: AbortSignal.timeout(25_000) });
-  } catch (caught) {
-    console.error("recognition service unreachable", caught);
-    return json(502, { error: "provider_unreachable" });
-  }
-  const parsed = (await response.json().catch(() => null)) as {
+  type AudDReply = {
     status?: string;
     error?: { error_code?: number; error_message?: string };
     result?: {
@@ -94,14 +94,48 @@ Deno.serve(async (req: Request) => {
       spotify?: { external_urls?: { spotify?: string }; album?: { images?: { url?: string }[] } };
       deezer?: { link?: string };
     } | null;
-  } | null;
-  if (!parsed || parsed.status !== "success") {
-    console.error("recognition refused", response.status, JSON.stringify(parsed).slice(0, 300));
-    const code = parsed?.error?.error_code;
-    // 900 bad token, 901 the token's allowance is used up (the "test" token has a small daily one)
-    if (code === 900) return json(502, { error: "provider_key", code });
-    if (code === 901 || code === 902) return json(503, { error: "provider_busy", code });
-    return json(502, { error: "provider_error", status: response.status });
+  };
+
+  // Tokens that are not resting come first; if all are, try them anyway.
+  const now = Date.now();
+  const ready = apiKeys.filter((key) => (resting.get(key) ?? 0) <= now);
+  const order = ready.length ? ready : apiKeys;
+  let parsed: AudDReply | null = null;
+  let lastCode: number | undefined;
+  let lastStatus = 0;
+  for (const apiKey of order) {
+    const upstream = new FormData();
+    upstream.append("api_token", apiKey);
+    upstream.append("file", file, "clip.wav");
+    upstream.append("return", "apple_music,spotify,deezer");
+    let response: Response;
+    try {
+      response = await fetch(AUDD, { method: "POST", body: upstream, signal: AbortSignal.timeout(25_000) });
+    } catch (caught) {
+      console.error("recognition service unreachable", caught);
+      return json(502, { error: "provider_unreachable" });
+    }
+    const reply = (await response.json().catch(() => null)) as AudDReply | null;
+    if (reply?.status === "success") {
+      resting.delete(apiKey);
+      parsed = reply;
+      break;
+    }
+    lastCode = reply?.error?.error_code;
+    lastStatus = response.status;
+    console.error("recognition refused", response.status, JSON.stringify(reply).slice(0, 300));
+    // 900 bad token, 901/902 the token's allowance is used up: on to the next token.
+    if (lastCode === 900 || lastCode === 901 || lastCode === 902) {
+      resting.set(apiKey, now + REST_MS);
+      continue;
+    }
+    // Any other refusal is about the clip or the service, not the token.
+    break;
+  }
+  if (!parsed) {
+    if (lastCode === 900) return json(502, { error: "provider_key", code: lastCode });
+    if (lastCode === 901 || lastCode === 902) return json(503, { error: "provider_busy", code: lastCode });
+    return json(502, { error: "provider_error", status: lastStatus });
   }
   // Charged once per identification: the first clip of a session that the
   // service answers (with a song or without) is the one that counts.
