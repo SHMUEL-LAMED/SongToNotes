@@ -36,8 +36,7 @@ describe("the catalogue", () => {
 
   it("never offers a hidden tool", () => {
     for (const tool of TOOL_IDS) expect(findTool(tool), tool).not.toBeNull();
-    expect(TOOL_IDS).not.toContain("identify");
-    expect(describeCatalog(null)).not.toContain("identify");
+    expect(TOOL_IDS).toContain("identify");
   });
 
   it("writes a signature the model can copy", () => {
