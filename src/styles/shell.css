@@ -482,6 +482,8 @@
   box-shadow: var(--shadow-sm);
 }
 .tool-loading .brand-mark { animation: bob 1.4s ease-in-out infinite; }
+/* The whole-site error screen (ErrorBoundary whole): its card, centred on the page. */
+.auth-screen { display: grid; place-items: center; min-height: 100vh; }
 
 /* ---- the footer ---- */
 
