@@ -4,8 +4,10 @@ import { validateAudioFile } from "../components/AudioPicker";
 import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { handOffTo } from "../lib/handoff";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
+import { findTool } from "../lib/tools";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { youtubeEmbedUrl, youtubeStillUrl, youtubeVideoId } from "../lib/youtube";
 
@@ -20,7 +22,10 @@ const TRYING_ANOTHER = "מנסה קטע נוסף…";
 const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_key", "provider_busy", "session_limit"]);
 
 /** Where the last identification came from, so "try another part" can go on from it. */
-type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
+type Source = { kind: "file"; file: File; buffer: AudioBuffer; round: number } | { kind: "mic" };
+
+/** Where a file identified here can go next, whole, with one click. */
+const NEXT_TOOLS = ["chords", "lyrics", "notes"];
 
 /** ▶ YouTube: the song's own video, straight from the server; nothing when it found none. */
 export function YouTubeLink({ href }: { href?: string | null }) {
@@ -41,6 +46,8 @@ export function YouTubeLink({ href }: { href?: string | null }) {
  */
 export function YouTubePlayer({ href, title }: { href?: string | null; title: string }) {
   const [playing, setPlaying] = useState(false);
+  // A still that does not load (blocked, offline) leaves the black frame and its play button.
+  const [stillFailed, setStillFailed] = useState(false);
   const id = youtubeVideoId(href);
   if (!id) return null;
   return (
@@ -55,7 +62,7 @@ export function YouTubePlayer({ href, title }: { href?: string | null; title: st
         />
       ) : (
         <button type="button" className="identify-video-still" onClick={() => setPlaying(true)} aria-label={`נגן כאן: ${title}`}>
-          <img src={youtubeStillUrl(id)} alt="" />
+          {!stillFailed && <img src={youtubeStillUrl(id)} alt="" onError={() => setStillFailed(true)} />}
           <span aria-hidden="true">
             <Play size={30} />
           </span>
@@ -140,8 +147,8 @@ export function IdentifyTool() {
     setBusy(null);
   };
 
-  const fileRound = async (buffer: AudioBuffer, round: number) => {
-    setSource({ kind: "file", buffer, round });
+  const fileRound = async (file: File, buffer: AudioBuffer, round: number) => {
+    setSource({ kind: "file", file, buffer, round });
     const starts = fileClipStarts(buffer, round);
     await lookup(starts.map((start) => () => renderClip(buffer, start)));
   };
@@ -186,7 +193,7 @@ export function IdentifyTool() {
   const tryAnother = async () => {
     if (!source) return;
     if (source.kind === "file") {
-      await fileRound(source.buffer, source.round + 1);
+      await fileRound(source.file, source.buffer, source.round + 1);
     } else {
       await startListening();
     }
@@ -204,7 +211,7 @@ export function IdentifyTool() {
     setBusy("מכין את הקטע…");
     setError(null);
     try {
-      await fileRound(await decodeAudioFile(await file.arrayBuffer()), 0);
+      await fileRound(file, await decodeAudioFile(await file.arrayBuffer()), 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "לא הצלחנו לקרוא את הקובץ.");
       setBusy(null);
@@ -353,6 +360,20 @@ export function IdentifyTool() {
               <small className="ai-status">
                 {result.timecode ? `הקטע נמצא בדקה ${result.timecode} של השיר · ` : ""}נותרו היום {Math.max(0, result.limit - result.used)} זיהויים
               </small>
+              {source?.kind === "file" && (
+                <div className="identify-next">
+                  <span className="eyebrow-small">ממשיכים עם הקובץ</span>
+                  <div className="identify-links">
+                    {NEXT_TOOLS.map((id) => findTool(id))
+                      .filter((tool) => tool !== null)
+                      .map((tool) => (
+                        <button key={tool.id} type="button" className="chip-toggle" onClick={() => void handOffTo(tool.id, source.file, "הקובץ ממזהה השירים")}>
+                          <tool.icon size={14} /> {tool.title}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
             <YouTubePlayer key={result.links.youtube ?? ""} href={result.links.youtube} title={[result.title, result.artist].filter(Boolean).join(" — ")} />
           </div>

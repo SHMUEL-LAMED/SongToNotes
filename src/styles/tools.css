@@ -750,6 +750,7 @@
 .identify-links a { display: inline-flex; align-items: center; gap: 4px; }
 /* The play mark as a glyph in the chip's colour, not as an emoji. */
 .identify-youtube [aria-hidden] { font-variant-emoji: text; }
+.identify-next { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 /* The song's video, the card's full width under the text. */
 .identify-video { flex: 1 1 100%; aspect-ratio: 16 / 9; border-radius: var(--radius); overflow: hidden; background: #000; box-shadow: var(--shadow-md); }
 .identify-video iframe, .identify-video-still { display: block; width: 100%; height: 100%; border: 0; }
