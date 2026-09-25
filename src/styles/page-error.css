@@ -1,0 +1,4 @@
+/* ---- a page that did not load, or broke: what happened, and two ways on, side by side ---- */
+
+.site-closed.is-error .tool-inline-actions { justify-content: center; }
+.site-closed.is-error .primary-button { width: auto; }
