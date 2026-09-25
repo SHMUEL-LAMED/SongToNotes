@@ -1,11 +1,14 @@
 import { Captions, Download, FileText, LogIn, Mic2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { CreditCost } from "../components/CreditCost";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
 import { useAuth } from "../lib/auth";
+import { minutesCost } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
 import { applyLineEdits, buildLines, linesToLrc, linesToText, positionAt, type LyricLine } from "../lib/lyrics";
@@ -54,6 +57,7 @@ export function LyricsTool({ initial = null }: Props) {
   // in memory, and the same samples are what go up to the server.
   const { audio, error, setError, isLoading, progress, load, clear } = useAudioFile({ maxBytes: 600 * 1024 * 1024, monoAt: RATE });
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
+  const { rules: creditRules } = useCredits();
   const [language, setLanguage] = useState<string | null>(() => (initial && "language" in initial.payload ? normalizeLanguage(initial.payload.language) : "he"));
   const [lines, setLines] = useState<LyricLine[]>(() => normalizeLines(initial?.payload.lines));
   const [text, setText] = useState(() => linesToText(normalizeLines(initial?.payload.lines)));
@@ -296,10 +300,13 @@ export function LyricsTool({ initial = null }: Props) {
                 </button>
               </div>
             ) : !busy ? (
-              <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
-                <Wand2 size={20} /> זהה את המילים והזמנים
-                <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
-              </button>
+              <>
+                <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
+                  <Wand2 size={20} /> זהה את המילים והזמנים
+                  <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
+                </button>
+                <CreditCost cost={minutesCost(trim ? trim.end - trim.start : audio.buffer.duration, creditRules)} estimate />
+              </>
             ) : (
               <div className="processing-box" aria-live="polite">
                 <div className="processing-top">

@@ -1,9 +1,11 @@
 import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
+import { CreditCost } from "../components/CreditCost";
 import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { useCredits } from "../lib/creditsContext";
 import { handOffTo } from "../lib/handoff";
 import { historyFromWorks, pushSong, sameSong, songOfWork, workForSong, HISTORY_SIZE, type FoundSong } from "../lib/identifyHistory";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
@@ -21,7 +23,7 @@ const TRYING_ANOTHER = "מנסה קטע נוסף…";
  * service refusing the site's key or out of its own allowance. Any other
  * failure of one clip just moves on to the next, without a word.
  */
-const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_key", "provider_busy", "session_limit"]);
+const STOP_CODES = new Set(["signed_out", "quota", "credits", "not_configured", "provider_key", "provider_busy", "session_limit"]);
 
 /** Where the last identification came from, so "try another part" can go on from it. */
 type Source = { kind: "file"; file: File; buffer: AudioBuffer; round: number } | { kind: "mic" };
@@ -83,6 +85,7 @@ export function YouTubePlayer({ href, title }: { href?: string | null; title: st
  */
 export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } = {}) {
   const { user, signInWithGoogle } = useAuth();
+  const { rules: creditRules } = useCredits();
   const userId = user?.id ?? null;
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [recorder] = useState(() => new MicRecorder());
@@ -325,6 +328,7 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
               }} aria-label="בחר קובץ לזיהוי" disabled={busy !== null || recording} />
               <FileAudio size={18} /> או בחר קובץ
             </label>
+            <CreditCost cost={creditRules.prices.identify} unit="לכל זיהוי" />
           </div>
         )}
         {busy === TRYING_ANOTHER && (

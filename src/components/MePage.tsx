@@ -40,6 +40,7 @@ import {
   UserRound,
   UserX,
   X,
+  Zap,
 } from "lucide-react";
 import {
   useCallback,
@@ -54,6 +55,8 @@ import { deleteAccount, exportAccount } from "../lib/account";
 import { dayRange, formatBytes, formatNumber, timeAgo } from "../lib/admin";
 import { analyticsEnabled, setAnalyticsEnabled } from "../lib/analytics";
 import { useAuth } from "../lib/auth";
+import { balanceOf, creditsLabel } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { canShareFiles, downloadFile, shareFile } from "../lib/export";
 import { clearFiles, type StoredFileInfo } from "../lib/fileStore";
 import {
@@ -134,6 +137,8 @@ function formatDate(value: string) {
 type Props = {
   onOpenWork: (work: SavedWork) => void;
   onOpenAdmin?: (() => void) | null;
+  /** The credits page: the balance, the private link, how to get more. */
+  onOpenCredits?: () => void;
   onHome: () => void;
   onSignInError: (message: string) => void;
   /** Where the page opens when it is reached from a link: `#/me/links`. */
@@ -176,8 +181,9 @@ function Card({
   );
 }
 
-export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initialTab }: Props) {
+export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignInError, initialTab }: Props) {
   const { user, profile, updateName, signOut, signInWithGoogle } = useAuth();
+  const { rules: creditRules, status: credits } = useCredits();
   const userId = user?.id ?? null;
 
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "gallery");
@@ -544,6 +550,11 @@ export function MePage({ onOpenWork, onOpenAdmin, onHome, onSignInError, initial
           </div>
         </div>
         <div className="me-hero-actions">
+          {onOpenCredits && creditRules.enabled && (
+            <button type="button" className="secondary-button me-credits-button" onClick={onOpenCredits}>
+              <Zap size={16} /> {credits ? creditsLabel(balanceOf(credits)) : "קרדיטים"}
+            </button>
+          )}
           <button type="button" className="secondary-button" onClick={onHome}>
             <ArrowRight size={16} /> לכלים
           </button>

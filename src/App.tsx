@@ -1,4 +1,4 @@
-import { CircleSlash, Info, Keyboard, MessageSquareText, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House } from "lucide-react";
+import { CircleSlash, Info, Keyboard, MessageSquareText, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House, Zap } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
@@ -6,6 +6,7 @@ import { AppNotices } from "./components/AppNotices";
 import { AppShell } from "./components/AppShell";
 import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
+import { CreditNotices } from "./components/CreditNotices";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
@@ -19,6 +20,8 @@ import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
 import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
 import { useAuth } from "./lib/auth";
+import { balanceOf, referralLink, untilReset } from "./lib/credits";
+import { useCredits } from "./lib/creditsContext";
 import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
 import { langForModel } from "./lib/i18n";
@@ -80,6 +83,12 @@ const MePage = lazy(() =>
   import("./components/MePage").then((module) => ({ default: module.MePage })),
 );
 
+// The credits page explains the rules and holds the private link; it is
+// opened now and then, so it loads on demand too.
+const CreditsPage = lazy(() =>
+  import("./components/CreditsPage").then((module) => ({ default: module.CreditsPage })),
+);
+
 /**
  * A saved transcription or piano recording, in the shape the transcriber
  * starts from. Anything that is not a list of notes opens as an empty page
@@ -107,6 +116,7 @@ function toPendingTranscription(work: SavedWork): PendingTranscription {
 function WorkspaceApp() {
   const { route, navigate } = useRoute();
   const { user } = useAuth();
+  const credit = useCredits();
   const theme = useTheme();
   // A saved work the personal area asked a tool to open. The key bumps with
   // every opening so the tool remounts and starts from that work instead of
@@ -156,6 +166,8 @@ function WorkspaceApp() {
   // `#/me` and `#/me/links`: the personal area, opened on one of its tabs.
   const me = route === "me" || route.startsWith("me/");
   const meTab = me ? route.slice(3) || null : null;
+  // `#/credits`: the credits, the private link and how it all works.
+  const credits = route === "credits";
   // A tool the admin switched off is shown as such, not opened; the owner
   // still gets in, to see that it is really off.
   const toolOff = Boolean(tool && control.disabledTools.includes(tool.id) && !owner);
@@ -169,10 +181,12 @@ function WorkspaceApp() {
   });
   // Once a visit, after a little while on screen, an invitation to one of the
   // tools that are not only for musicians, taking turns — never to the tool on
-  // screen or one that is off, over a dialog, or beside the request to share.
+  // screen or one that is off, over a dialog, or beside the request to share
+  // or a word about credits.
+  const creditNotice = Boolean(credit.invite || credit.welcome || credit.empty);
   const toolPromo = useToolPromo({
     paused:
-      paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || feedbackOpen || closed || admin || sharePrompt.open,
+      paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || feedbackOpen || closed || admin || sharePrompt.open || creditNotice,
     current: tool?.id ?? null,
     disabledTools: control.disabledTools,
   });
@@ -180,8 +194,8 @@ function WorkspaceApp() {
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
   // than an empty page.
   useEffect(() => {
-    if (route !== "home" && !tool && !shareToken && !admin && !me) navigate("home");
-  }, [admin, me, navigate, route, shareToken, tool]);
+    if (route !== "home" && !tool && !shareToken && !admin && !me && !credits) navigate("home");
+  }, [admin, credits, me, navigate, route, shareToken, tool]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -265,8 +279,39 @@ function WorkspaceApp() {
   // What the assistant may do on the site itself, from any page.
   useAssistantTool("site", {
     state: () =>
-      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; שפת הממשק: ${langForModel()} (ענה בשפה הזאת); צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}.`,
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : credits ? "דף הקרדיטים והזמנת חברים" : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; שפת הממשק: ${langForModel()} (ענה בשפה הזאת); צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}${credit.status ? `; קרדיטים זמינים: ${balanceOf(credit.status)} (${credit.status.dailyLeft} מהקצבה היומית ו־${credit.status.bonus} בונוס)` : ""}.`,
     handlers: {
+      "credits.open": () => {
+        go("credits");
+        return { ok: true, message: "דף הקרדיטים נפתח" };
+      },
+      "credits.read": () => {
+        const { rules, status } = credit;
+        const prices = Object.entries(rules.prices).map(([key, price]) => `${key}=${price}`).join(", ");
+        if (!status) {
+          return {
+            ok: true,
+            message: user ? "הקרדיטים עוד נטענים" : "הגולש לא מחובר: קרדיטים וקישור אישי ניתנים אחרי התחברות",
+            data: { signedIn: Boolean(user), rules: { daily: rules.daily, signupBonus: rules.signupBonus, friendDaily: rules.friendDaily, friendDailyMax: rules.friendDailyMax, welcomeBonus: rules.welcomeBonus, visitBonus: rules.visitBonus, visitDailyMax: rules.visitDailyMax, prices } },
+          };
+        }
+        return {
+          ok: true,
+          message: `${balanceOf(status)} קרדיטים זמינים`,
+          data: {
+            available: balanceOf(status),
+            dailyLeft: status.dailyLeft,
+            dailyAllowance: status.allowance,
+            bonus: status.bonus,
+            renewsIn: untilReset(status.resetsAt),
+            friendsJoined: status.friends,
+            linkVisits: status.visits,
+            earned: status.earned,
+            privateLink: referralLink(status.code),
+            prices,
+          },
+        };
+      },
       navigate: ({ tool: target }) => {
         const id = String(target);
         if (id === "home") {
@@ -358,6 +403,7 @@ function WorkspaceApp() {
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
       { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
       { id: "page:share", label: "שיתוף האתר", hint: "קישור לחברים, בוואטסאפ או בכל מקום", group: "דפים", icon: <Share2 size={15} />, run: () => setShareOpen(true) },
+      { id: "page:credits", label: "קרדיטים והזמנת חברים", hint: "היתרה, הקישור האישי ואיך מקבלים עוד", group: "דפים", icon: <Zap size={15} />, keywords: "קרדיטים קישור הזמנה חברים בונוס credits invite referral", run: () => go("credits") },
       { id: "page:feedback", label: "משוב והצעות", hint: "בעיה, רעיון או כל דבר אחר", group: "דפים", icon: <MessageSquareText size={15} />, run: () => setFeedbackOpen(true) },
     ];
     if (owner) {
@@ -410,7 +456,7 @@ function WorkspaceApp() {
     <AppShell
       route={route}
       tool={tool}
-      pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : shareToken ? "עבודה משותפת" : null}
+      pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : credits ? "קרדיטים והזמנת חברים" : shareToken ? "עבודה משותפת" : null}
       account={accountOpen}
       owner={owner}
       disabledTools={control.disabledTools}
@@ -421,6 +467,7 @@ function WorkspaceApp() {
       onOpenPalette={openPalette}
       onOpenShortcuts={() => setShortcutsOpen(true)}
       onOpenShare={() => setShareOpen(true)}
+      onOpenCredits={() => go("credits")}
     >
       <AccountDrawer
         open={accountOpen}
@@ -434,6 +481,10 @@ function WorkspaceApp() {
           setAccountOpen(false);
           go("admin");
         } : null}
+        onOpenCredits={() => {
+          setAccountOpen(false);
+          go("credits");
+        }}
         onSignInError={setShellError}
       />
 
@@ -447,7 +498,7 @@ function WorkspaceApp() {
         accent={accent}
         onAccent={setAccent}
       />
-      <ShareSiteDialog open={shareOpen} onClose={closeShare} />
+      <ShareSiteDialog open={shareOpen} onClose={closeShare} onOpenCredits={() => go("credits")} />
       <FeedbackDialog open={feedbackOpen} page={route.slice(0, 40)} onClose={closeFeedback} />
 
       {control.banner && !closed && (
@@ -465,6 +516,7 @@ function WorkspaceApp() {
       />
 
       <AppNotices>
+        <CreditNotices onOpenCredits={() => go("credits")} onSignInError={setShellError} />
         {sharePrompt.open && (
           <SharePrompt
             onMore={() => {
@@ -510,10 +562,16 @@ function WorkspaceApp() {
           <MePage
             onOpenWork={openWork}
             onOpenAdmin={owner ? () => go("admin") : null}
+            onOpenCredits={() => go("credits")}
             onHome={() => go("home")}
             onSignInError={setShellError}
             initialTab={meTab}
           />
+        </Suspense>
+      )}
+      {!closed && credits && (
+        <Suspense fallback={loading("טוען את הקרדיטים…")}>
+          <CreditsPage onOpen={go} onSignInError={setShellError} />
         </Suspense>
       )}
       {toolOff && tool && (
@@ -533,7 +591,7 @@ function WorkspaceApp() {
           <AdminPanel onHome={() => go("home")} />
         </Suspense>
       )}
-      {!closed && !tool && !shareToken && !admin && !me && (
+      {!closed && !tool && !shareToken && !admin && !me && !credits && (
         <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
       )}
       {shown === "notes" && (

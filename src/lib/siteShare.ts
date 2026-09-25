@@ -9,6 +9,7 @@
  * shared, the request leaves them alone for a week.
  */
 import { useCallback, useEffect, useState } from "react";
+import { ownReferralCode, withReferral } from "./credits";
 import type { ShareOutcome } from "./export";
 import { currentLang } from "./i18n";
 
@@ -34,6 +35,26 @@ export type ShareTarget = { id: ShareTargetId; label: string; href: string };
 /** The front door of the site, wherever it is served from. */
 export function siteUrl() {
   return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+}
+
+/**
+ * The address to pass on: the signed-in account's private link, so every
+ * friend it brings is counted to them (see credits.ts), or the plain one.
+ */
+export function shareSiteUrl() {
+  return withReferral(siteUrl(), ownReferralCode());
+}
+
+/**
+ * What travels with a private link: the plain message, and the gift that
+ * waits for whoever opens an account through it.
+ */
+export function inviteMessage(welcome: number) {
+  const base = shareMessage();
+  if (welcome <= 0) return base;
+  return currentLang() === "en"
+    ? { ...base, text: `${base.text} Join through my link and get ${welcome} free credits.` }
+    : { ...base, text: `${base.text} מצטרפים דרך הקישור שלי ומקבלים ${welcome} קרדיטים מתנה.` };
 }
 
 /**

@@ -4,6 +4,7 @@
  * functions that hold the keys; the browser sends the work and shows the
  * result, and nothing is installed or fetched onto the device.
  */
+import { announceCredits, announceCreditsFrom, announceEmpty } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
 
 const FUNCTIONS = `${SUPABASE_URL}/functions/v1`;
@@ -20,6 +21,7 @@ const MESSAGES: Record<string, string> = {
   signed_out: "כדי להשתמש ב־AI צריך להתחבר לחשבון. ההתחברות חינמית ולוקחת רגע.",
   not_configured: "היכולת הזאת עדיין לא הופעלה באתר. מנהל האתר צריך להזין מפתח לשירות.",
   quota: "נגמרה המכסה היומית של החשבון לפעולה הזאת. אפשר להמשיך מחר.",
+  credits: "אין מספיק קרדיטים לפעולה הזאת. הקרדיטים היומיים מתחדשים בחצות — ואפשר לקבל עוד כבר עכשיו, בהזמנת חברים מדף „הקרדיטים שלי”.",
   too_large: "הטקסט או הקובץ גדולים מדי לשליחה.",
   provider_key: "השירות דחה את המפתח של האתר. מנהל האתר צריך לבדוק אותו.",
   provider_credit: "נגמר האשראי של האתר בשירות ההפרדה. מנהל האתר צריך לטעון אותו.",
@@ -64,12 +66,22 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
     }
     throw new AiError("network", MESSAGES.network);
   }
-  const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
+  const body = (await response.json().catch(() => null)) as (T & { error?: string; credits?: unknown }) | null;
   if (!response.ok) {
     const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
+    if (code === "credits") announceEmpty(body?.credits);
     throw new AiError(code, describeAiError(code, response.status));
   }
+  if (body?.credits) announceCredits(body.credits);
   return body as T;
+}
+
+/** A refusal from a function that answers with a stream or a file: its code, and the credits it names. */
+async function refusal(response: Response) {
+  const body = (await response.json().catch(() => null)) as { error?: string; credits?: unknown } | null;
+  const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
+  if (code === "credits") announceEmpty(body?.credits);
+  return new AiError(code, describeAiError(code, response.status));
 }
 
 // ---------------------------------------------------------------------------
@@ -192,11 +204,8 @@ export async function chatStream(
     if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
     throw new AiError("network", MESSAGES.network);
   }
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
-    throw new AiError(code, describeAiError(code, response.status));
-  }
+  if (!response.ok) throw await refusal(response);
+  announceCreditsFrom(response);
   const answering = response.headers.get("X-Model");
   if (answering) options.onModel?.(answering);
   const type = response.headers.get("Content-Type") ?? "";
@@ -353,11 +362,8 @@ export async function speakToFile(
     if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
     throw new AiError("network", MESSAGES.network);
   }
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
-    throw new AiError(code, describeAiError(code, response.status));
-  }
+  if (!response.ok) throw await refusal(response);
+  announceCreditsFrom(response);
   const bytes = await response.arrayBuffer();
   const format = options.format ?? "mp3";
   return new File([bytes], `speech.${format}`, { type: format === "wav" ? "audio/wav" : "audio/mpeg" });

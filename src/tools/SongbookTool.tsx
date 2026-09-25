@@ -1,12 +1,15 @@
 import { BookOpen, ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, Languages, Minus, Pause, Play, Plus, Printer, Type, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
+import { CreditCost } from "../components/CreditCost";
 import { ExplainSong } from "../components/ExplainSong";
 import { langForModel } from "../lib/i18n";
 import { AiError, parseLyricGloss, transformText, type LyricGloss } from "../lib/aiApi";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { useAuth } from "../lib/auth";
+import { textCost } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
 import { foldChordLines, parseChordSymbol, parseSong, songChords, songToText, takeSongbookDraft, transposeSong } from "../lib/songbook";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -36,6 +39,7 @@ function readInitial(work: SavedWork | null | undefined) {
  */
 export function SongbookTool({ initial = null }: Props) {
   const { user } = useAuth();
+  const { rules: creditRules } = useCredits();
   const [restored] = useState<{ title: string; body: string; transpose: number } | null>(() => {
     const opened = readInitial(initial);
     if (opened) return opened;
@@ -523,6 +527,7 @@ export function SongbookTool({ initial = null }: Props) {
                 <button type="button" className="secondary-button" onClick={() => void translateLyrics()} disabled={glossBusy}>
                   <Languages size={16} /> {glossBusy ? "מתרגם…" : gloss && gloss.source === lyricSource ? "תרגום מחדש" : "תרגום ותעתיק"}
                 </button>
+                <CreditCost cost={textCost(Math.min(lyricSource.length, 20_000), creditRules)} />
                 <label className="songbook-tempo">
                   ל־
                   <select value={targetLanguage} onChange={(event) => setGlossLanguage(event.target.value)} aria-label="שפת התרגום">

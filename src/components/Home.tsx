@@ -1,7 +1,10 @@
 import {
   ArrowLeft,
+  Check,
   Cloud,
   Clock3,
+  Copy,
+  Gift,
   Search,
   ShieldCheck,
   Sparkles,
@@ -12,6 +15,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
+import { balanceOf, creditsLabel, referralLink } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
+import { markShared } from "../lib/siteShare";
 import { clearRecentTools, useFavorites, useRecentTools } from "../lib/prefs";
 import { CATEGORY_LABELS, TOOLS, findTool, type ToolCategory, type ToolDefinition } from "../lib/tools";
 import { WORKFLOWS } from "../lib/workflows";
@@ -133,6 +139,8 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
           <QuickStart disabledTools={disabledTools} />
         </div>
       </section>
+
+      <CreditsPromo onOpen={onOpen} />
 
       {(recent.length > 0 || favorites.length > 0) && (
         <section className="home-section" aria-labelledby="mine-title">
@@ -353,6 +361,67 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
       <SiteFooter onOpen={onOpen} onFeedback={onFeedback} />
     </div>
+  );
+}
+
+/**
+ * Credits in one line on the home page: for a visitor, what signing in gives;
+ * for an account, the balance and the private link, one tap from the clipboard.
+ */
+function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
+  const { user } = useAuth();
+  const { rules, status } = useCredits();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  if (!rules.enabled) return null;
+  const link = status ? referralLink(status.code) : null;
+  const copy = () => {
+    if (!link) return;
+    void navigator.clipboard
+      .writeText(link)
+      .then(() => {
+        markShared();
+        setCopied(true);
+      })
+      // No clipboard here: the credits page shows the link to copy by hand.
+      .catch(() => onOpen("credits"));
+  };
+
+  return (
+    <section className="credits-promo" aria-labelledby="credits-promo-title">
+      <span className="credits-promo-icon" aria-hidden="true">
+        <Gift size={22} />
+      </span>
+      <div className="credits-promo-copy">
+        <h2 id="credits-promo-title">
+          {user && status
+            ? `יש לך ${creditsLabel(balanceOf(status))} — וחברים מביאים עוד`
+            : `${rules.daily} קרדיטים בכל יום, ועוד על כל חבר שמצטרף`}
+        </h2>
+        <p>
+          {user
+            ? `שלחו לחברים את הקישור האישי שלכם: על כל מי שמצטרף דרכו תקבלו ${rules.signupBonus} קרדיטים, והקצבה היומית שלכם תגדל.`
+            : "הכלים שבדפדפן חינמיים תמיד. לפעולות שרצות בשרת — תמלול, העוזר, הפרדת שירה ב־AI — מתחברים ומקבלים קרדיטים חינם בכל יום, וקישור אישי להזמנת חברים."}
+        </p>
+      </div>
+      <div className="credits-promo-actions">
+        {link && (
+          <button type="button" className="primary-button compact" onClick={copy}>
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? "הקישור הועתק" : "העתקת הקישור שלי"}
+          </button>
+        )}
+        <button type="button" className="secondary-button" onClick={() => onOpen("credits")}>
+          {user ? "לדף הקרדיטים" : "איך זה עובד"} <ArrowLeft size={15} />
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
+import { CreditCost } from "../components/CreditCost";
 import { SaveButton } from "../components/SaveButton";
 import { Transport } from "../components/Transport";
 import { ShareButton } from "../components/ShareButton";
@@ -24,6 +25,8 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
 import { AiError, transformText, type AiAction } from "../lib/aiApi";
 import { useAuth } from "../lib/auth";
+import { minutesCost, textCost } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import {
   CANCELLED,
   SpeechError,
@@ -183,6 +186,7 @@ export function TranscriptTool({ initial = null }: Props) {
     monoAt: SPEECH_RATE,
   });
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
+  const { rules: creditRules } = useCredits();
   const [saved] = useState(loadSaved);
   const [language, setLanguage] = useState<string | null>(saved.language);
   const [result, setResult] = useState<Result | null>(() => readInitial(initial));
@@ -756,10 +760,13 @@ export function TranscriptTool({ initial = null }: Props) {
           </div>
         )}
         {audio && !busy && !resume && (user || authLoading) && (
-          <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
-            <Wand2 size={20} /> {trim ? "תמלל את הקטע המסומן" : "תמלל את ההקלטה"}
-            <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
-          </button>
+          <>
+            <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
+              <Wand2 size={20} /> {trim ? "תמלל את הקטע המסומן" : "תמלל את ההקלטה"}
+              <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
+            </button>
+            <CreditCost cost={minutesCost(trim ? trim.end - trim.start : audio.buffer.duration, creditRules)} estimate />
+          </>
         )}
         {audio && !busy && resume && user && (
           <div className="transcript-resume">
@@ -957,6 +964,7 @@ export function TranscriptTool({ initial = null }: Props) {
                 כדי להשתמש ב־AI צריך להתחבר לחשבון.
               </small>
             )}
+            {text.trim() && <CreditCost cost={textCost(text.length, creditRules)} unit="לכל פעולה" />}
             {aiBusy && (
               <div className="progress-track indeterminate" aria-label="ה־AI עובד">
                 <div />

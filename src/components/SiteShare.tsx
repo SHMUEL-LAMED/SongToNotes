@@ -1,7 +1,10 @@
-import { Check, Copy, Heart, Mail, Share2, X } from "lucide-react";
+import { Check, Copy, Heart, Mail, Share2, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { referralLink } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import {
   canShareNatively,
+  inviteMessage,
   markShared,
   shareMessage,
   shareNatively,
@@ -40,24 +43,97 @@ function TargetIcon({ id, size = 18 }: { id: ShareTargetId; size?: number }) {
   );
 }
 
+/** The address to pass on, and the words with it: the account's private link when there is one. */
+function useShareLink() {
+  const { status, rules } = useCredits();
+  const personal = Boolean(status?.code) && rules.enabled;
+  const url = personal && status ? referralLink(status.code) : siteUrl();
+  const { title, text } = personal ? inviteMessage(rules.welcomeBonus) : shareMessage();
+  return { url, title, text, personal };
+}
+
+/**
+ * One tap to each app people pass links around in, and the system's own
+ * share sheet where there is one. Used by the share window and by the
+ * credits page, for the private link.
+ */
+export function ShareTargetButtons({
+  url,
+  text,
+  title,
+  onShared,
+}: {
+  url: string;
+  text: string;
+  title: string;
+  onShared?: () => void;
+}) {
+  const targets = shareTargets(url, text, title);
+  const shareElsewhere = () => {
+    void shareNatively(url, text, title).then((outcome) => {
+      if (outcome !== "shared") return;
+      markShared();
+      onShared?.();
+    });
+  };
+  return (
+    <div className="share-site-targets">
+      {targets.map((target) => (
+        <a
+          key={target.id}
+          className="share-site-target"
+          href={target.href}
+          // A mail link opens the mail app, not a page, so it needs no tab of its own.
+          target={target.id === "email" ? undefined : "_blank"}
+          rel="noopener noreferrer"
+          style={{ "--share-brand": BRANDS[target.id].brand, "--share-ink": BRANDS[target.id].ink } as CSSProperties}
+          onClick={() => markShared()}
+        >
+          <span className="share-site-mark">
+            <TargetIcon id={target.id} />
+          </span>
+          {target.label}
+        </a>
+      ))}
+      {canShareNatively() && (
+        <button type="button" className="share-site-target" onClick={shareElsewhere}>
+          <span className="share-site-mark">
+            <Share2 size={18} />
+          </span>
+          עוד…
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * The share window the top bar opens: the site's address, ready to copy, and
  * one tap to the apps people pass links around in. Where the system has a
- * share sheet of its own, it is one more button away.
+ * share sheet of its own, it is one more button away. A signed-in visitor
+ * shares their private link, which earns them credits.
  */
-export function ShareSiteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ShareSiteDialog({
+  open,
+  onClose,
+  onOpenCredits,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Opens the page that explains the credits a private link earns. */
+  onOpenCredits?: () => void;
+}) {
   if (!open) return null;
   // Mounted afresh for every opening, so "copied" never greets the next one.
-  return <ShareSheet onClose={onClose} />;
+  return <ShareSheet onClose={onClose} onOpenCredits={onOpenCredits} />;
 }
 
-function ShareSheet({ onClose }: { onClose: () => void }) {
+function ShareSheet({ onClose, onOpenCredits }: { onClose: () => void; onOpenCredits?: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const linkRef = useRef<HTMLInputElement>(null);
   const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
-  const url = siteUrl();
-  const { title, text } = shareMessage();
-  const targets = shareTargets(url, text, title);
+  const { rules } = useCredits();
+  const { url, title, text, personal } = useShareLink();
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -94,14 +170,6 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
     })();
   };
 
-  const shareElsewhere = () => {
-    void shareNatively(url, text, title).then((outcome) => {
-      if (outcome !== "shared") return;
-      markShared();
-      onClose();
-    });
-  };
-
   return (
     <div className="dialog-overlay" role="presentation" onMouseDown={onClose}>
       <div className="dialog share-site-dialog" role="dialog" aria-modal="true" aria-labelledby="share-site-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -110,34 +178,45 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
         </button>
         <h2 id="share-site-title">שיתוף האתר</h2>
         <p>כל הכלים כאן חינמיים ורצים בדפדפן. שלחו את הקישור למי שמנגן, שר או מלמד מוזיקה.</p>
+        {personal ? (
+          <p className="share-site-credits">
+            <Zap size={15} aria-hidden="true" />
+            <span>
+              {`זה הקישור האישי שלך: על כל חבר שמצטרף דרכו תקבל ${rules.signupBonus} קרדיטים, והקצבה היומית שלך תגדל.`}{" "}
+              {onOpenCredits && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    onClose();
+                    onOpenCredits();
+                  }}
+                >
+                  איך זה עובד
+                </button>
+              )}
+            </span>
+          </p>
+        ) : rules.enabled && onOpenCredits ? (
+          <p className="share-site-credits">
+            <Zap size={15} aria-hidden="true" />
+            <span>
+              מתחברים ומקבלים קישור אישי — וכל חבר שמצטרף דרכו מזכה בקרדיטים.{" "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  onClose();
+                  onOpenCredits();
+                }}
+              >
+                איך זה עובד
+              </button>
+            </span>
+          </p>
+        ) : null}
 
-        <div className="share-site-targets">
-          {targets.map((target) => (
-            <a
-              key={target.id}
-              className="share-site-target"
-              href={target.href}
-              // A mail link opens the mail app, not a page, so it needs no tab of its own.
-              target={target.id === "email" ? undefined : "_blank"}
-              rel="noopener noreferrer"
-              style={{ "--share-brand": BRANDS[target.id].brand, "--share-ink": BRANDS[target.id].ink } as CSSProperties}
-              onClick={() => markShared()}
-            >
-              <span className="share-site-mark">
-                <TargetIcon id={target.id} />
-              </span>
-              {target.label}
-            </a>
-          ))}
-          {canShareNatively() && (
-            <button type="button" className="share-site-target" onClick={shareElsewhere}>
-              <span className="share-site-mark">
-                <Share2 size={18} />
-              </span>
-              עוד…
-            </button>
-          )}
-        </div>
+        <ShareTargetButtons url={url} text={text} title={title} onShared={onClose} />
 
         <div className="share-site-link">
           <input
@@ -171,8 +250,9 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
  * dims the page, so whoever is mid-song keeps playing.
  */
 export function SharePrompt({ onMore, onClose }: { onMore: () => void; onClose: () => void }) {
-  const { title, text } = shareMessage();
-  const whatsapp = shareTargets(siteUrl(), text, title).find((target) => target.id === "whatsapp")!;
+  const { url, title, text, personal } = useShareLink();
+  const { rules } = useCredits();
+  const whatsapp = shareTargets(url, text, title).find((target) => target.id === "whatsapp")!;
 
   return (
     <div
@@ -186,7 +266,10 @@ export function SharePrompt({ onMore, onClose }: { onMore: () => void; onClose: 
         <Heart size={17} />
       </span>
       <p>
-        <strong>נהנים מהאתר?</strong> ספרו עליו לחברים — הוא חינמי, וכל שיתוף עוזר לו להמשיך ולגדול.
+        <strong>נהנים מהאתר?</strong>{" "}
+        {personal
+          ? `ספרו עליו לחברים דרך הקישור האישי שלכם — על כל חבר שמצטרף תקבלו ${rules.signupBonus} קרדיטים.`
+          : "ספרו עליו לחברים — הוא חינמי, וכל שיתוף עוזר לו להמשיך ולגדול."}
       </p>
       <div className="share-prompt-actions">
         <a

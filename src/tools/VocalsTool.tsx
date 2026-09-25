@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AiError, separateOnServer, separationAvailability } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { creditsLabel } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -94,6 +96,9 @@ export function VocalsTool({ initial = null }: Props) {
   const [compare, setCompare] = useState(false);
   const [context] = useState(sharedContext);
   const { user } = useAuth();
+  const { rules } = useCredits();
+  // The server said no for want of credits: the separation can still run here, for free.
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const separation = useSeparation(context);
   const aiAbortRef = useRef<AbortController | null>(null);
   // `true` means the free on-device Demucs model is used. `null` is while the
@@ -246,6 +251,9 @@ export function VocalsTool({ initial = null }: Props) {
       if (caught instanceof AiError && caught.code === "not_configured") {
         setServerMissing(true);
         setAiStatus("ההפרדה בשרת עדיין לא הופעלה. אפשר להפריד בדפדפן — זה מוריד רשת של 180MB בפעם הראשונה.");
+      } else if (caught instanceof AiError && caught.code === "credits") {
+        setOutOfCredits(true);
+        setAiStatus("אין מספיק קרדיטים להפרדה בשרת. אפשר להפריד כאן בדפדפן, בחינם — זה מוריד רשת של 180MB בפעם הראשונה.");
       } else {
         setAiStatus(caught instanceof Error ? caught.message : "ההפרדה נכשלה.");
       }
@@ -363,7 +371,7 @@ export function VocalsTool({ initial = null }: Props) {
     );
   };
 
-  /** The browser path, offered only while the server has no key. */
+  /** The browser path, offered while the server has no key — or no credits are left for it. */
   const runAiInBrowser = useCallback(async () => {
     if (!audio || !context) return;
     setAiBusy(true);
@@ -862,7 +870,7 @@ export function VocalsTool({ initial = null }: Props) {
                     {serverMissing === true
                       ? "מודל Demucs אמיתי מפריד את הקול, התופים, הבס ושאר המוזיקה בדפדפן. בפעם הראשונה יורדים כ־180MB; כדאי להשאיר את הכרטיסייה פתוחה. אין צורך להתחבר."
                       : serverMissing === false
-                        ? `נעשית בשרת של האתר ועובדת גם בטלפון. לוקח בדרך כלל כדקה.${!user ? " צריך להתחבר לחשבון." : ""}`
+                        ? `נעשית בשרת של האתר ועובדת גם בטלפון. לוקח בדרך כלל כדקה.${rules.enabled && rules.prices.separate > 0 ? ` עולה ${creditsLabel(rules.prices.separate)} לשיר.` : ""}${!user ? " צריך להתחבר לחשבון." : ""}`
                         : "בודק את מנוע ההפרדה הזמין…"}
                   </p>
                 </div>
@@ -882,6 +890,19 @@ export function VocalsTool({ initial = null }: Props) {
                 {serverMissing === true && !aiBusy && aiStatus?.includes("נכשלה") && (
                   <button className="link-button" type="button" onClick={runAiInBrowser} disabled={busy}>
                     <Cpu size={14} /> נסה שוב את מודל ה־AI בדפדפן
+                  </button>
+                )}
+                {outOfCredits && serverMissing !== true && !aiBusy && (
+                  <button
+                    className="link-button"
+                    type="button"
+                    onClick={() => {
+                      setOutOfCredits(false);
+                      void runAiInBrowser();
+                    }}
+                    disabled={busy}
+                  >
+                    <Cpu size={14} /> הפרדה בדפדפן, בלי קרדיטים
                   </button>
                 )}
                 {aiBusy && (

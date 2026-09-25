@@ -14,8 +14,14 @@
  *                      (Groq: https://api.groq.com/openai/v1)
  *   STT_MODEL          default whisper-1 (Groq: whisper-large-v3)
  *   STT_DAILY_SECONDS  audio allowed per account per day, default 4 hours
+ *
+ * Each window is paid for in credits (supabase/credits.sql): the "minute"
+ * price for every minute of audio, counted over the day so a minute split
+ * between two windows is paid once. A window the service fails on is refunded.
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { charge, creditSummary, refund, refused } from "../_shared/credits.ts";
+import { minutesCrossed } from "../_shared/pricing.ts";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const DEFAULT_DAILY_SECONDS = 4 * 3600;
@@ -117,6 +123,13 @@ Deno.serve(async (req) => {
     return json(429, { error: "quota", used, limit });
   }
 
+  const paid = await charge(admin, user, wantWords ? "lyrics" : "transcript", "minute", minutesCrossed(used, seconds));
+  if (!paid.ok) return refused(paid);
+  const fail = async (status: number, reply: Record<string, unknown>) => {
+    await refund(admin, user, paid);
+    return json(status, reply);
+  };
+
   const upstream = new FormData();
   upstream.append("file", new Blob([bytes], { type: "audio/wav" }), "audio.wav");
   upstream.append("model", model);
@@ -137,15 +150,15 @@ Deno.serve(async (req) => {
     });
   } catch (caught) {
     console.error("speech service unreachable", caught);
-    return json(502, { error: "provider_unreachable" });
+    return await fail(502, { error: "provider_unreachable" });
   }
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 300);
     console.error("speech service refused", response.status, detail);
-    if (response.status === 401 || response.status === 403) return json(502, { error: "provider_key" });
-    if (response.status === 429) return json(502, { error: "provider_busy" });
-    if (response.status === 413) return json(413, { error: "too_large" });
-    return json(502, { error: "provider_error", status: response.status });
+    if (response.status === 401 || response.status === 403) return await fail(502, { error: "provider_key" });
+    if (response.status === 429) return await fail(502, { error: "provider_busy" });
+    if (response.status === 413) return await fail(413, { error: "too_large" });
+    return await fail(502, { error: "provider_error", status: response.status });
   }
 
   const parsed = (await response.json()) as {
@@ -184,5 +197,6 @@ Deno.serve(async (req) => {
     seconds,
     used: used + seconds,
     limit,
+    credits: creditSummary(paid),
   });
 });

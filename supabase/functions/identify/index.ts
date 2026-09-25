@@ -19,8 +19,13 @@
  *                      further tokens, optional: when a token is refused or its
  *                      allowance is used up, the same clip goes to the next one
  *   IDENTIFY_DAILY     lookups per account per day, default 30
+ *
+ * An identification is paid for in credits, once — the "identify" price
+ * (supabase/credits.sql) — when its first clip goes out. If the service fails
+ * on that clip, the credits come back and the next clip pays instead.
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
+import { charge, creditSummary, refund, refused, type Charge } from "../_shared/credits.ts";
 import { videoFromLyricsMedia, videoFromSongLink } from "./youtube.ts";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -83,6 +88,17 @@ Deno.serve(async (req: Request) => {
   // A session already charged for this identification goes on without a new charge.
   if (!charged && used >= limit) return json(429, { error: "quota", used, limit });
 
+  // Credits, for an identification that has not been paid for yet.
+  let paid: Charge | null = null;
+  if (!charged) {
+    paid = await charge(admin, user, "identify", "identify", 1, session ? { session } : {});
+    if (!paid.ok) return refused(paid);
+  }
+  const fail = async (status: number, reply: Record<string, unknown>) => {
+    if (paid) await refund(admin, user, paid);
+    return json(status, reply);
+  };
+
   type AudDReply = {
     status?: string;
     error?: { error_code?: number; error_message?: string };
@@ -119,7 +135,7 @@ Deno.serve(async (req: Request) => {
       response = await fetch(AUDD, { method: "POST", body: upstream, signal: AbortSignal.timeout(25_000) });
     } catch (caught) {
       console.error("recognition service unreachable", caught);
-      return json(502, { error: "provider_unreachable" });
+      return await fail(502, { error: "provider_unreachable" });
     }
     const reply = (await response.json().catch(() => null)) as AudDReply | null;
     if (reply?.status === "success") {
@@ -139,9 +155,9 @@ Deno.serve(async (req: Request) => {
     break;
   }
   if (!parsed) {
-    if (lastCode === 900) return json(502, { error: "provider_key", code: lastCode });
-    if (lastCode === 901 || lastCode === 902) return json(503, { error: "provider_busy", code: lastCode });
-    return json(502, { error: "provider_error", status: lastStatus });
+    if (lastCode === 900) return await fail(502, { error: "provider_key", code: lastCode });
+    if (lastCode === 901 || lastCode === 902) return await fail(503, { error: "provider_busy", code: lastCode });
+    return await fail(502, { error: "provider_error", status: lastStatus });
   }
   // Charged once per identification: the first clip of a session that the
   // service answers (with a song or without) is the one that counts.
@@ -149,11 +165,14 @@ Deno.serve(async (req: Request) => {
   if (session) {
     const { data: first } = await admin.rpc("identify_charge", { p_user: user.id, p_session: session });
     if (first === true) usedNow = await recordUsage(admin, user.id, "identify", 1);
+    // Another clip of the same identification was answered first and paid for it.
+    else if (paid) paid = await refund(admin, user, paid);
   } else {
     usedNow = await recordUsage(admin, user.id, "identify", 1);
   }
+  const credits = creditSummary(paid);
   const result = parsed.result;
-  if (!result) return json(200, { found: false, used: usedNow, limit });
+  if (!result) return json(200, { found: false, used: usedNow, limit, ...(credits ? { credits } : {}) });
   const artwork = result.apple_music?.artwork?.url?.replace("{w}", "600").replace("{h}", "600") ?? result.spotify?.album?.images?.[0]?.url ?? null;
   const youtube = videoFromLyricsMedia(result.lyrics?.media) ?? (await videoFromSongLink(result.song_link));
   return json(200, {
@@ -174,5 +193,6 @@ Deno.serve(async (req: Request) => {
     artwork,
     used: usedNow,
     limit,
+    ...(credits ? { credits } : {}),
   });
 });

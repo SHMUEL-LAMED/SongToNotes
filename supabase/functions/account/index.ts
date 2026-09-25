@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
       const mine = (table: string, column = "user_id") =>
         admin.from(table).select("*").eq(column, user.id);
 
-      const [profile, works, transcriptions, ringtones, shares, chats, files] = await Promise.all([
+      const [profile, works, transcriptions, ringtones, shares, chats, files, credits, creditHistory] = await Promise.all([
         admin.from("profiles").select("*").eq("id", user.id).maybeSingle(),
         mine("works"),
         mine("transcriptions"),
@@ -34,6 +34,9 @@ Deno.serve(async (req: Request) => {
         mine("shares"),
         mine("assistant_chats"),
         admin.storage.from(BUCKET).list(user.id, { limit: 1000 }),
+        // The addresses are kept only as salted hashes, and are of no use to anybody outside the site.
+        admin.from("credit_accounts").select("code, bonus, friends, referred_at, created_at").eq("user_id", user.id).maybeSingle(),
+        admin.from("credit_ledger").select("at, kind, action, delta, refunded").eq("user_id", user.id).order("at", { ascending: false }).limit(5000),
       ]);
 
       return json(200, {
@@ -50,6 +53,8 @@ Deno.serve(async (req: Request) => {
         ringtones: ringtones.data ?? [],
         shares: shares.data ?? [],
         chats: chats.data ?? [],
+        credits: credits.data ?? null,
+        creditHistory: creditHistory.data ?? [],
         files: (files.data ?? []).map((file) => ({
           name: file.name,
           size: (file.metadata as { size?: number } | null)?.size ?? 0,

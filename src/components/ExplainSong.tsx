@@ -1,6 +1,8 @@
 import { Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AiError, transformText } from "../lib/aiApi";
+import { useCredits } from "../lib/creditsContext";
+import { CreditCost } from "./CreditCost";
 import { langForModel } from "../lib/i18n";
 import { renderMarkdown } from "../lib/markdown";
 
@@ -17,6 +19,7 @@ type Props = {
  * progression in Roman numerals, what is unusual about it, and tips.
  */
 export function ExplainSong({ describe, songKey }: Props) {
+  const { rules } = useCredits();
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export function ExplainSong({ describe, songKey }: Props) {
         <div>
           <h2>תסביר לי את השיר</h2>
           <p>הסולם, המהלך, מה מיוחד בו וטיפים לנגינה, בשפה פשוטה. נשלח לשרת רק רצף האקורדים והמילים, לא השיר עצמו.</p>
+          <CreditCost cost={rules.prices.text} />
         </div>
         <button type="button" className={text ? "secondary-button" : "primary-button compact"} onClick={run} disabled={busy}>
           {text ? <RotateCcw size={16} /> : <Sparkles size={16} />}

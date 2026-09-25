@@ -65,6 +65,7 @@ import {
   toolLabel,
   weekdayLabel,
   type AdminAuditEntry,
+  type AdminCredits,
   type AdminSetting,
   type AdminSnapshot,
   type FeedbackEntry,
@@ -73,6 +74,7 @@ import {
   type ToolRow,
 } from "../lib/admin";
 import { useAuth } from "../lib/auth";
+import { PRICE_KEYS, PRICE_LABELS, entryLabel, type CreditRules } from "../lib/credits";
 import { downloadFile } from "../lib/export";
 import { TOOLS, findAnyTool } from "../lib/tools";
 import {
@@ -706,6 +708,7 @@ function SystemTab({
   onClean,
   onPrune,
   onResetUsage,
+  onCredits,
   orphans,
 }: {
   snapshot: AdminSnapshot;
@@ -723,6 +726,7 @@ function SystemTab({
   onClean: () => void;
   onPrune: () => void;
   onResetUsage: () => void;
+  onCredits: (patch: Record<string, unknown>) => void;
   orphans: { count: number; bytes: number } | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -781,6 +785,14 @@ function SystemTab({
         )}
       </Card>
 
+      <CreditsAdminCard
+        key={JSON.stringify(snapshot.credits.rules)}
+        credits={snapshot.credits}
+        days={snapshot.days}
+        busy={busy}
+        onSave={onCredits}
+      />
+
       <Card title="מכסות וצריכה" hint="היום מול התקרה היומית שהוגדרה" icon={<Gauge size={17} />}>
         <div className="meter-stack">
           {snapshot.quotas.map((quota) => (
@@ -798,7 +810,7 @@ function SystemTab({
             />
           ))}
           <div className="row-actions">
-            <ConfirmButton confirmLabel="לאפס את מכסות היום לכל החשבונות?" onConfirm={onResetUsage} disabled={busy}>
+            <ConfirmButton confirmLabel="לאפס את מכסות היום ואת הקרדיטים היומיים לכל החשבונות?" onConfirm={onResetUsage} disabled={busy}>
               <RefreshCw size={15} /> איפוס מכסות היום
             </ConfirmButton>
           </div>
@@ -981,6 +993,195 @@ function SystemTab({
         )}
       </Card>
     </div>
+  );
+}
+
+/* --------------------------------------------------------------- credits */
+
+type CreditField = { key: keyof Omit<CreditRules, "enabled" | "prices">; server: string; label: string; hint: string };
+
+const CREDIT_FIELDS: CreditField[] = [
+  { key: "daily", server: "daily", label: "קצבה יומית לכל חשבון", hint: "מתחדשת בחצות, שעון ישראל" },
+  { key: "signupBonus", server: "signup_bonus", label: "בונוס על חבר שמצטרף", hint: "פעם אחת, למי שהזמין" },
+  { key: "friendDaily", server: "friend_daily", label: "תוספת יומית לכל חבר", hint: "לתמיד, לקצבה של מי שהזמין" },
+  { key: "friendDailyMax", server: "friend_daily_max", label: "תקרת התוספת היומית", hint: "הכי הרבה שחברים מוסיפים ביום" },
+  { key: "welcomeBonus", server: "welcome_bonus", label: "מתנת הצטרפות", hint: "לחבר החדש שהגיע דרך הזמנה" },
+  { key: "visitBonus", server: "visit_bonus", label: "על כניסה חדשה לקישור", hint: "כל אדם נספר פעם אחת" },
+  { key: "visitDailyMax", server: "visit_daily_max", label: "תקרת כניסות מתוגמלות ביום", hint: "לכל קישור" },
+  { key: "signupDailyMax", server: "signup_daily_max", label: "תקרת בונוסי הצטרפות ביום", hint: "נגד חשבונות שנפתחים רק בשביל הבונוס" },
+  { key: "claimHours", server: "claim_hours", label: "שעות לציון חבר אחרי ההרשמה", hint: "למי שנרשם ממכשיר אחר" },
+];
+
+/**
+ * The credit rules, and how credits moved across the site in the range — in
+ * totals only, never whose, like everything else on this page.
+ */
+function CreditsAdminCard({
+  credits,
+  days,
+  busy,
+  onSave,
+}: {
+  credits: AdminCredits;
+  days: number;
+  busy: boolean;
+  onSave: (patch: Record<string, unknown>) => void;
+}) {
+  const rules = credits.rules;
+  const stats = credits.stats;
+  // The drafts start from the server's numbers; a save remounts the card by its key.
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    rules
+      ? Object.fromEntries([
+          ...CREDIT_FIELDS.map((field) => [field.key, String(rules[field.key])]),
+          ...PRICE_KEYS.map((key) => [`price:${key}`, String(rules.prices[key])]),
+        ])
+      : {},
+  );
+
+  if (!rules) {
+    return (
+      <Card title="קרדיטים והזמנת חברים" hint="אין עדיין נתונים מהשרת" icon={<Zap size={17} />} wide>
+        <p className="admin-empty">
+          השרת לא החזיר את כללי הקרדיטים: פונקציית הניהול עוד לא עודכנה, או ש־supabase/credits.sql לא הורץ בפרויקט.
+        </p>
+      </Card>
+    );
+  }
+
+  const changed =
+    CREDIT_FIELDS.some((field) => draft[field.key] !== String(rules[field.key])) ||
+    PRICE_KEYS.some((key) => draft[`price:${key}`] !== String(rules.prices[key]));
+  const valid = Object.values(draft).every((value) => /^\d{1,6}$/.test(value.trim()));
+
+  const save = () => {
+    const patch: Record<string, unknown> = {};
+    for (const field of CREDIT_FIELDS) patch[field.server] = Number(draft[field.key]);
+    patch.prices = Object.fromEntries(PRICE_KEYS.map((key) => [key, Number(draft[`price:${key}`])]));
+    onSave(patch);
+  };
+
+  const granted = stats?.granted ?? {};
+  return (
+    <Card
+      title="קרדיטים והזמנת חברים"
+      hint="כמה עולה כל פעולת שרת, כמה מקבלים — ואיך הקרדיטים זזים באתר"
+      icon={<Zap size={17} />}
+      wide
+    >
+      <label className="switch-row credits-admin-switch">
+        <input type="checkbox" checked={rules.enabled} disabled={busy} onChange={(event) => onSave({ enabled: event.target.checked })} />
+        <span>
+          <b>קרדיטים פעילים</b>
+          <small>כבוי: פעולות השרת לא נגבות ולא נחסמות, והאתר לא מזכיר קרדיטים. המכסות היומיות של כל כלי ממשיכות לחול.</small>
+        </span>
+      </label>
+
+      {stats && (
+        <div className="credits-admin-figures">
+          <div>
+            <span>נוצלו היום</span>
+            <b>{formatNumber(stats.spentToday)}</b>
+          </div>
+          <div>
+            <span>{`נוצלו ב־${days} ימים`}</span>
+            <b>{compactNumber(stats.spent)}</b>
+          </div>
+          <div>
+            <span>כניסות לקישורים</span>
+            <b>{formatNumber(stats.visits)}</b>
+            <small>{`${formatNumber(stats.visitsRewarded)} זיכו בקרדיט`}</small>
+          </div>
+          <div>
+            <span>הצטרפו דרך חברים</span>
+            <b>{formatNumber(stats.referred)}</b>
+            <small>{`${formatNumber(stats.referredTotal)} מאז ההתחלה`}</small>
+          </div>
+          <div>
+            <span>בונוס שמחכה בחשבונות</span>
+            <b>{compactNumber(stats.bonusOutstanding)}</b>
+            <small>{`ב־${formatNumber(stats.accounts)} חשבונות`}</small>
+          </div>
+          <div>
+            <span>החזרים על כשלים</span>
+            <b>{formatNumber(stats.refunds)}</b>
+          </div>
+        </div>
+      )}
+
+      {stats && (
+        <div className="credits-admin-split">
+          <div>
+            <h3>על מה הלכו הקרדיטים</h3>
+            <BarList
+              rows={stats.byAction.map((row) => ({
+                key: row.action,
+                label: entryLabel({ kind: "spend", action: row.action, detail: {} }),
+                value: row.credits,
+                hint: `${formatNumber(row.count)} פעולות`,
+              }))}
+              unit="קרדיטים"
+              empty="עדיין לא נוצלו קרדיטים בטווח"
+            />
+          </div>
+          <div>
+            <h3>מה ניתן במתנה</h3>
+            <BarList
+              rows={[
+                { key: "signup", label: "על חברים שהצטרפו", value: granted.signup ?? 0 },
+                { key: "welcome", label: "מתנות הצטרפות", value: granted.welcome ?? 0 },
+                { key: "visit", label: "על כניסות לקישורים", value: granted.visit ?? 0 },
+              ].filter((row) => row.value > 0)}
+              unit="קרדיטים"
+              empty="עדיין לא ניתנו קרדיטים בטווח"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="credits-admin-form">
+        <h3>הכללים</h3>
+        <div className="credits-admin-fields">
+          {CREDIT_FIELDS.map((field) => (
+            <label key={field.key} className="credits-admin-field">
+              <span>{field.label}</span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={draft[field.key] ?? ""}
+                disabled={busy}
+                onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+              />
+              <small>{field.hint}</small>
+            </label>
+          ))}
+        </div>
+        <h3>המחירון</h3>
+        <div className="credits-admin-fields">
+          {PRICE_KEYS.map((key) => (
+            <label key={key} className="credits-admin-field">
+              <span>{PRICE_LABELS[key].title}</span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={draft[`price:${key}`] ?? ""}
+                disabled={busy}
+                onChange={(event) => setDraft((current) => ({ ...current, [`price:${key}`]: event.target.value }))}
+              />
+              <small>{PRICE_LABELS[key].unit}</small>
+            </label>
+          ))}
+        </div>
+        <div className="row-actions">
+          <button type="button" className="primary-button compact" disabled={busy || !changed || !valid} onClick={save}>
+            שמירת הכללים
+          </button>
+          {!valid && <small className="admin-muted">כל ערך צריך להיות מספר שלם, 0 או יותר.</small>}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -1291,6 +1492,16 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     [act, load, days],
   );
 
+  const onCredits = useCallback(
+    (patch: Record<string, unknown>) =>
+      void act(async () => {
+        await runAdminAction("credits.set", patch);
+        setNote("כללי הקרדיטים נשמרו. הם חלים מהפעולה הבאה של כל גולש.");
+        await load(days);
+      }),
+    [act, load, days],
+  );
+
   const openTool = useCallback((tool: string) => {
     setFocusTool(tool);
     setTab("tools");
@@ -1437,6 +1648,7 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
           onClean={onClean}
           onPrune={onPrune}
           onResetUsage={onResetUsage}
+          onCredits={onCredits}
           orphans={orphans}
         />
       )}

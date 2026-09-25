@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AiError, chatStream, type AssistantMode, type ChatMessage } from "../lib/aiApi";
+import { creditsLabel } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import {
   describeCatalog,
   describeState,
@@ -281,6 +283,7 @@ type Confirmation = { call: ActionCall; spec: ActionSpec; resolve: (approved: bo
 
 function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle }: Props) {
   const { user, signInWithGoogle } = useAuth();
+  const { rules: creditRules } = useCredits();
   const userId = user?.id ?? null;
   // The thread on screen, and the rest of them. This device's copy is read
   // synchronously, so a refresh comes back to the conversation rather than
@@ -1141,7 +1144,12 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                 >
                   {listening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
-                <small className="assistant-hint">Enter לשליחה · Shift+Enter לשורה חדשה</small>
+                <small className="assistant-hint">
+                  Enter לשליחה · Shift+Enter לשורה חדשה
+                  {creditRules.enabled && creditRules.prices.assistant > 0 && (
+                    <span className="assistant-cost">{` · ${creditsLabel(creditRules.prices.assistant)} להודעה`}</span>
+                  )}
+                </small>
                 {busy ? (
                   <button type="button" className="assistant-send is-stop" onClick={stop} aria-label="עצור" title="עצור">
                     <Square size={15} />

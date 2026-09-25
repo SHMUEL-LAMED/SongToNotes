@@ -18,8 +18,13 @@
  *                        which is how Demucs asks for all the parts. Another
  *                        model spells that differently, so set it here.
  *   SEPARATION_DAILY     songs per account per day, default 12
+ *
+ * A separation is paid for in credits — the "separate" price
+ * (supabase/credits.sql) — when the job is asked for. If the upload or the
+ * provider fails, or the job itself ends in failure, the credits come back.
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
+import { charge, creditSummary, noteCharge, refund, refundJob, refused } from "../_shared/credits.ts";
 
 const BUCKET = "works";
 const MAX_BYTES = 60 * 1024 * 1024;
@@ -124,6 +129,8 @@ Deno.serve(async (req) => {
     }
     if (prediction.status === "failed" || prediction.status === "canceled") {
       console.error("separation failed", prediction.error, (prediction.logs ?? "").slice(-300));
+      // Nobody pays for a separation that did not happen; the refund is once only.
+      await refundJob(admin, user, id);
       return json(200, { status: "failed", message: String(prediction.error ?? "").slice(0, 200) });
     }
     // A rough sense of progress from the model's own log lines, when it prints percentages.
@@ -172,18 +179,25 @@ Deno.serve(async (req) => {
   const mode = form.get("mode") === "stems" ? "stems" : "vocals";
   const input = mode === "stems" ? stemsExtra : extra;
 
+  const paid = await charge(admin, user, "separate", "separate", 1, { mode });
+  if (!paid.ok) return refused(paid);
+  const fail = async (status: number, reply: Record<string, unknown>) => {
+    await refund(admin, user, paid);
+    return json(status, reply);
+  };
+
   const extension = (file.name.split(".").pop() ?? "").toLowerCase();
   const contentType = MIME[extension] ?? (MIME[file.type.split("/")[1] ?? ""] ?? "audio/mpeg");
   const path = `${user.id}/separate/${crypto.randomUUID()}.${MIME[extension] ? extension : "bin"}`;
   const upload = await admin.storage.from(BUCKET).upload(path, await file.arrayBuffer(), { contentType });
   if (upload.error) {
     console.error("upload failed", upload.error);
-    return json(502, { error: "storage" });
+    return await fail(502, { error: "storage" });
   }
   const signed = await admin.storage.from(BUCKET).createSignedUrl(path, 3600);
   if (signed.error || !signed.data?.signedUrl) {
     console.error("signing failed", signed.error);
-    return json(502, { error: "storage" });
+    return await fail(502, { error: "storage" });
   }
 
   const [owner, name] = model.split("/");
@@ -195,17 +209,19 @@ Deno.serve(async (req) => {
     console.error("separation service unreachable", caught);
     return null;
   });
-  if (!response) return json(502, { error: "provider_unreachable" });
+  if (!response) return await fail(502, { error: "provider_unreachable" });
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 400);
     console.error("separation service refused", response.status, detail);
     await admin.storage.from(BUCKET).remove([path]);
-    if (response.status === 401 || response.status === 403) return json(502, { error: "provider_key" });
-    if (response.status === 402) return json(502, { error: "provider_credit" });
-    if (response.status === 429) return json(502, { error: "provider_busy" });
-    return json(502, { error: "provider_error", status: response.status });
+    if (response.status === 401 || response.status === 403) return await fail(502, { error: "provider_key" });
+    if (response.status === 402) return await fail(502, { error: "provider_credit" });
+    if (response.status === 429) return await fail(502, { error: "provider_busy" });
+    return await fail(502, { error: "provider_error", status: response.status });
   }
   const prediction = (await response.json()) as { id: string };
+  // The entry remembers its job, so a job that fails later is refunded.
+  await noteCharge(admin, paid, { job: prediction.id });
   const total = await recordUsage(admin, user.id, "separation", 1);
-  return json(200, { id: prediction.id, path, used: total, limit });
+  return json(200, { id: prediction.id, path, used: total, limit, credits: creditSummary(paid) });
 });

@@ -12,6 +12,7 @@
  * account, no title and no file name, because the rows it is counted from
  * never had any. Nothing here can be turned back into a person, by design.
  */
+import { normalizeRules, type CreditRules } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
 import { ALL_TOOLS } from "./tools";
 
@@ -113,6 +114,29 @@ export type ControlState = {
   disabledTools: string[];
 };
 
+/** How credits moved across the site in the range — totals only, never whose. */
+export type CreditStats = {
+  /** Accounts that have a credits row (every account that signed in since credits began). */
+  accounts: number;
+  /** New accounts that joined through a friend's link, in the range and ever. */
+  referred: number;
+  referredTotal: number;
+  /** Visits through somebody's link, and how many of them earned a credit. */
+  visits: number;
+  visitsRewarded: number;
+  /** Earned credits waiting in accounts, site-wide. */
+  bonusOutstanding: number;
+  spentToday: number;
+  spent: number;
+  refunds: number;
+  /** Credits given, by why: visit, signup, welcome, grant. */
+  granted: Record<string, number>;
+  byAction: { action: string; credits: number; count: number }[];
+  daily: { day: string; spent: number }[];
+};
+
+export type AdminCredits = { rules: CreditRules | null; stats: CreditStats | null };
+
 export type AdminSnapshot = {
   generatedAt: string;
   days: number;
@@ -123,6 +147,8 @@ export type AdminSnapshot = {
   quotas: QuotaRow[];
   alerts: Alert[];
   control: ControlState;
+  /** Absent from a server that predates credits. */
+  credits: AdminCredits;
 };
 
 export type AdminSetting = {
@@ -326,6 +352,38 @@ export function normalizeSnapshot(raw: Record<string, unknown>): AdminSnapshot {
       };
     }),
     control: normalizeControlState(raw.control),
+    credits: normalizeAdminCredits(raw.credits),
+  };
+}
+
+export function normalizeAdminCredits(raw: unknown): AdminCredits {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const stats = row.stats && typeof row.stats === "object" ? (row.stats as Record<string, unknown>) : null;
+  const granted = (stats?.granted ?? {}) as Record<string, unknown>;
+  return {
+    rules: row.settings && typeof row.settings === "object" ? normalizeRules(row.settings) : null,
+    stats: stats
+      ? {
+          accounts: num(stats.accounts),
+          referred: num(stats.referred),
+          referredTotal: num(stats.referred_total),
+          visits: num(stats.visits),
+          visitsRewarded: num(stats.visits_rewarded),
+          bonusOutstanding: num(stats.bonus_outstanding),
+          spentToday: num(stats.spent_today),
+          spent: num(stats.spent),
+          refunds: num(stats.refunds),
+          granted: Object.fromEntries(Object.entries(granted).map(([key, value]) => [key, num(value)])),
+          byAction: (Array.isArray(stats.by_action) ? stats.by_action : []).map((item) => {
+            const entry = item as Record<string, unknown>;
+            return { action: String(entry.action ?? ""), credits: num(entry.credits), count: num(entry.count) };
+          }),
+          daily: (Array.isArray(stats.daily) ? stats.daily : []).map((item) => {
+            const entry = item as Record<string, unknown>;
+            return { day: String(entry.day ?? ""), spent: num(entry.spent) };
+          }),
+        }
+      : null,
   };
 }
 
@@ -420,11 +478,13 @@ export type AdminAction =
   | "files.scan"
   | "files.clean"
   | "events.prune"
-  | "usage.reset";
+  | "usage.reset"
+  | "credits.set";
 
 export type AdminResult = {
   ok: boolean;
   control?: unknown;
+  credits?: unknown;
   checks?: HealthCheck[];
   orphans?: { count: number; bytes: number };
   removed?: number;
@@ -575,6 +635,7 @@ const ACTION_LABELS: Record<string, string> = {
   "files.clean": "ניקוי קבצים יתומים",
   "events.prune": "מחיקת מדידות ישנות",
   "usage.reset": "איפוס מכסות היום",
+  "credits.set": "שינוי כללי הקרדיטים",
 };
 
 export function actionLabel(action: string) {

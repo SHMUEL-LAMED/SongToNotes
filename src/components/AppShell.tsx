@@ -13,12 +13,14 @@ import {
   Star,
   UserRound,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren } from "react";
 import { useAuth } from "../lib/auth";
 import { useFavorites } from "../lib/prefs";
 import type { ThemePreference } from "../lib/theme";
 import { CATEGORY_LABELS, CATEGORY_ORDER, TOOLS, findTool, type ToolDefinition } from "../lib/tools";
+import { CreditsPill } from "./CreditsPill";
 import { Logo } from "./Logo";
 import { LanguageMenu } from "./LanguageMenu";
 import { ThemeToggle } from "./ThemeToggle";
@@ -39,6 +41,8 @@ type Props = PropsWithChildren<{
   onOpenPalette: () => void;
   onOpenShortcuts: () => void;
   onOpenShare: () => void;
+  /** The page about credits and the private link. */
+  onOpenCredits: () => void;
 }>;
 
 /**
@@ -62,6 +66,7 @@ export function AppShell({
   onOpenPalette,
   onOpenShortcuts,
   onOpenShare,
+  onOpenCredits,
   children,
 }: Props) {
   const { user, profile } = useAuth();
@@ -102,6 +107,7 @@ export function AppShell({
 
   const me = route === "me" || route.startsWith("me/");
   const home = route === "home";
+  const credits = route === "credits";
   const pinned = favorites.map(findTool).filter((item): item is ToolDefinition => Boolean(item));
 
   const toolItem = (item: ToolDefinition, keyPrefix = "") => {
@@ -169,6 +175,11 @@ export function AppShell({
                 <UserRound size={17} /> <span className="nav-label">האזור האישי</span>
               </button>
             </li>
+            <li>
+              <button type="button" className={`nav-item ${credits ? "is-current" : ""}`} onClick={() => go("credits")} aria-current={credits ? "page" : undefined}>
+                <Zap size={17} /> <span className="nav-label">קרדיטים והזמנת חברים</span>
+              </button>
+            </li>
             {owner && (
               <li>
                 <button type="button" className={`nav-item ${route === "admin" ? "is-current" : ""}`} onClick={() => go("admin")}>
@@ -200,7 +211,7 @@ export function AppShell({
         <div className="sidebar-foot">
           <p className="sidebar-note">
             <LockKeyhole size={14} />
-            <span>רוב הכלים עובדים כולם בדפדפן. תמלול, מילים והקראה נעזרים בשרת.</span>
+            <span>רוב הכלים עובדים כולם בדפדפן, חינם. כלים שנעזרים בשרת משתמשים בקרדיטים — וכל יום מקבלים חדשים.</span>
           </p>
         </div>
       </aside>
@@ -265,6 +276,7 @@ export function AppShell({
                 <LockKeyhole size={14} /> הקובץ נשאר אצלך
               </span>
             )}
+            <CreditsPill current={credits} onOpen={onOpenCredits} />
             <button type="button" className="share-site-button" onClick={onOpenShare} aria-label="שיתוף האתר" title="שיתוף האתר עם חברים">
               <Share2 size={16} />
               <span>שיתוף</span>

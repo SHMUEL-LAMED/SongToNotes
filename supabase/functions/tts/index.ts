@@ -12,8 +12,13 @@
  *   TTS_MODEL      default playai-tts on Groq, tts-1 elsewhere
  *   TTS_VOICE      default Fritz-PlayAI on Groq, alloy elsewhere
  *   TTS_DAILY_CHARS  default 60000
+ *
+ * A recording is paid for in credits: the "tts" price for every 1,000
+ * characters (supabase/credits.sql), given back if the voice service fails.
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
+import { charge, creditHeaders, refund, refused } from "../_shared/credits.ts";
+import { ttsUnits } from "../_shared/pricing.ts";
 
 const MAX_CHARS = 4000;
 const DEFAULT_DAILY = 60_000;
@@ -51,6 +56,13 @@ Deno.serve(async (req: Request) => {
   const { used } = await usedToday(admin, user.id, "tts");
   if (used + text.length > limit) return json(429, { error: "quota", used, limit });
 
+  const paid = await charge(admin, user, "tts", "tts", ttsUnits(text.length));
+  if (!paid.ok) return refused(paid);
+  const fail = async (status: number, reply: Record<string, unknown>) => {
+    await refund(admin, user, paid);
+    return json(status, reply);
+  };
+
   let response: Response;
   try {
     response = await fetch(`${base}/audio/speech`, {
@@ -60,16 +72,16 @@ Deno.serve(async (req: Request) => {
     });
   } catch (caught) {
     console.error("speech service unreachable", caught);
-    return json(502, { error: "provider_unreachable" });
+    return await fail(502, { error: "provider_unreachable" });
   }
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 300);
     console.error("speech service refused", response.status, detail);
-    if (response.status === 401 || response.status === 403) return json(502, { error: "provider_key" });
-    if (response.status === 429) return json(502, { error: "provider_busy" });
+    if (response.status === 401 || response.status === 403) return await fail(502, { error: "provider_key" });
+    if (response.status === 429) return await fail(502, { error: "provider_busy" });
     // A language the voice does not speak comes back as a validation error.
-    if (response.status === 400 || response.status === 422) return json(422, { error: "unsupported_language", detail });
-    return json(502, { error: "provider_error", status: response.status });
+    if (response.status === 400 || response.status === 422) return await fail(422, { error: "unsupported_language", detail });
+    return await fail(502, { error: "provider_error", status: response.status });
   }
   const bytes = await response.arrayBuffer();
   await recordUsage(admin, user.id, "tts", text.length);
@@ -79,6 +91,7 @@ Deno.serve(async (req: Request) => {
       "Content-Type": format === "wav" ? "audio/wav" : "audio/mpeg",
       "X-Voice": voice,
       "X-Model": model,
+      ...creditHeaders(paid),
     },
   });
 });

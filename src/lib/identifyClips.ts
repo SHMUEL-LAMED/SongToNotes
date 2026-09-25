@@ -6,6 +6,7 @@
  * the way in, and about 65%. "Try another part" moves to other places.
  */
 import { AiError, describeAiError, type Identification } from "./aiApi";
+import { announceCredits, announceEmpty } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
 import { encodeWav } from "./wav";
 
@@ -122,10 +123,12 @@ export async function identifyClip(clip: Blob, session: string, signal?: AbortSi
     if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", describeAiError("cancelled"));
     throw new AiError("network", describeAiError("network"));
   }
-  const body = (await response.json().catch(() => null)) as (Identification & { error?: string }) | null;
+  const body = (await response.json().catch(() => null)) as (Identification & { error?: string; credits?: unknown }) | null;
   if (!response.ok || !body) {
     const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
+    if (code === "credits") announceEmpty(body?.credits);
     throw new AiError(code, code === "session_limit" ? "הזיהוי הזה כבר ניסה את כל הקטעים שלו. לחץ על „נסה שוב בקטע אחר”." : describeAiError(code, response.status));
   }
+  if (body.credits) announceCredits(body.credits);
   return body;
 }
