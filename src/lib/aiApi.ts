@@ -394,6 +394,16 @@ export function identifyAvailability(signal?: AbortSignal) {
   return call<{ configured: boolean }>("identify", { method: "GET", query: { availability: "1" }, signal });
 }
 
+/**
+ * The song's video, looked up again from its page on AudD (lis.tn) — for an
+ * identification whose page did not answer in time. Free, and null when the
+ * page has no video.
+ */
+export async function findSongVideo(songPage: string, signal?: AbortSignal) {
+  const { youtube } = await call<{ youtube?: unknown }>("identify", { method: "GET", query: { video: songPage }, signal });
+  return typeof youtube === "string" ? youtube : null;
+}
+
 /** Asks the recognition service about a clip of a few seconds. */
 export function identifySong(clip: Blob, signal?: AbortSignal) {
   const form = new FormData();

@@ -820,6 +820,21 @@
 .identify-video iframe, .identify-video-still { display: block; width: 100%; height: 100%; border: 0; }
 .identify-video-still { position: relative; padding: 0; background: #000; cursor: pointer; }
 .identify-video-still:focus-visible { outline-offset: -4px; }
+.identify-video-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 18px;
+  text-align: center;
+  color: #fff;
+  background: radial-gradient(120% 90% at 50% 0%, #2a2733, #0d0c12);
+}
+.identify-video-failed strong { font-size: 17px; }
+.identify-video-failed p { margin: 0; max-width: 46ch; font-size: 13.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.72); }
+.identify-video-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
 .identify-video-still img { width: 100%; height: 100%; object-fit: cover; opacity: 0.85; transition: opacity 0.2s var(--ease); }
 .identify-video-still:hover img, .identify-video-still:focus-visible img { opacity: 1; }
 .identify-video-still span {
