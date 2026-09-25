@@ -928,6 +928,9 @@ input[type="radio"] { accent-color: var(--accent); }
 .piano-roll { display: block; cursor: pointer; }
 
 .note-table-wrap { max-height: 460px; overflow: auto; border-radius: var(--radius); border: 1px solid var(--line); }
+/* Guitar tabs: a fixed-width page, scrolled sideways on a phone rather than wrapped. */
+.tab-sheet-wrap { max-height: 520px; overflow: auto; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.tab-sheet { margin: 0; padding: 16px 18px; font-family: var(--font-mono); font-size: 13.5px; line-height: 1.45; white-space: pre; color: var(--text); tab-size: 4; }
 .note-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .note-table th,
 .note-table td { padding: 9px 12px; text-align: start; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
