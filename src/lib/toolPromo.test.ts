@@ -4,8 +4,7 @@ import {
   PROMO_AFTER_MS,
   REST_ALL_AFTER_DISMISS_MS,
   REST_TOOL_AFTER_DISMISS_MS,
-  REST_TOOL_AFTER_USE_MS,
-  afterOutcome,
+  afterDismiss,
   afterShown,
   parseState,
   pickPromo,
@@ -46,7 +45,7 @@ describe("when one rises", () => {
   });
 
   it("not for a day after 'not now'", () => {
-    const state = afterOutcome(fresh(), "ringtone", "dismissed", now);
+    const state = afterDismiss(fresh(), "ringtone", now);
     expect(state.pauseAll - now).toBe(REST_ALL_AFTER_DISMISS_MS);
     expect(promoDue({ spent: PROMO_AFTER_MS, state, shownThisVisit: false, now: state.pauseAll - 1 })).toBe(false);
     expect(promoDue({ spent: PROMO_AFTER_MS, state, shownThisVisit: false, now: state.pauseAll })).toBe(true);
@@ -73,28 +72,31 @@ describe("which one", () => {
     expect(pickPromo(fresh(), now, () => true)).toBeNull();
   });
 
-  it("skips a tool that was opened this past month, or closed these two weeks", () => {
-    const used = afterOutcome(fresh(), PROMOS[0].tool, "used", now);
-    expect(used.rest[PROMOS[0].tool] - now).toBe(REST_TOOL_AFTER_USE_MS);
-    expect(used.pauseAll).toBe(0);
-    expect(PROMOS[pickPromo(used, now, none)!].tool).toBe(PROMOS[1].tool);
-    expect(PROMOS[pickPromo(used, now + REST_TOOL_AFTER_USE_MS, none)!].tool).toBe(PROMOS[0].tool);
-
-    const closed = afterOutcome(fresh(), PROMOS[0].tool, "dismissed", now);
-    expect(closed.rest[PROMOS[0].tool] - now).toBe(REST_TOOL_AFTER_DISMISS_MS);
-    expect(PROMOS[pickPromo(closed, now, none)!].tool).toBe(PROMOS[1].tool);
+  it("brings a tool back in its turn after it was taken, the visitor's own tools too", () => {
+    // Taking an invitation only moves the turns on; the tool comes round again.
+    let state = afterShown(fresh(), 0);
+    for (let visit = 1; visit < PROMOS.length; visit += 1) state = afterShown(state, pickPromo(state, now, none)!);
+    expect(PROMOS[pickPromo(state, now, none)!].tool).toBe(PROMOS[0].tool);
+    expect(state.rest).toEqual({});
   });
 
-  it("has nothing to offer to a visitor who uses them all", () => {
+  it("skips a tool closed these two weeks, then offers it again", () => {
+    const closed = afterDismiss(fresh(), PROMOS[0].tool, now);
+    expect(closed.rest[PROMOS[0].tool] - now).toBe(REST_TOOL_AFTER_DISMISS_MS);
+    expect(PROMOS[pickPromo(closed, now, none)!].tool).toBe(PROMOS[1].tool);
+    expect(PROMOS[pickPromo(closed, now + REST_TOOL_AFTER_DISMISS_MS, none)!].tool).toBe(PROMOS[0].tool);
+  });
+
+  it("has nothing to offer once every invitation was closed", () => {
     let state = fresh();
-    for (const promo of PROMOS) state = afterOutcome(state, promo.tool, "used", now);
+    for (const promo of PROMOS) state = afterDismiss(state, promo.tool, now);
     expect(pickPromo(state, now, none)).toBeNull();
   });
 });
 
 describe("what the device remembers", () => {
   it("reads back what it wrote, and forgets what it cannot read", () => {
-    const state = afterShown(afterOutcome(fresh(), "vocals", "dismissed", now), 2);
+    const state = afterShown(afterDismiss(fresh(), "vocals", now), 2);
     expect(parseState(JSON.stringify(state))).toEqual(state);
     expect(parseState(null)).toEqual(fresh());
     expect(parseState("not json")).toEqual(fresh());
