@@ -6,11 +6,11 @@
  * in the background does not count — and the tools take turns from one visit
  * to the next.
  *
- * It never rises over a dialog, beside the request to share the site, in the
- * admin area or on a closed site, and it never suggests the tool on screen, a
- * tool that is switched off, or one this visitor opened in the past month:
- * whoever already uses a tool needs no invitation to it. "Not now" rests that
- * tool for two weeks, and every invitation for a day.
+ * Tools the visitor already knows take their turn too — a reminder of a tool
+ * one used once is as welcome as a first look. It never rises over a dialog,
+ * beside the request to share the site, in the admin area or on a closed site,
+ * and it never suggests the tool on screen or a tool that is switched off.
+ * "Not now" rests that tool for two weeks, and every invitation for a day.
  */
 import { useCallback, useEffect, useState } from "react";
 import { advanceClock, type PromptClock } from "./siteShare";
@@ -135,27 +135,26 @@ export const PROMO_AFTER_MS = 40_000;
 export const REST_TOOL_AFTER_DISMISS_MS = 14 * DAY_MS;
 /** How long every invitation rests after "not now". */
 export const REST_ALL_AFTER_DISMISS_MS = DAY_MS;
-/** How long a tool's invitation rests once the tool was opened. */
-export const REST_TOOL_AFTER_USE_MS = 30 * DAY_MS;
 const TICK_MS = 5_000;
 
-/** What this device remembers: the turns, and what rests until when. */
-const STATE_KEY = "musictools.tool-promos.v1";
+/**
+ * What this device remembers: the turns, and what rests until when. (v1 also
+ * rested the tools a visitor had opened; v2 starts afresh without that.)
+ */
+const STATE_KEY = "musictools.tool-promos.v2";
 /** Time on screen in this visit — per tab, so a reload keeps it. */
 const SPENT_KEY = "musictools.tool-promos.spent.v1";
 /** Whether an invitation already rose in this visit. */
 const SHOWN_KEY = "musictools.tool-promos.shown.v1";
 
 export type PromoState = {
-  /** Until when each tool's invitation rests. */
+  /** Until when each tool's invitation rests, after "not now". */
   rest: Record<string, number>;
   /** Until when every invitation rests. */
   pauseAll: number;
   /** The place in the turns: the next invitation to try. */
   next: number;
 };
-
-export type PromoOutcome = "dismissed" | "used";
 
 /* ---- when and which: pure, so the timing and the turns are testable ---- */
 
@@ -217,13 +216,16 @@ export function afterShown(state: PromoState, index: number): PromoState {
   return { ...state, next: (index + 1) % PROMOS.length };
 }
 
-/** A tool was opened, or its invitation closed: it rests, and "not now" rests them all a day. */
-export function afterOutcome(state: PromoState, tool: string, outcome: PromoOutcome, now: number): PromoState {
-  const until = now + (outcome === "used" ? REST_TOOL_AFTER_USE_MS : REST_TOOL_AFTER_DISMISS_MS);
+/**
+ * "Not now": that tool rests two weeks, and every invitation a day. It is the
+ * only thing that rests an invitation — opening a tool, from its invitation or
+ * any other way, leaves it in the turns.
+ */
+export function afterDismiss(state: PromoState, tool: string, now: number): PromoState {
   return {
     ...state,
-    rest: { ...state.rest, [tool]: Math.max(state.rest[tool] ?? 0, until) },
-    pauseAll: outcome === "dismissed" ? Math.max(state.pauseAll, now + REST_ALL_AFTER_DISMISS_MS) : state.pauseAll,
+    rest: { ...state.rest, [tool]: Math.max(state.rest[tool] ?? 0, now + REST_TOOL_AFTER_DISMISS_MS) },
+    pauseAll: Math.max(state.pauseAll, now + REST_ALL_AFTER_DISMISS_MS),
   };
 }
 
@@ -252,8 +254,8 @@ function writeState(state: PromoState) {
   }
 }
 
-function record(tool: string, outcome: PromoOutcome) {
-  writeState(afterOutcome(readState(), tool, outcome, Date.now()));
+function recordDismiss(tool: string) {
+  writeState(afterDismiss(readState(), tool, Date.now()));
 }
 
 function readShown() {
@@ -308,11 +310,6 @@ export function useToolPromo({
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const off = disabledTools.join(",");
 
-  // Opening a tool, whichever way, is what an invitation to it would be for.
-  useEffect(() => {
-    if (current && PROMOS.some((promo) => promo.tool === current)) record(current, "used");
-  }, [current]);
-
   useEffect(() => {
     const disabled = new Set(off ? off.split(",") : []);
     const unavailable = (tool: string) => !findTool(tool) || disabled.has(tool);
@@ -340,16 +337,15 @@ export function useToolPromo({
 
   const promo = openIndex === null ? null : PROMOS[openIndex];
 
-  /** The visitor took the invitation: its tool rests a month. Returns the tool to open. */
+  /** The visitor took the invitation. Returns the tool to open; it keeps its turn. */
   const accept = useCallback(() => {
-    if (promo) record(promo.tool, "used");
     setOpenIndex(null);
     return promo?.tool ?? null;
   }, [promo]);
 
   /** "Not now": this tool rests two weeks, and every invitation a day. */
   const dismiss = useCallback(() => {
-    if (promo) record(promo.tool, "dismissed");
+    if (promo) recordDismiss(promo.tool);
     setOpenIndex(null);
   }, [promo]);
 
