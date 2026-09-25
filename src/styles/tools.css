@@ -748,7 +748,11 @@
 .identify-text p { margin: 0; color: var(--text-soft); }
 .identify-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .identify-links a { display: inline-flex; align-items: center; gap: 4px; }
+/* The play mark as a glyph in the chip's colour, not as an emoji. */
+.identify-youtube [aria-hidden] { font-variant-emoji: text; }
 .identify-history ul { margin: 6px 0 0; padding-inline-start: 18px; color: var(--text-soft); font-size: 14px; }
+.identify-history li + li { margin-top: 4px; }
+.identify-history .identify-youtube { margin-inline-start: 8px; padding: 2px 10px; font-size: 12px; vertical-align: middle; }
 
 /* ---- the public share page ---- */
 
