@@ -31,7 +31,7 @@ const MESSAGES: Record<string, string> = {
   storage: "לא הצלחנו להעלות את הקובץ לשרת. נסה שוב.",
   network: "החיבור לשרת נכשל. בדוק את האינטרנט ונסה שוב.",
   cancelled: "בוטל.",
-  unsupported_language: "הקול שמוגדר בשרת לא מדבר בשפה הזאת. אפשר להקשיב בדפדפן, או שמנהל האתר יגדיר ספק עם עברית (TTS_*).",
+  timeout: "השירות לא סיים בזמן. נסה שוב, או שלח טקסט קצר יותר.",
   not_found: "לא זוהה שיר בקטע הזה. נסה קטע ארוך יותר או ברור יותר.",
 };
 
@@ -344,7 +344,15 @@ export async function separateOnServer(
 // Text to speech
 // ---------------------------------------------------------------------------
 
-/** A spoken recording of the text, as a file, from the server's voice. */
+/** What a visitor sees when the server has no voice yet: what the site needs, and what works meanwhile. */
+const NO_VOICE =
+  "הקראה לקובץ עדיין לא הופעלה באתר. מנהל האתר צריך להוסיף מפתח של Google Gemini (GEMINI_API_KEY), שאפשר לקבל בחינם. בינתיים אפשר להקשיב בדפדפן.";
+
+/**
+ * A spoken recording of the text, as a file, from the server's voice: a WAV
+ * from Google's voice, or what a service set up with TTS_API_KEY sends (an
+ * MP3 unless asked for a WAV). The file's type says which.
+ */
 export async function speakToFile(
   text: string,
   options: { voice?: string; speed?: number; format?: "mp3" | "wav"; signal?: AbortSignal } = {},
@@ -362,11 +370,14 @@ export async function speakToFile(
     if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
     throw new AiError("network", MESSAGES.network);
   }
-  if (!response.ok) throw await refusal(response);
+  if (!response.ok) {
+    const error = await refusal(response);
+    throw error.code === "not_configured" ? new AiError(error.code, NO_VOICE) : error;
+  }
   announceCreditsFrom(response);
   const bytes = await response.arrayBuffer();
-  const format = options.format ?? "mp3";
-  return new File([bytes], `speech.${format}`, { type: format === "wav" ? "audio/wav" : "audio/mpeg" });
+  const wav = /wav/i.test(response.headers.get("Content-Type") ?? "");
+  return new File([bytes], wav ? "speech.wav" : "speech.mp3", { type: wav ? "audio/wav" : "audio/mpeg" });
 }
 
 // ---------------------------------------------------------------------------
