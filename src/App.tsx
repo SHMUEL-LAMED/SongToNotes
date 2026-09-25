@@ -7,6 +7,7 @@ import { AppShell } from "./components/AppShell";
 import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { Home } from "./components/Home";
+import { IdentifyPromo } from "./components/IdentifyPromo";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
 import { SharePage } from "./components/SharePage";
@@ -22,6 +23,7 @@ import { useSiteControl } from "./lib/siteControl";
 import { langForModel } from "./lib/i18n";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
+import { useIdentifyPromo } from "./lib/identifyPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
@@ -162,6 +164,14 @@ function WorkspaceApp() {
   const sharePrompt = useSharePrompt({
     paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || closed || admin,
     sharing: shareOpen,
+  });
+  // Once a visit, after a little while on screen, an invitation to the song
+  // identifier — never on the identifier itself, over a dialog, beside the
+  // request to share, or while the tool is switched off.
+  const identifyPromo = useIdentifyPromo({
+    paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || closed || admin || sharePrompt.open,
+    available: Boolean(findTool("identify")) && !control.disabledTools.includes("identify"),
+    here: tool?.id === "identify",
   });
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
@@ -455,6 +465,15 @@ function WorkspaceApp() {
               setShareOpen(true);
             }}
             onClose={sharePrompt.close}
+          />
+        )}
+        {identifyPromo.open && (
+          <IdentifyPromo
+            onOpen={() => {
+              identifyPromo.accept();
+              go("identify");
+            }}
+            onClose={identifyPromo.dismiss}
           />
         )}
       </AppNotices>
