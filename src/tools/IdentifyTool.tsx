@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
+import { youtubeSearchUrl } from "../lib/youtube";
 
 /** A message shown while a further clip of the same song is tried. */
 const TRYING_ANOTHER = "מנסה קטע נוסף…";
@@ -20,6 +21,20 @@ const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_k
 
 /** Where the last identification came from, so "try another part" can go on from it. */
 type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
+
+/** ▶ YouTube: a search there for the song, shown only when both the artist and the title are known. */
+export function YouTubeLink({ artist, title }: { artist: string | null; title: string | null }) {
+  const href = youtubeSearchUrl(artist, title);
+  if (!href) return null;
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="chip-toggle identify-youtube">
+      {/* Left to right on the Hebrew page too, so the play mark comes before the name. */}
+      <span dir="ltr">
+        <span aria-hidden="true">▶</span> YouTube
+      </span>
+    </a>
+  );
+}
 
 /**
  * What song is this? Twenty seconds from the microphone, or up to three
@@ -192,7 +207,14 @@ export function IdentifyTool() {
         return {
           ok: true,
           message: `${result.title} — ${result.artist}`,
-          data: { found: true, title: result.title, artist: result.artist, album: result.album, releaseDate: result.releaseDate, links: result.links },
+          data: {
+            found: true,
+            title: result.title,
+            artist: result.artist,
+            album: result.album,
+            releaseDate: result.releaseDate,
+            links: { ...result.links, youtube: youtubeSearchUrl(result.artist, result.title) },
+          },
         };
       },
     },
@@ -299,6 +321,7 @@ export function IdentifyTool() {
                     Deezer <ExternalLink size={12} />
                   </a>
                 )}
+                <YouTubeLink artist={result.artist} title={result.title} />
                 {result.links.song && (
                   <a href={result.links.song} target="_blank" rel="noreferrer noopener" className="chip-toggle">
                     עוד <ExternalLink size={12} />
@@ -317,8 +340,11 @@ export function IdentifyTool() {
             <span className="eyebrow-small">זוהו לאחרונה</span>
             <ul>
               {history.slice(1).map((item, index) => (
-                <li key={index} dir="auto">
-                  {item.title} — {item.artist}
+                <li key={index}>
+                  <span dir="auto">
+                    {item.title} — {item.artist}
+                  </span>
+                  <YouTubeLink artist={item.artist} title={item.title} />
                 </li>
               ))}
             </ul>
