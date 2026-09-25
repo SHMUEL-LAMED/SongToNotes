@@ -250,7 +250,7 @@ const KNOWN_KEYS = [
   "HF_TOKEN", "TOGETHER_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY",
   "SEPARATION_API_KEY", "SEPARATION_MODEL", "SEPARATION_INPUT", "SEPARATION_STEMS_INPUT", "SEPARATION_DAILY",
   "TTS_API_KEY", "TTS_BASE_URL", "TTS_MODEL", "TTS_VOICE", "TTS_DAILY_CHARS",
-  "ACRCLOUD_HOST", "ACRCLOUD_ACCESS_KEY", "ACRCLOUD_ACCESS_SECRET", "IDENTIFY_DAILY",
+  "IDENTIFY_API_KEY", "IDENTIFY_API_KEY_2", "IDENTIFY_API_KEY_3", "IDENTIFY_DAILY",
   "ADMIN_EMAILS", "STORAGE_SOFT_GB",
 ];
 
@@ -468,29 +468,14 @@ async function health(admin: SupabaseClient) {
     });
   }
 
-  const acrMissing = ["ACRCLOUD_HOST", "ACRCLOUD_ACCESS_KEY", "ACRCLOUD_ACCESS_SECRET"].filter((key) => !read(key));
-  if (acrMissing.length) {
-    checks.push({
-      service: "identify",
-      label: "זיהוי שירים (ACRCloud)",
-      state: "off",
-      note: `חסר: ${acrMissing.join(", ")}`,
-      ms: 0,
-    });
-  } else {
-    const host = read("ACRCLOUD_HOST").toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    const valid = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.acrcloud\.(com|cn)$/.test(host);
-    // Any HTTP answer from the host means it is reachable; the keys are checked on a real lookup.
-    const result = valid ? await ping(`https://${host}/v1/identify`, {}) : { ok: false, status: 0, ms: 0 };
-    const reachable = valid && (result.ok || result.status > 0);
-    checks.push({
-      service: "identify",
-      label: "זיהוי שירים (ACRCloud)",
-      state: reachable ? "good" : "bad",
-      note: !valid ? "ACRCLOUD_HOST אינו כתובת של ACRCloud" : reachable ? "השרת עונה · המפתחות נבדקים בזיהוי אמיתי" : "השרת לא נענה",
-      ms: result.ms,
-    });
-  }
+  const identifyKeys = ["IDENTIFY_API_KEY", "IDENTIFY_API_KEY_2", "IDENTIFY_API_KEY_3"].filter((key) => read(key));
+  checks.push({
+    service: "identify",
+    label: "זיהוי שירים (AudD)",
+    state: identifyKeys.length ? "good" : "off",
+    note: identifyKeys.length ? `${identifyKeys.length} מפתחות מוגדרים · נבדקים בזיהוי אמיתי` : "אין IDENTIFY_API_KEY",
+    ms: 0,
+  });
 
   return checks;
 }
@@ -582,6 +567,28 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       const result = await orphans(admin, true);
       await log(admin, actor, action, null, result);
       return json(200, { ok: true, orphans: result });
+    }
+    case "usage.reset": {
+      // Today's allowances start again: every account, one kind or all of them.
+      const kind = text(body.kind, 20);
+      const kinds = ["ai", "tts", "separation", "identify"];
+      if (kind && kind !== "stt" && !kinds.includes(kind)) return json(400, { error: "bad_request" });
+      const day = new Date().toISOString().slice(0, 10);
+      let removed = 0;
+      if (kind !== "stt") {
+        let request = admin.from("ai_usage").delete({ count: "exact" }).eq("day", day);
+        request = kind ? request.eq("kind", kind) : request.in("kind", kinds);
+        const { count, error } = await request;
+        if (error) return json(502, { error: "storage" });
+        removed += count ?? 0;
+      }
+      if (!kind || kind === "stt") {
+        const { count, error } = await admin.from("stt_usage").delete({ count: "exact" }).eq("day", day);
+        if (error) return json(502, { error: "storage" });
+        removed += count ?? 0;
+      }
+      await log(admin, actor, action, kind || "all", { removed });
+      return json(200, { ok: true, removed });
     }
     case "events.prune": {
       const days = Math.max(30, Math.min(3650, Number(body.days) || 365));
