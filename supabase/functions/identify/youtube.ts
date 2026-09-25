@@ -57,8 +57,16 @@ export function videoFromSongPage(html: string): string | null {
   return null;
 }
 
-/** Fetches AudD's page for the song (only ever lis.tn) and reads its YouTube button. */
-export async function videoFromSongLink(link: string | null | undefined): Promise<string | null> {
+/**
+ * Fetches AudD's page for the song (only ever lis.tn) and reads its YouTube
+ * button. The page is sometimes slow from the function's region, so it gets
+ * `timeoutMs` per try and, after a try that timed out or failed on the way,
+ * `retries` more.
+ */
+export async function videoFromSongLink(
+  link: string | null | undefined,
+  { timeoutMs = 4_000, retries = 0 }: { timeoutMs?: number; retries?: number } = {},
+): Promise<string | null> {
   let url: URL;
   try {
     url = new URL(link ?? "");
@@ -66,11 +74,13 @@ export async function videoFromSongLink(link: string | null | undefined): Promis
     return null;
   }
   if (url.protocol !== "https:" || url.hostname !== "lis.tn") return null;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(4_000) });
-    return response.ok ? videoFromSongPage(await response.text()) : null;
-  } catch (caught) {
-    console.error("song page unreachable", caught);
-    return null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      return response.ok ? videoFromSongPage(await response.text()) : null;
+    } catch (caught) {
+      console.error(`song page unreachable (try ${attempt + 1} of ${retries + 1})`, caught);
+    }
   }
+  return null;
 }
