@@ -647,22 +647,8 @@ function WorkspaceApp() {
   );
 }
 
+// The studio paints at once: who is signed in comes from the session this
+// browser keeps (see lib/auth.tsx), not from waiting on the client library.
 export default function App() {
-  const { loading } = useAuth();
-  const theme = useTheme();
-
-  if (loading) {
-    return (
-      <main className="auth-screen" data-theme={theme.resolved}>
-        <div className="auth-loading" role="status">
-          <span className="brand-mark">
-            <LogoGlyph />
-          </span>
-          <strong>טוען את הסטודיו…</strong>
-        </div>
-      </main>
-    );
-  }
-
   return <WorkspaceApp />;
 }

@@ -1,5 +1,5 @@
 import type { DetectedNote } from "./types";
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export type SavedTranscription = {
   id: string;
@@ -17,6 +17,7 @@ export type SavedTranscription = {
 };
 
 export async function listTranscriptions(userId: string) {
+  const supabase = await getSupabase();
   const { data, error } = await supabase
     .from("transcriptions")
     .select(
@@ -32,6 +33,7 @@ export async function listTranscriptions(userId: string) {
 export async function saveTranscription(
   item: Omit<SavedTranscription, "id" | "created_at">,
 ) {
+  const supabase = await getSupabase();
   const { data, error } = await supabase
     .from("transcriptions")
     .insert(item)
@@ -42,6 +44,7 @@ export async function saveTranscription(
 }
 
 export async function deleteTranscription(id: string, userId: string) {
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("transcriptions")
     .delete()

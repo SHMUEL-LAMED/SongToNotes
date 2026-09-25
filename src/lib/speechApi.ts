@@ -5,7 +5,7 @@
  * onto the device; the account's daily allowance is what limits it.
  */
 import { announceCredits, announceEmpty } from "./credits";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 import type { TranscriptSegment } from "./transcript";
 import { encodeWav } from "./wav";
 
@@ -70,7 +70,7 @@ type Options = {
 
 /** Is anyone signed in? The server will refuse otherwise, so ask first. */
 export async function hasSession() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   return Boolean(data.session);
 }
 
@@ -84,7 +84,7 @@ export async function transcribeWindow(
   sampleRate: number,
   { language, signal, onUpload, words = false }: Options,
 ): Promise<SpeechResult> {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new SpeechError("signed_out", MESSAGES.signed_out);
   if (signal?.aborted) throw new SpeechError("cancelled", CANCELLED);

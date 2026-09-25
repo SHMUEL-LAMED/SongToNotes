@@ -3,7 +3,7 @@
  * take everything, or take it all away. Both go through
  * `supabase/functions/account`, which acts on the caller and only the caller.
  */
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 
 const ACCOUNT_URL = `${SUPABASE_URL}/functions/v1/account`;
 
@@ -23,7 +23,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 async function call<T>(init: RequestInit & { query?: string }): Promise<T> {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const access = data.session?.access_token;
   if (!access) throw new AccountError("signed_out", MESSAGES.signed_out);
   let response: Response;

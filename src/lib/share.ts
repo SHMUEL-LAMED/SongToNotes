@@ -4,7 +4,7 @@
  * to anyone, signed in or not, with a player and a download.
  */
 import { ownReferralCode, withReferral } from "./credits";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 import type { SavedWork, WorkKind, WorkOrigin } from "./works";
 
 const SHARE_URL = `${SUPABASE_URL}/functions/v1/share`;
@@ -49,7 +49,7 @@ export function shareLink(token: string) {
 }
 
 async function authed(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await (await getSupabase()).auth.getSession();
   const access = data.session?.access_token;
   if (!access) throw new ShareError("signed_out", MESSAGES.signed_out);
   return { Authorization: `Bearer ${access}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" };
@@ -87,6 +87,7 @@ export type MyShare = {
 
 /** Every link the visitor made, newest first — through RLS, so only theirs. */
 export async function listShares(): Promise<MyShare[]> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase
     .from("shares")
     .select("token, origin, work_id, kind, title, views, created_at, expires_at, revoked_at")

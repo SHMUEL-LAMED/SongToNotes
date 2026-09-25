@@ -8,7 +8,7 @@
  * the site by accident.
  */
 import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export type SiteControl = {
   maintenance: boolean;
@@ -47,6 +47,7 @@ export function normalizeControl(row: Row | null | undefined): SiteControl {
 }
 
 export async function fetchSiteControl(): Promise<SiteControl> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase
     .from("site_control")
     .select("maintenance, maintenance_message, banner, banner_kind, disabled_tools")

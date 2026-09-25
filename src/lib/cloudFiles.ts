@@ -11,7 +11,7 @@
  * The song the visitor started from is still never uploaded; only what the
  * tool made from it.
  */
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export const WORK_FILES_BUCKET = "works";
 
@@ -39,6 +39,7 @@ export class UploadTooLargeError extends Error {
 export async function uploadWorkFile(userId: string, workId: string, file: File | Blob) {
   if (file.size > MAX_UPLOAD_BYTES) throw new UploadTooLargeError(file.size);
   const path = workFilePath(userId, workId, file);
+  const supabase = await getSupabase();
   const { error } = await supabase.storage.from(WORK_FILES_BUCKET).upload(path, file, {
     upsert: true,
     contentType: file.type || "application/octet-stream",
@@ -50,6 +51,7 @@ export async function uploadWorkFile(userId: string, workId: string, file: File 
 
 /** Fetches a work's file back, as a File named after the work. */
 export async function downloadWorkFile(path: string, name: string): Promise<File> {
+  const supabase = await getSupabase();
   const { data, error } = await supabase.storage.from(WORK_FILES_BUCKET).download(path);
   if (error || !data) throw error ?? new Error("empty download");
   return new File([data], name, { type: data.type || "audio/wav" });
@@ -57,6 +59,7 @@ export async function downloadWorkFile(path: string, name: string): Promise<File
 
 /** A short-lived URL the audio element can play from directly. */
 export async function workFileUrl(path: string, seconds = 60 * 60) {
+  const supabase = await getSupabase();
   const { data, error } = await supabase.storage
     .from(WORK_FILES_BUCKET)
     .createSignedUrl(path, seconds);
@@ -65,6 +68,7 @@ export async function workFileUrl(path: string, seconds = 60 * 60) {
 }
 
 export async function deleteWorkFile(path: string) {
+  const supabase = await getSupabase();
   const { error } = await supabase.storage.from(WORK_FILES_BUCKET).remove([path]);
   if (error) throw error;
 }

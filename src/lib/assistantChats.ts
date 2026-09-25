@@ -13,7 +13,7 @@
  * which fills its budget from the newest turn backwards and says so when
  * something did not fit.
  */
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 export type StoredAction = {
   id: string;
@@ -201,6 +201,7 @@ function toRow(chat: Chat, userId: string) {
 export async function listChats(userId: string | null): Promise<Chat[]> {
   const local = readLocal(userId);
   if (!userId) return local;
+  const supabase = await getSupabase();
 
   const pending = local.filter((chat) => chat.localOnly && chat.messages.length);
   if (pending.length) {
@@ -248,6 +249,7 @@ export async function saveChat(chat: Chat, userId: string | null): Promise<Chat>
     writeLocal(userId, [updated, ...rest]);
     return updated;
   }
+  const supabase = await getSupabase();
   const { error } = await supabase
     .from("assistant_chats")
     .upsert([toRow(updated, userId)], { onConflict: "user_id,client_id" });
@@ -260,7 +262,7 @@ export async function saveChat(chat: Chat, userId: string | null): Promise<Chat>
 export async function deleteChat(id: string, userId: string | null): Promise<void> {
   writeLocal(userId, readLocal(userId).filter((item) => item.id !== id));
   if (!userId) return;
-  await supabase.from("assistant_chats").delete().eq("user_id", userId).eq("client_id", id);
+  await (await getSupabase()).from("assistant_chats").delete().eq("user_id", userId).eq("client_id", id);
 }
 
 export async function renameChat(id: string, title: string, userId: string | null): Promise<void> {
@@ -268,5 +270,5 @@ export async function renameChat(id: string, title: string, userId: string | nul
   if (!clean) return;
   writeLocal(userId, readLocal(userId).map((item) => (item.id === id ? { ...item, title: clean } : item)));
   if (!userId) return;
-  await supabase.from("assistant_chats").update({ title: clean }).eq("user_id", userId).eq("client_id", id);
+  await (await getSupabase()).from("assistant_chats").update({ title: clean }).eq("user_id", userId).eq("client_id", id);
 }
