@@ -367,7 +367,8 @@ export type AdminAction =
   | "health.check"
   | "files.scan"
   | "files.clean"
-  | "events.prune";
+  | "events.prune"
+  | "usage.reset";
 
 export type AdminResult = {
   ok: boolean;
@@ -521,6 +522,7 @@ const ACTION_LABELS: Record<string, string> = {
   "setting.delete": "מחיקת מפתח",
   "files.clean": "ניקוי קבצים יתומים",
   "events.prune": "מחיקת מדידות ישנות",
+  "usage.reset": "איפוס מכסות היום",
 };
 
 export function actionLabel(action: string) {
