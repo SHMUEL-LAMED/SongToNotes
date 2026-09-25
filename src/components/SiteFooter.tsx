@@ -13,6 +13,7 @@ export function SiteFooter({ onOpen }: { onOpen: (route: string) => void }) {
         <button type="button" onClick={() => onOpen("vocals")}>קריוקי</button>
         <button type="button" onClick={() => onOpen("beats")}>מכונת תופים</button>
         <button type="button" onClick={() => onOpen("me")}>האזור האישי</button>
+        <button type="button" onClick={() => onOpen("credits")}>קרדיטים והזמנת חברים</button>
       </nav>
     </footer>
   );

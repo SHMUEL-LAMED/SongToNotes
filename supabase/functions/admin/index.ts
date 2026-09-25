@@ -16,37 +16,17 @@
  * GET  ?view=settings          which server keys are set (never their values)
  * GET  ?view=audit             the log of what the admin area did
  * POST {action, …}             one change: a notice, maintenance, a tool off,
- *                              a key, a health check, a clean-up
+ *                              a key, a health check, a clean-up, the credit
+ *                              rules
  */
-import { CORS, adminClient, json, visitor } from "../_shared/common.ts";
+import { CORS, adminClient, isOwner, json, visitor } from "../_shared/common.ts";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 
 const BUCKET = "works";
-const DEFAULT_ADMINS = ["0534169095@xn--4dbjbascrao3i.com", "0534169095@שמואלליווי.com"];
 const PAGE = 1000;
 /** Enough for a year of a busy site; the reply says when it was reached. */
 const MAX_EVENTS = 60_000;
 const PREVIEW = { ...CORS, "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
-
-function normalize(email: string) {
-  return email.trim().toLowerCase().normalize("NFC");
-}
-
-function admins() {
-  const configured = (Deno.env.get("ADMIN_EMAILS") ?? "")
-    .split(/[,\s;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return new Set((configured.length ? configured : DEFAULT_ADMINS).map(normalize));
-}
-
-/** An unverified address never counts: anybody may type the owner's address. */
-function isAdmin(user: User | null) {
-  if (!user?.email) return false;
-  const verified =
-    Boolean(user.email_confirmed_at) || user.user_metadata?.email_verified === true;
-  return verified && admins().has(normalize(user.email));
-}
 
 type Row = Record<string, unknown>;
 
@@ -298,7 +278,7 @@ async function overview(admin: SupabaseClient, days: number) {
   const sinceIso = new Date(now.getTime() - days * 86_400_000).toISOString();
   const sinceDay = sinceIso.slice(0, 10);
 
-  const [events, accounts, works, transcriptions, ringtones, storage, shares, ai, stt, settings, notices] =
+  const [events, accounts, works, transcriptions, ringtones, storage, shares, ai, stt, settings, notices, credits] =
     await Promise.all([
       readEvents(admin, sinceIso),
       exactCount(admin, "profiles"),
@@ -311,6 +291,7 @@ async function overview(admin: SupabaseClient, days: number) {
       admin.from("stt_usage").select("day, seconds").gte("day", sinceDay),
       settingsMap(admin),
       control(admin),
+      creditsOverview(admin, sinceDay),
     ]);
 
   const stats = aggregate(events, dayRange(days, now), now.getTime());
@@ -361,6 +342,9 @@ async function overview(admin: SupabaseClient, days: number) {
   if (off.length) alerts.push({ kind: "info", text: `${off.length} כלים מכובים כרגע` });
   if (!settings.read("STT_API_KEY")) alerts.push({ kind: "warn", text: "אין מפתח לתמלול — הכלי לא יעבוד" });
   if (!stats.events) alerts.push({ kind: "info", text: "עדיין לא נאספו מדידות — הן מתחילות להיכנס ברגע שגולשים נכנסים" });
+  if (credits.settings && !credits.settings.enabled) {
+    alerts.push({ kind: "info", text: "הקרדיטים כבויים — פעולות השרת לא נגבות, רק המכסות היומיות חלות" });
+  }
 
   return {
     generatedAt: now.toISOString(),
@@ -379,7 +363,80 @@ async function overview(admin: SupabaseClient, days: number) {
     quotas,
     alerts,
     control: notices,
+    credits,
   };
+}
+
+/* ---------------------------------------------------------------- credits */
+
+type CreditSettingsRow = {
+  enabled: boolean;
+  daily: number;
+  signup_bonus: number;
+  friend_daily: number;
+  friend_daily_max: number;
+  welcome_bonus: number;
+  visit_bonus: number;
+  visit_daily_max: number;
+  signup_daily_max: number;
+  claim_hours: number;
+  prices: Record<string, number>;
+};
+
+/** The rules and how credits moved in the range — totals only, never whose. */
+async function creditsOverview(admin: SupabaseClient, sinceDay: string) {
+  const [rules, stats] = await Promise.all([
+    admin.from("credit_settings").select("*").maybeSingle(),
+    admin.rpc("admin_credit_stats", { p_since: sinceDay }),
+  ]);
+  if (rules.error) console.warn("credit settings unavailable", rules.error.message);
+  return {
+    settings: (rules.data ?? null) as CreditSettingsRow | null,
+    stats: (stats.data ?? null) as Row | null,
+  };
+}
+
+/** The numbers the admin may set, each held to a sensible range. */
+const CREDIT_FIELDS: Record<string, [number, number]> = {
+  daily: [0, 100000],
+  signup_bonus: [0, 100000],
+  friend_daily: [0, 10000],
+  friend_daily_max: [0, 100000],
+  welcome_bonus: [0, 100000],
+  visit_bonus: [0, 10000],
+  visit_daily_max: [0, 10000],
+  signup_daily_max: [0, 10000],
+  claim_hours: [1, 8760],
+};
+
+const PRICE_KEYS = ["assistant", "text", "minute", "tts", "separate", "identify"];
+
+function wholeNumber(value: unknown, [min, max]: [number, number]) {
+  const number = Math.round(Number(value));
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : null;
+}
+
+async function setCredits(admin: SupabaseClient, body: Row) {
+  const patch: Row = { updated_at: new Date().toISOString() };
+  if ("enabled" in body) patch.enabled = Boolean(body.enabled);
+  for (const [field, range] of Object.entries(CREDIT_FIELDS)) {
+    if (!(field in body)) continue;
+    const number = wholeNumber(body[field], range);
+    if (number !== null) patch[field] = number;
+  }
+  if (body.prices && typeof body.prices === "object") {
+    const { data } = await admin.from("credit_settings").select("prices").maybeSingle();
+    const prices: Record<string, number> = { ...((data?.prices ?? {}) as Record<string, number>) };
+    for (const key of PRICE_KEYS) {
+      const raw = (body.prices as Row)[key];
+      if (raw === undefined) continue;
+      const number = wholeNumber(raw, [0, 1000]);
+      if (number !== null) prices[key] = number;
+    }
+    patch.prices = prices;
+  }
+  const { error } = await admin.from("credit_settings").update(patch).eq("id", true);
+  return { patch, error };
 }
 
 /* ------------------------------------------------------------- the checks */
@@ -568,13 +625,30 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       await log(admin, actor, action, null, result);
       return json(200, { ok: true, orphans: result });
     }
+    case "credits.set": {
+      const { patch, error } = await setCredits(admin, body);
+      if (error) return json(502, { error: "storage" });
+      await log(admin, actor, action, null, patch);
+      const { data } = await admin.from("credit_settings").select("*").maybeSingle();
+      return json(200, { ok: true, credits: data ?? null });
+    }
     case "usage.reset": {
-      // Today's allowances start again: every account, one kind or all of them.
+      // Today's allowances start again: every account, one kind or all of them
+      // — the day's credits among them.
       const kind = text(body.kind, 20);
       const kinds = ["ai", "tts", "separation", "identify"];
-      if (kind && kind !== "stt" && !kinds.includes(kind)) return json(400, { error: "bad_request" });
+      if (kind && kind !== "stt" && kind !== "credits" && !kinds.includes(kind)) return json(400, { error: "bad_request" });
       const day = new Date().toISOString().slice(0, 10);
       let removed = 0;
+      if (!kind || kind === "credits") {
+        const { data, error } = await admin.rpc("admin_credit_reset_today");
+        if (error) console.warn("credits reset failed", error.message);
+        else removed += Number(data ?? 0);
+      }
+      if (kind === "credits") {
+        await log(admin, actor, action, kind, { removed });
+        return json(200, { ok: true, removed });
+      }
       if (kind !== "stt") {
         let request = admin.from("ai_usage").delete({ count: "exact" }).eq("day", day);
         request = kind ? request.eq("kind", kind) : request.in("kind", kinds);
@@ -607,7 +681,7 @@ Deno.serve(async (req: Request) => {
 
   const user = await visitor(req);
   if (!user) return json(401, { error: "signed_out" });
-  if (!isAdmin(user)) return json(403, { error: "forbidden" });
+  if (!isOwner(user)) return json(403, { error: "forbidden" });
 
   const admin = adminClient();
   const url = new URL(req.url);

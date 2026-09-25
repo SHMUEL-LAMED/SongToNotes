@@ -1,15 +1,16 @@
 /**
  * What the site's server functions share: CORS, JSON replies, the signed-in
- * visitor, the settings (function secrets first, then private.stt_settings),
- * and the per-account daily allowances kept in public.ai_usage.
+ * visitor, the site's owner, the settings (function secrets first, then
+ * private.stt_settings), and the per-account daily allowances kept in
+ * public.ai_usage.
  */
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2";
 
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Expose-Headers": "x-model, x-provider",
+  "Access-Control-Expose-Headers": "x-model, x-provider, x-credits",
 };
 
 export function json(status: number, body: Record<string, unknown>) {
@@ -33,6 +34,28 @@ export async function visitor(req: Request) {
   });
   const { data, error } = await client.auth.getUser(token);
   return error ? null : data.user;
+}
+
+const DEFAULT_OWNERS = ["0534169095@xn--4dbjbascrao3i.com", "0534169095@שמואלליווי.com"];
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase().normalize("NFC");
+}
+
+/** The site's owner: `ADMIN_EMAILS`, or the built-in address when that is not set. */
+function owners() {
+  const configured = (Deno.env.get("ADMIN_EMAILS") ?? "")
+    .split(/[,\s;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return new Set((configured.length ? configured : DEFAULT_OWNERS).map(normalizeEmail));
+}
+
+/** An unverified address never counts: anybody may type the owner's address. */
+export function isOwner(user: User | null) {
+  if (!user?.email) return false;
+  const verified = Boolean(user.email_confirmed_at) || user.user_metadata?.email_verified === true;
+  return verified && owners().has(normalizeEmail(user.email));
 }
 
 /** A secret wins; the private table is the fallback for a project set up from the database. */

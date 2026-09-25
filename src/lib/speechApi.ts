@@ -4,6 +4,7 @@
  * small WAV, and the timed text comes back. Nothing is installed or fetched
  * onto the device; the account's daily allowance is what limits it.
  */
+import { announceCredits, announceEmpty } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
 import type { TranscriptSegment } from "./transcript";
 import { encodeWav } from "./wav";
@@ -37,6 +38,7 @@ const MESSAGES: Record<string, string> = {
   signed_out: "כדי לתמלל צריך להתחבר לחשבון. ההתחברות חינמית ולוקחת רגע.",
   not_configured: "שירות התמלול עדיין לא הופעל באתר. מנהל האתר צריך להזין מפתח לשירות הזיהוי.",
   quota: "נגמרה מכסת התמלול היומית של החשבון. אפשר להמשיך מחר, מאותה נקודה.",
+  credits: "אין מספיק קרדיטים להמשך התמלול. הקרדיטים היומיים מתחדשים בחצות — ואפשר לקבל עוד כבר עכשיו, בהזמנת חברים מדף „הקרדיטים שלי”. אחר כך ממשיכים מאותה נקודה.",
   too_large: "הקטע גדול מדי לשליחה. נסה לסמן קטע קצר יותר.",
   provider_key: "שירות הזיהוי דחה את המפתח של האתר. מנהל האתר צריך לבדוק אותו.",
   provider_busy: "שירות הזיהוי עמוס כרגע. המתן דקה ולחץ על המשך.",
@@ -112,12 +114,14 @@ export async function transcribeWindow(
     xhr.ontimeout = () => reject(new SpeechError("network", MESSAGES.network));
     xhr.onload = () => {
       signal?.removeEventListener("abort", abort);
-      const body = (xhr.response ?? null) as Partial<SpeechResult> & { error?: string } | null;
+      const body = (xhr.response ?? null) as Partial<SpeechResult> & { error?: string; credits?: unknown } | null;
       if (xhr.status !== 200) {
         const code = body?.error ?? (xhr.status === 401 ? "signed_out" : "http");
+        if (code === "credits") announceEmpty(body?.credits);
         reject(new SpeechError(code, describeSpeechError(code, xhr.status)));
         return;
       }
+      if (body?.credits) announceCredits(body.credits);
       resolve({
         segments: Array.isArray(body?.segments) ? body.segments : [],
         words: Array.isArray(body?.words) ? body.words : undefined,

@@ -1,9 +1,12 @@
 import { Download, Pause, Play, Speech, Square, Volume2, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CreditCost } from "../components/CreditCost";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { AiError, speakToFile } from "../lib/aiApi";
 import { useAuth } from "../lib/auth";
+import { ttsCost } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -27,6 +30,7 @@ function languageOf(text: string) {
  */
 export function TtsTool({ initial = null }: Props) {
   const { user } = useAuth();
+  const { rules: creditRules } = useCredits();
   const [text, setText] = useState(() => (typeof initial?.payload.text === "string" ? initial.payload.text : ""));
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceName, setVoiceName] = useState(() => {
@@ -352,6 +356,7 @@ export function TtsTool({ initial = null }: Props) {
                 הקראה שנעשית בשרת ונשמרת כ־MP3 — לשיתוף, לסרטון או לאזור האישי.
                 {!user ? " צריך להתחבר לחשבון." : ""}
               </p>
+              {text.trim() && <CreditCost cost={ttsCost(text.trim().length, creditRules)} />}
             </div>
           </div>
           <div className="download-buttons">

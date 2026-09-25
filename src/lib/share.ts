@@ -3,6 +3,7 @@
  * the page behind it asks the share function for the snapshot and shows it
  * to anyone, signed in or not, with a player and a download.
  */
+import { ownReferralCode, withReferral } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "./supabase";
 import type { SavedWork, WorkKind, WorkOrigin } from "./works";
 
@@ -38,10 +39,13 @@ function describe(code: string) {
   return MESSAGES[code] ?? "השיתוף נכשל. נסה שוב בעוד רגע.";
 }
 
-/** The page a token opens on this site. */
+/**
+ * The page a token opens on this site. It carries the owner's private link
+ * code, so whoever opens a shared work and stays counts as their friend.
+ */
 export function shareLink(token: string) {
   const base = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-  return `${base}#/s/${token}`;
+  return withReferral(`${base}#/s/${token}`, ownReferralCode());
 }
 
 async function authed(): Promise<Record<string, string>> {

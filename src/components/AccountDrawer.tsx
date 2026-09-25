@@ -10,9 +10,12 @@ import {
   Trophy,
   UserRound,
   X,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useAuth } from "../lib/auth";
+import { balanceOf, creditsLabel } from "../lib/credits";
+import { useCredits } from "../lib/creditsContext";
 import { monthCount, streak, topKind } from "../lib/me";
 import { findTool } from "../lib/tools";
 import { KIND_LABELS, KIND_TOOL, describeWork, listWorks, type SavedWork } from "../lib/works";
@@ -27,6 +30,8 @@ type Props = {
   onOpenPage: () => void;
   /** Opens the admin area — given only to the account that owns the site. */
   onOpenAdmin?: (() => void) | null;
+  /** Opens the credits page. */
+  onOpenCredits?: () => void;
   onSignInError: (message: string) => void;
 };
 
@@ -39,8 +44,9 @@ const FOCUSABLE =
  * It slides in over whatever tool is open so a recording can be reopened
  * without leaving the tool; everything heavier lives on the page itself.
  */
-export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdmin, onSignInError }: Props) {
+export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdmin, onOpenCredits, onSignInError }: Props) {
   const { user, profile, signOut, signInWithGoogle } = useAuth();
+  const { rules, status: credits } = useCredits();
   const [works, setWorks] = useState<SavedWork[] | null>(null);
   const [query, setQuery] = useState("");
   const panelRef = useRef<HTMLElement>(null);
@@ -183,6 +189,19 @@ export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdm
             <span>הכלי המוביל</span>
           </div>
         </div>
+
+        {onOpenCredits && rules.enabled && (
+          <button type="button" className="quick-credits" onClick={onOpenCredits}>
+            <span className="quick-credits-icon" aria-hidden="true">
+              <Zap size={16} />
+            </span>
+            <span className="quick-item-text">
+              <b>{credits ? creditsLabel(balanceOf(credits)) : user ? "הקרדיטים שלך" : `${rules.daily} קרדיטים חינם בכל יום`}</b>
+              <small>{user ? "הקישור האישי והזמנת חברים" : "מתחברים ומקבלים, וחברים מביאים עוד"}</small>
+            </span>
+            <ArrowLeft size={15} aria-hidden="true" />
+          </button>
+        )}
 
         <button type="button" className="primary-button compact quick-open" onClick={onOpenPage}>
           <ArrowLeft size={16} /> לאזור האישי המלא · {works ? all.length : "…"} פריטים

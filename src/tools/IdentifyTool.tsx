@@ -1,9 +1,11 @@
 import { Disc3, ExternalLink, FileAudio, LogIn, Mic, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
+import { CreditCost } from "../components/CreditCost";
 import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { useCredits } from "../lib/creditsContext";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -16,7 +18,7 @@ const TRYING_ANOTHER = "מנסה קטע נוסף…";
  * service refusing the site's key or out of its own allowance. Any other
  * failure of one clip just moves on to the next, without a word.
  */
-const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_key", "provider_busy", "session_limit"]);
+const STOP_CODES = new Set(["signed_out", "quota", "credits", "not_configured", "provider_key", "provider_busy", "session_limit"]);
 
 /** Where the last identification came from, so "try another part" can go on from it. */
 type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
@@ -43,6 +45,7 @@ export function YouTubeLink({ href }: { href?: string | null }) {
  */
 export function IdentifyTool() {
   const { user, signInWithGoogle } = useAuth();
+  const { rules: creditRules } = useCredits();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [recorder] = useState(() => new MicRecorder());
   const [recording, setRecording] = useState(false);
@@ -260,6 +263,7 @@ export function IdentifyTool() {
               }} aria-label="בחר קובץ לזיהוי" disabled={busy !== null || recording} />
               <FileAudio size={18} /> או בחר קובץ
             </label>
+            <CreditCost cost={creditRules.prices.identify} unit="לכל זיהוי" />
           </div>
         )}
         {busy === TRYING_ANOTHER && (

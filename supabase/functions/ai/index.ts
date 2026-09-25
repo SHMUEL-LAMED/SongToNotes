@@ -32,8 +32,15 @@
  *   AI_MODEL          the model to try first on it
  *   AI_DAILY_TOKENS   default 5000000
  *   <NAME>_API_KEY    a key for one of the known providers
+ *
+ * Every request is paid for in credits (supabase/credits.sql): a message to
+ * the assistant is the "assistant" price, and the text work the "text" price
+ * for every 10,000 characters. A request the services could not answer gives
+ * its credits back.
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
+import { charge, creditHeaders, creditSummary, refund, refused } from "../_shared/credits.ts";
+import { textUnits } from "../_shared/pricing.ts";
 
 /**
  * The daily allowance, in tokens. The free providers below cost nothing, so
@@ -317,6 +324,8 @@ ${TOOL_LIST}
 
 האזור האישי: כפתור בראש כל עמוד; כל כלי שומר את העבודה, והקבצים עולים לענן אחרי התחברות עם Google וזמינים מכל מכשיר. ההתחברות חינמית. אפשר ליצור קישור ציבורי לכל עבודה שמורה.
 
+קרדיטים: הכלים שרצים בדפדפן חינמיים ובלי הגבלה. פעולות שרצות בשרת עולות קרדיטים — הודעה לעוזר, תמלול ומילים מסונכרנות (לפי דקות), עיבוד טקסט ב־AI (לפי אורך), הקראה לקובץ MP3, הפרדת שירה ב־AI וזיהוי שיר. כל חשבון מחובר מקבל קצבה חינמית בכל יום (מתחדשת בחצות, שעון ישראל). לכל חשבון יש קישור אישי: מי שנכנס דרכו מזכה בקרדיט, וחבר שמצטרף דרכו מזכה בבונוס גדול ומגדיל לתמיד את הקצבה היומית; החבר מקבל מתנת הצטרפות. בונוס לא פג. אם פעולה נכשלת, הקרדיטים חוזרים. אי אפשר לקנות קרדיטים. הכול מוסבר בדף "קרדיטים והזמנת חברים" (credits.open), והמספרים המדויקים של הגולש ב־credits.read.
+
 בנוסף אתה מורה למוזיקה: תיאוריה, אקורדים, סולמות, קצב, טכניקה וטיפים לתרגול — בבהירות ועם דוגמאות קצרות. אפשר להשתמש ב־Markdown פשוט: כותרות קצרות, רשימות, הדגשה.`;
 
 /** How the model keeps a task list the panel shows as it goes. */
@@ -440,6 +449,7 @@ Deno.serve(async (req: Request) => {
 
   let messages: Message[] = prompts(action, language);
   let trimmed = 0;
+  let textLength = 0;
   if (action === "chat") {
     const history = Array.isArray(body.messages) ? body.messages : [];
     const whole = history
@@ -483,11 +493,28 @@ Deno.serve(async (req: Request) => {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) return json(400, { error: "bad_request" });
     if (text.length > MAX_INPUT_CHARS) return json(413, { error: "too_large" });
+    textLength = text.length;
     messages = [...messages, { role: "user", content: text }];
   }
 
   const { used } = await usedToday(admin, user.id, "ai");
   if (used >= limit) return json(429, { error: "quota", used, limit });
+
+  // The price, taken before any service is asked and given back if none answers.
+  const chatting = action === "chat";
+  const paid = await charge(
+    admin,
+    user,
+    chatting ? "assistant" : "text",
+    chatting ? "assistant" : "text",
+    chatting ? 1 : textUnits(textLength),
+    chatting ? { mode: body.mode === "execute" || body.mode === "plan" ? body.mode : "question" } : { job: action },
+  );
+  if (!paid.ok) return refused(paid);
+  const fail = async (status: number, reply: Record<string, unknown>) => {
+    await refund(admin, user, paid);
+    return json(status, reply);
+  };
 
   const wantStream = action === "chat" && body.stream === true;
   const ask = (endpoint: Endpoint, model: string) =>
@@ -570,22 +597,22 @@ Deno.serve(async (req: Request) => {
         failures.push(`${first.id}: ${attempt.status} (גם אחרי המתנה)`);
         if (BUSY(attempt.status)) {
           console.error("language models unavailable:", failures.join(" | "));
-          return json(502, { error: "provider_busy" });
+          return await fail(502, { error: "provider_busy" });
         }
         if (BAD_KEY(attempt.status)) {
           console.error("language models unavailable:", failures.join(" | "));
-          return json(502, { error: "provider_key" });
+          return await fail(502, { error: "provider_key" });
         }
       }
     }
   } catch (caught) {
     console.error("language model unreachable", caught);
-    return json(502, { error: "provider_unreachable" });
+    return await fail(502, { error: "provider_unreachable" });
   }
 
   if (!response || !endpoint) {
     console.error("language models unavailable:", failures.join(" | "));
-    return json(502, { error: failures.some((item) => /: 40[13]/.test(item)) ? "provider_key" : "provider_unreachable" });
+    return await fail(502, { error: failures.some((item) => /: 40[13]/.test(item)) ? "provider_key" : "provider_unreachable" });
   }
   // The model that answered is where the next request starts — but only when
   // the ones before it are gone for good. A model that stood in while a better
@@ -619,6 +646,7 @@ Deno.serve(async (req: Request) => {
         "Cache-Control": "no-cache",
         "X-Model": model,
         "X-Provider": endpoint.id,
+        ...creditHeaders(paid),
       },
     });
   }
@@ -637,5 +665,6 @@ Deno.serve(async (req: Request) => {
     tokens,
     used: total,
     limit,
+    credits: creditSummary(paid),
   });
 });
