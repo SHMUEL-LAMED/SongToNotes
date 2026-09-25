@@ -12,7 +12,6 @@ import {
   FileCog,
   Gauge,
   Globe,
-  Infinity as InfinityIcon,
   KeyRound,
   Laptop,
   Megaphone,
@@ -67,7 +66,6 @@ import {
   weekdayLabel,
   type AdminAuditEntry,
   type AdminCredits,
-  type AdminPurchase,
   type AdminSetting,
   type AdminSnapshot,
   type FeedbackEntry,
@@ -76,8 +74,7 @@ import {
   type ToolRow,
 } from "../lib/admin";
 import { useAuth } from "../lib/auth";
-import { PASS_PLANS, PRICE_KEYS, PRICE_LABELS, entryLabel, formatMoney, type CreditRules, type PassPlan } from "../lib/credits";
-import { SUPABASE_URL } from "../lib/supabase";
+import { PRICE_KEYS, PRICE_LABELS, entryLabel, type CreditRules } from "../lib/credits";
 import { downloadFile } from "../lib/export";
 import { TOOLS, findAnyTool } from "../lib/tools";
 import {
@@ -791,7 +788,6 @@ function SystemTab({
       <CreditsAdminCard
         key={JSON.stringify(snapshot.credits.rules)}
         credits={snapshot.credits}
-        keys={settings}
         days={snapshot.days}
         busy={busy}
         onSave={onCredits}
@@ -839,7 +835,7 @@ function SystemTab({
             <thead>
               <tr>
                 <th scope="col">מפתח</th>
-                <th scope="col">סטטוס</th>
+                <th scope="col">מצב</th>
                 <th scope="col">מקור</th>
                 <th scope="col">פעולה</th>
               </tr>
@@ -1002,7 +998,7 @@ function SystemTab({
 
 /* --------------------------------------------------------------- credits */
 
-type CreditField = { key: keyof Omit<CreditRules, "enabled" | "prices" | "pay">; server: string; label: string; hint: string };
+type CreditField = { key: keyof Omit<CreditRules, "enabled" | "prices">; server: string; label: string; hint: string };
 
 const CREDIT_FIELDS: CreditField[] = [
   { key: "daily", server: "daily", label: "קצבה יומית לכל חשבון", hint: "מתחדשת בחצות, שעון ישראל" },
@@ -1022,13 +1018,11 @@ const CREDIT_FIELDS: CreditField[] = [
  */
 function CreditsAdminCard({
   credits,
-  keys,
   days,
   busy,
   onSave,
 }: {
   credits: AdminCredits;
-  keys: AdminSetting[];
   days: number;
   busy: boolean;
   onSave: (patch: Record<string, unknown>) => void;
@@ -1187,279 +1181,7 @@ function CreditsAdminCard({
           {!valid && <small className="admin-muted">כל ערך צריך להיות מספר שלם, 0 או יותר.</small>}
         </div>
       </div>
-
-      <PaymentsAdmin rules={rules} stats={stats} keys={keys} days={days} busy={busy} onSave={onSave} />
     </Card>
-  );
-}
-
-const PAY_STATUS: Record<string, string> = {
-  approved: "אושר, ממתין לחיוב",
-  pending: "בבדיקה אצל PayPal",
-  completed: "שולם",
-  failed: "נכשל",
-  refunded: "הוחזר",
-};
-
-/** The address PayPal sends its notices to, for each mode. */
-function webhookUrl(mode: "live" | "sandbox") {
-  return `${SUPABASE_URL}/functions/v1/pay/webhook?mode=${mode}`;
-}
-
-/**
- * Selling passes: on or off, PayPal's test mode or real money, the prices and
- * the fair use, which keys are in, the money taken, and the latest payments —
- * each with PayPal's ids, to find it in the PayPal account, and nothing about
- * who paid.
- */
-function PaymentsAdmin({
-  rules,
-  stats,
-  keys,
-  days,
-  busy,
-  onSave,
-}: {
-  rules: CreditRules;
-  stats: AdminCredits["stats"];
-  keys: AdminSetting[];
-  days: number;
-  busy: boolean;
-  onSave: (patch: Record<string, unknown>) => void;
-}) {
-  const pay = rules.pay;
-  const [draft, setDraft] = useState(() => ({
-    week: String(pay.week),
-    month: String(pay.month),
-    passDaily: String(pay.passDaily),
-    currency: pay.currency,
-  }));
-  const has = (key: string) => keys.some((item) => item.key === key && item.set);
-  const ready = {
-    live: has("PAYPAL_CLIENT_ID") && has("PAYPAL_CLIENT_SECRET"),
-    sandbox: has("PAYPAL_SANDBOX_CLIENT_ID") && has("PAYPAL_SANDBOX_CLIENT_SECRET"),
-  };
-  const webhook = { live: has("PAYPAL_WEBHOOK_ID"), sandbox: has("PAYPAL_SANDBOX_WEBHOOK_ID") };
-
-  const price = /^\d{1,6}(\.\d{1,2})?$/;
-  const valid =
-    price.test(draft.week.trim()) &&
-    price.test(draft.month.trim()) &&
-    /^[1-9]\d{0,6}$/.test(draft.passDaily.trim()) &&
-    /^[A-Za-z]{3}$/.test(draft.currency.trim());
-  const changed =
-    Number(draft.week) !== pay.week ||
-    Number(draft.month) !== pay.month ||
-    Number(draft.passDaily) !== pay.passDaily ||
-    draft.currency.trim().toUpperCase() !== pay.currency;
-  const save = () =>
-    onSave({
-      pass_week_price: Number(draft.week),
-      pass_month_price: Number(draft.month),
-      pass_daily: Number(draft.passDaily),
-      pay_currency: draft.currency.trim().toUpperCase(),
-    });
-
-  const revenue = Object.entries(stats?.revenue ?? {});
-  const purchases: AdminPurchase[] = stats?.recentPurchases ?? [];
-  const planTitle = (plan: string) => (plan === "week" || plan === "month" ? PASS_PLANS[plan as PassPlan].title : plan);
-
-  return (
-    <div className="credits-admin-pay">
-      <h3>
-        <InfinityIcon size={16} aria-hidden="true" /> חופשי ותשלומים (PayPal)
-      </h3>
-      <label className="switch-row credits-admin-switch">
-        <input type="checkbox" checked={pay.enabled} disabled={busy} onChange={(event) => onSave({ pay_enabled: event.target.checked })} />
-        <span>
-          <b>מכירת חופשי פעילה</b>
-          <small>
-            {pay.mode === "live"
-              ? "כולם רואים את החופשי בדף הקרדיטים ויכולים לקנות בכסף אמיתי."
-              : "מצב ניסיון: רק את/ה רואה את המכירה, והתשלום הוא בכסף של בדיקה."}
-          </small>
-        </span>
-      </label>
-
-      <div className="credits-admin-modes" role="radiogroup" aria-label="מצב התשלומים">
-        {(["sandbox", "live"] as const).map((mode) => (
-          <label key={mode} className={`credits-admin-mode ${pay.mode === mode ? "is-on" : ""}`}>
-            <input type="radio" name="pay-mode" checked={pay.mode === mode} disabled={busy} onChange={() => onSave({ pay_mode: mode })} />
-            <span>
-              <b>{mode === "live" ? "תשלומים אמיתיים" : "מצב ניסיון (Sandbox)"}</b>
-              <small className={ready[mode] ? "is-ready" : "is-missing"}>
-                {ready[mode] ? (webhook[mode] ? "המפתחות וה־Webhook מוגדרים" : "המפתחות מוגדרים · חסר Webhook ID") : "חסרים מפתחות"}
-              </small>
-            </span>
-          </label>
-        ))}
-      </div>
-
-      {stats && (
-        <div className="credits-admin-figures">
-          <div>
-            <span>{`הכנסות ב־${days} ימים`}</span>
-            <b translate="no">{revenue.length ? revenue.map(([currency, amount]) => formatMoney(amount, currency)).join(" · ") : formatMoney(0, pay.currency)}</b>
-            <small>תשלומים אמיתיים בלבד</small>
-          </div>
-          <div>
-            <span>נמכרו</span>
-            <b>{formatNumber((stats.sales.week ?? 0) + (stats.sales.month ?? 0))}</b>
-            <small>{`${formatNumber(stats.sales.week ?? 0)} שבועי · ${formatNumber(stats.sales.month ?? 0)} חודשי`}</small>
-          </div>
-          <div>
-            <span>חופשי פעיל עכשיו</span>
-            <b>{formatNumber(stats.passesActive)}</b>
-            <small>חשבונות</small>
-          </div>
-          <div>
-            <span>שימוש בחופשי</span>
-            <b>{compactNumber(stats.passUsed)}</b>
-            <small>{`בקרדיטים, ב־${days} ימים`}</small>
-          </div>
-          {stats.testSales > 0 && (
-            <div>
-              <span>תשלומי ניסיון</span>
-              <b>{formatNumber(stats.testSales)}</b>
-              <small>לא נספרים בהכנסות</small>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="credits-admin-fields">
-        <label className="credits-admin-field">
-          <span>{PASS_PLANS.week.title}</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            dir="ltr"
-            value={draft.week}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, week: event.target.value }))}
-          />
-          <small>{`המחיר ל־${PASS_PLANS.week.length}`}</small>
-        </label>
-        <label className="credits-admin-field">
-          <span>{PASS_PLANS.month.title}</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            dir="ltr"
-            value={draft.month}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, month: event.target.value }))}
-          />
-          <small>{`המחיר ל־${PASS_PLANS.month.length}`}</small>
-        </label>
-        <label className="credits-admin-field">
-          <span>שימוש הוגן ביום</span>
-          <input
-            type="number"
-            min={1}
-            inputMode="numeric"
-            value={draft.passDaily}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, passDaily: event.target.value }))}
-          />
-          <small>כמה קרדיטים של עבודה החופשי מכסה ביום; מעבר לזה — הקרדיטים הרגילים</small>
-        </label>
-        <label className="credits-admin-field">
-          <span>מטבע</span>
-          <input
-            type="text"
-            dir="ltr"
-            maxLength={3}
-            value={draft.currency}
-            disabled={busy}
-            onChange={(event) => setDraft((current) => ({ ...current, currency: event.target.value }))}
-          />
-          <small>ILS לשקלים; צריך להיות מטבע שהחשבון ב־PayPal מקבל</small>
-        </label>
-      </div>
-      <div className="row-actions">
-        <button type="button" className="primary-button compact" disabled={busy || !changed || !valid} onClick={save}>
-          שמירת המחירים
-        </button>
-        {!valid && <small className="admin-muted">מחיר הוא מספר (עד שתי ספרות אחרי הנקודה), שימוש הוגן — מספר שלם, מטבע — שלוש אותיות.</small>}
-      </div>
-
-      {purchases.length > 0 && (
-        <div className="admin-table-wrap">
-          <table className="admin-table credits-admin-purchases">
-            <thead>
-              <tr>
-                <th scope="col">מתי</th>
-                <th scope="col">מה</th>
-                <th scope="col">סכום</th>
-                <th scope="col">סטטוס</th>
-                <th scope="col">ב־PayPal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchases.map((purchase) => (
-                <tr key={`${purchase.at}-${purchase.orderId ?? ""}`} className={`is-${purchase.status}`}>
-                  <td title={purchase.at}>{timeAgo(purchase.at)}</td>
-                  <td>
-                    {planTitle(purchase.plan)}
-                    {purchase.mode === "sandbox" && <small className="credits-history-badge">ניסיון</small>}
-                  </td>
-                  <td translate="no">{formatMoney(purchase.amount, purchase.currency)}</td>
-                  <td>{PAY_STATUS[purchase.status] ?? purchase.status}</td>
-                  <td dir="ltr" translate="no">
-                    <code>{purchase.captureId ?? purchase.orderId ?? "—"}</code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <details className="credits-admin-guide">
-        <summary>איך מחברים את PayPal</summary>
-        <ol>
-          <li>
-            <span>נכנסים עם חשבון ה־PayPal העסקי ל־</span>
-            <a href="https://developer.paypal.com/dashboard/applications" target="_blank" rel="noreferrer" dir="ltr">
-              developer.paypal.com
-            </a>
-            <span>, לעמוד:</span>
-            <code dir="ltr">Apps &amp; Credentials</code>
-          </li>
-          <li>
-            <span>במצב Sandbox יוצרים אפליקציה (Create App), ומעתיקים ממנה את ה־Client ID ואת ה־Secret לטבלת המפתחות שלמטה, בשמות:</span>
-            <code dir="ltr">PAYPAL_SANDBOX_CLIENT_ID · PAYPAL_SANDBOX_CLIENT_SECRET</code>
-          </li>
-          <li>
-            <span>באותה אפליקציה, תחת Webhooks → Add Webhook, מדביקים את הכתובת:</span>
-            <input className="field credits-admin-url" type="text" readOnly dir="ltr" value={webhookUrl("sandbox")} onFocus={(event) => event.currentTarget.select()} />
-            <span>מסמנים את האירועים:</span>
-            <code dir="ltr">
-              Checkout order approved · Payment capture completed · Payment capture pending · Payment capture denied · Payment capture refunded ·
-              Payment capture reversed
-            </code>
-            <span>שומרים, ומעתיקים את ה־Webhook ID לשם:</span>
-            <code dir="ltr">PAYPAL_SANDBOX_WEBHOOK_ID</code>
-          </li>
-          <li>
-            <span>מפעילים כאן את המכירה במצב ניסיון, וקונים חופשי מדף הקרדיטים עם חשבון בדיקה: </span>
-            <span>ב־developer.paypal.com, תחת Sandbox → Accounts, יש חשבון Personal עם סיסמה.</span>
-          </li>
-          <li>
-            <span>כשהכול עובד: עוברים ל־Live ב־developer.paypal.com, וחוזרים על שני השלבים עם הכתובת:</span>
-            <input className="field credits-admin-url" type="text" readOnly dir="ltr" value={webhookUrl("live")} onFocus={(event) => event.currentTarget.select()} />
-            <span>ובשמות:</span>
-            <code dir="ltr">PAYPAL_CLIENT_ID · PAYPAL_CLIENT_SECRET · PAYPAL_WEBHOOK_ID</code>
-            <span>ואז בוחרים כאן "תשלומים אמיתיים".</span>
-          </li>
-        </ol>
-        <p className="admin-muted">
-          <span>כפתור "בדיקה" בכרטיס בריאות השירותים בודק שהמפתחות עובדים. </span>
-          <span>החזר כספי עושים ב־PayPal עצמו, והימים שנקנו מתבטלים לבד.</span>
-        </p>
-      </details>
-    </div>
   );
 }
 
@@ -1469,13 +1191,6 @@ const SETTING_HINTS: Record<string, string> = {
   IDENTIFY_API_KEY_2: "מפתח AudD נוסף, לא חובה: כשהמכסה של המפתח הראשון נגמרת, הזיהוי עובר לכאן לבד",
   IDENTIFY_API_KEY_3: "מפתח AudD שלישי, לא חובה",
   IDENTIFY_DAILY: "כמה זיהויים מותרים לכל חשבון ביום (ברירת מחדל 30)",
-  PAYPAL_CLIENT_ID: "PayPal, תשלומים אמיתיים: ה־Client ID של האפליקציה ב־developer.paypal.com (Live)",
-  PAYPAL_CLIENT_SECRET: "PayPal, תשלומים אמיתיים: ה־Secret של אותה אפליקציה (Live)",
-  PAYPAL_WEBHOOK_ID: "PayPal, תשלומים אמיתיים: ה־Webhook ID, שמאשר את ההודעות של PayPal על תשלומים והחזרים",
-  PAYPAL_SANDBOX_CLIENT_ID: "PayPal, מצב ניסיון: ה־Client ID של האפליקציה ב־Sandbox",
-  PAYPAL_SANDBOX_CLIENT_SECRET: "PayPal, מצב ניסיון: ה־Secret של אותה אפליקציה (Sandbox)",
-  PAYPAL_SANDBOX_WEBHOOK_ID: "PayPal, מצב ניסיון: ה־Webhook ID של ה־Sandbox",
-  SITE_URL: "לאן PayPal מחזיר אחרי תשלום — לא חובה (ברירת מחדל: הכתובת של האתר ב־GitHub Pages)",
 };
 
 const SETTING_PLACEHOLDERS: Record<string, string> = {

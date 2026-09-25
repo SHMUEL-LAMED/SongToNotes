@@ -26,26 +26,9 @@ import {
   type CreditPulse,
   type CreditRules,
   type CreditStatus,
-  type PassPlan,
 } from "./credits";
-import {
-  PayError,
-  cancelPayment,
-  clearPaymentReturn,
-  finishPayment,
-  readPaymentReturn,
-  startPass,
-  type PaymentResult,
-  type PaymentReturn,
-} from "./payments";
 
 type Invite = { code: string; name: string | null };
-
-/** Where a purchase stands, for the notice that tells it. */
-export type PaymentNotice =
-  | { phase: "working" }
-  | { phase: "done"; result: PaymentResult }
-  | { phase: "error"; message: string; retry: boolean };
 
 type CreditsContextValue = {
   /** The rules the whole site runs on (the defaults until the server answers). */
@@ -67,12 +50,6 @@ type CreditsContextValue = {
   claim: (code: string) => Promise<ClaimReply>;
   /** Grows with every live change to the balance, for the top bar to notice. */
   beat: number;
-  /** A pass on its way: the plan whose payment is being opened, and how the last one went. */
-  buying: PassPlan | null;
-  buyPass: (plan: PassPlan) => void;
-  payment: PaymentNotice | null;
-  dismissPayment: () => void;
-  retryPayment: () => void;
 };
 
 const CreditsContext = createContext<CreditsContextValue | null>(null);
@@ -84,17 +61,6 @@ const FOCUS_REFRESH_MS = 60_000;
 
 /** One claim at a time, whatever React does with the effects. */
 let claiming: string | null = null;
-/** And one settling of a purchase. */
-let settling: string | null = null;
-
-const CANCELED: PaymentResult = { status: "canceled", plan: null, until: null, reason: null };
-
-/** A purchase PayPal sent back to the site, as the notice first shows it. */
-function waitingPayment(): PaymentNotice | null {
-  const back = readPaymentReturn();
-  if (!back) return null;
-  return back.kind === "cancel" ? { phase: "done", result: CANCELED } : { phase: "working" };
-}
 
 /** An invitation already counted on an earlier visit, still waiting for its sign-in. */
 function waitingInvite(): Invite | null {
@@ -104,11 +70,7 @@ function waitingInvite(): Invite | null {
 
 /** A balance a server reply announced, laid over the status it belongs to. */
 function withPulse(status: CreditStatus, pulse: CreditPulse): CreditStatus {
-  const pass =
-    status.pass && pulse.passUntil
-      ? { ...status.pass, until: pulse.passUntil, left: pulse.passLeft ?? status.pass.left }
-      : status.pass;
-  return { ...status, dailyLeft: pulse.daily, bonus: pulse.bonus, allowance: pulse.allowance || status.allowance, pass };
+  return { ...status, dailyLeft: pulse.daily, bonus: pulse.bonus, allowance: pulse.allowance || status.allowance };
 }
 
 export function CreditsProvider({ children }: PropsWithChildren) {
@@ -122,8 +84,6 @@ export function CreditsProvider({ children }: PropsWithChildren) {
   const [welcome, setWelcome] = useState<CreditsContextValue["welcome"]>(null);
   const [empty, setEmpty] = useState<CreditsContextValue["empty"]>(null);
   const [beat, setBeat] = useState(0);
-  const [buying, setBuying] = useState<PassPlan | null>(null);
-  const [payment, setPayment] = useState<PaymentNotice | null>(waitingPayment);
   const loadedAt = useRef(0);
   const request = useRef(0);
 
@@ -268,74 +228,6 @@ export function CreditsProvider({ children }: PropsWithChildren) {
       });
   }, [load, userId]);
 
-  // Back from PayPal: the purchase is settled once the account is known.
-  const settlePayment = useCallback(
-    (back: PaymentReturn) => {
-      if (settling === back.purchase) return;
-      settling = back.purchase;
-      const work: Promise<PaymentNotice> =
-        back.kind === "cancel"
-          ? cancelPayment(back.purchase)
-              .catch(() => undefined)
-              .then(() => ({ phase: "done", result: CANCELED }))
-          : finishPayment(back.purchase).then((result) => {
-              load();
-              return { phase: "done", result };
-            });
-      void work
-        .then((next) => {
-          clearPaymentReturn();
-          setPayment(next);
-        })
-        .catch((error: unknown) => {
-          const code = error instanceof PayError ? error.code : "network";
-          // Not this account's purchase: nothing to keep. Anything else may be tried again.
-          if (code === "unknown") clearPaymentReturn();
-          setPayment({
-            phase: "error",
-            message: error instanceof PayError ? error.message : "החיבור לשרת נכשל. אפשר לנסות שוב.",
-            retry: code !== "unknown",
-          });
-        })
-        .finally(() => {
-          settling = null;
-        });
-    },
-    [load],
-  );
-
-  useEffect(() => {
-    if (!userId) return;
-    const back = readPaymentReturn();
-    if (back) settlePayment(back);
-  }, [settlePayment, userId]);
-
-  const retryPayment = useCallback(() => {
-    const back = readPaymentReturn();
-    if (!back) {
-      setPayment(null);
-      return;
-    }
-    setPayment({ phase: "working" });
-    settlePayment(back);
-  }, [settlePayment]);
-
-  const buyPass = useCallback((plan: PassPlan) => {
-    setBuying(plan);
-    setPayment(null);
-    // On success the browser is on its way to PayPal.
-    void startPass(plan).catch((error: unknown) => {
-      setBuying(null);
-      setPayment({
-        phase: "error",
-        message: error instanceof PayError ? error.message : "לא הצלחנו לפתוח את התשלום. אפשר לנסות שוב.",
-        retry: false,
-      });
-    });
-  }, []);
-
-  const dismissPayment = useCallback(() => setPayment(null), []);
-
   const claim = useCallback(
     async (code: string) => {
       const reply = await claimReferral(code);
@@ -371,32 +263,8 @@ export function CreditsProvider({ children }: PropsWithChildren) {
       dismissEmpty,
       claim,
       beat,
-      buying,
-      buyPass,
-      payment,
-      dismissPayment,
-      retryPayment,
     }),
-    [
-      beat,
-      buyPass,
-      buying,
-      claim,
-      current?.loading,
-      dismissEmpty,
-      dismissInvite,
-      dismissPayment,
-      dismissWelcome,
-      empty,
-      invite,
-      load,
-      payment,
-      retryPayment,
-      rules,
-      status,
-      userId,
-      welcome,
-    ],
+    [beat, claim, current?.loading, dismissEmpty, dismissInvite, dismissWelcome, empty, invite, load, rules, status, userId, welcome],
   );
 
   return <CreditsContext.Provider value={value}>{children}</CreditsContext.Provider>;
@@ -420,11 +288,6 @@ const OUTSIDE: CreditsContextValue = {
   dismissEmpty: () => undefined,
   claim: () => Promise.resolve({ ok: false, reason: "signed_out", welcome: 0, name: null }),
   beat: 0,
-  buying: null,
-  buyPass: () => undefined,
-  payment: null,
-  dismissPayment: () => undefined,
-  retryPayment: () => undefined,
 };
 
 // The hook lives beside its provider, like useAuth.

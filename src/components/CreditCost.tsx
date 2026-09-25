@@ -1,12 +1,12 @@
-import { Infinity as InfinityIcon, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { balanceOf, creditsLabel, passActive } from "../lib/credits";
+import { balanceOf, creditsLabel } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 
 /**
  * The price of a server action, said before it is paid: what it costs, what
- * the account holds, and the way to more when that is not enough — or that a
- * running pass covers it. Says nothing while credits are switched off.
+ * the account holds, and the way to more when that is not enough. Says
+ * nothing while credits are switched off.
  */
 export function CreditCost({
   cost,
@@ -22,14 +22,6 @@ export function CreditCost({
   const { user } = useAuth();
   const { rules, status } = useCredits();
   if (!rules.enabled || cost <= 0) return null;
-  if (user && status?.pass && passActive(status.pass) && status.pass.left >= cost) {
-    return (
-      <p className="credit-cost is-pass">
-        <InfinityIcon size={14} aria-hidden="true" />
-        <span>כלול בחופשי שלך</span>
-      </p>
-    );
-  }
   const balance = user && status ? balanceOf(status) : null;
   const short = balance !== null && balance < cost;
   const price = unit
