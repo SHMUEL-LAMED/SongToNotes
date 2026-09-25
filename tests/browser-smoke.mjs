@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 21, "hub renders all 21 tool cards", `found ${cards}`);
+log(cards === 24, "hub renders all 24 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,12 +83,13 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "beats", "theory"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "beats", "theory", "pads", "progressions", "changes", "identify"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
-  await page.waitForSelector(".tool-body h1, .tool-hero h1", { timeout: 30_000 }).catch(() => {});
-  const heading = await page.locator(".tool-body h1, .tool-hero h1").first().textContent().catch(() => null);
+  // The pads are a full-bleed board of their own, outside .tool-body.
+  await page.waitForSelector(".tool-body h1, .tool-hero h1, .pad-tool h1", { timeout: 30_000 }).catch(() => {});
+  const heading = await page.locator(".tool-body h1, .tool-hero h1, .pad-tool h1").first().textContent().catch(() => null);
   log(Boolean(heading), `tool "${id}" renders`, heading ?? "no heading");
 }
 
@@ -643,12 +644,16 @@ log((await page.locator(".tts-meta").textContent() ?? "").includes(`${ttsSample.
 log((await page.locator(".tts-tool .transport-button.primary").isEnabled()), "tts: the read-aloud button is ready");
 log(await page.locator(".tts-tool .download-buttons button").first().isDisabled(), "tts: the server MP3 waits for a sign-in");
 
-// --- song identifier: hidden from visitors, so its address lands on the hub ---
+// --- song identifier: on the hub and open to all; the recognition itself asks for a sign-in ---
+await page.goto(BASE, { waitUntil: "load" });
+await page.reload({ waitUntil: "load" });
+await page.waitForSelector(".tool-card", { timeout: 10_000 });
+log((await page.locator(".tool-card", { hasText: "מזהה שיר" }).count()) === 1, "identify: the hub has its card");
 await page.goto(`${BASE}#/identify`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
-await page.waitForTimeout(600);
-log(await page.locator(".hub-hero").isVisible(), "identify: hidden, its address lands on the hub");
-log((await page.locator(".tool-card", { hasText: "מזהה שיר" }).count()) === 0, "identify: no card for it on the hub");
+await page.waitForSelector(".identify-tool", { timeout: 10_000 }).catch(() => {});
+log(await page.locator(".identify-tool h1", { hasText: "מזהה שיר" }).isVisible(), "identify: its address opens the tool");
+log(await page.locator(".identify-tool .transcript-signin").isVisible(), "identify: recognition asks for a sign-in");
 
 // --- transcript extras: a reopened transcript has search with jump and a speakers button ---
 await page.evaluate(() => {
