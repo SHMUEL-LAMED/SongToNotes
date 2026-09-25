@@ -66,6 +66,15 @@ class VoiceError extends Error {
   }
 }
 
+/** Bytes to base64, a slice at a time so a long recording does not overflow the call stack. */
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  }
+  return btoa(binary);
+}
+
 async function refusal(response: Response, model: string) {
   const detail = (await response.text().catch(() => "")).slice(0, 300);
   return new VoiceError(troubleOf(response.status, detail), response.status, `${model}: ${detail}`);
@@ -151,7 +160,7 @@ Deno.serve(async (req: Request) => {
   const user = await visitor(req);
   if (!user) return json(401, { error: "signed_out" });
 
-  let body: { text?: string; voice?: string; speed?: number; format?: string };
+  let body: { text?: string; voice?: string; speed?: number; format?: string; encoding?: string };
   try {
     body = await req.json();
   } catch {
@@ -163,6 +172,9 @@ Deno.serve(async (req: Request) => {
   const voice = typeof body.voice === "string" && /^[\w.-]{1,40}$/.test(body.voice) ? body.voice : undefined;
   const speed = typeof body.speed === "number" ? Math.max(0.5, Math.min(2, body.speed)) : 1;
   const format = body.format === "wav" ? "wav" : "mp3";
+  // Some filtered connections (NetFree, for one) hold back a reply that is an
+  // audio file; the same audio as base64 inside JSON passes like any answer.
+  const asJson = body.encoding === "base64";
 
   const { used } = await usedToday(admin, user.id, "tts");
   if (used + text.length > limit) return json(429, { error: "quota", used, limit });
@@ -198,6 +210,20 @@ Deno.serve(async (req: Request) => {
       continue;
     }
     await recordUsage(admin, user.id, "tts", text.length);
+    if (asJson) {
+      return new Response(
+        JSON.stringify({ audio: toBase64(speech.bytes), type: speech.type, provider: service.id, model: speech.model }),
+        {
+          headers: {
+            ...CORS,
+            "Content-Type": "application/json; charset=utf-8",
+            "X-Provider": service.id,
+            "X-Model": speech.model,
+            ...creditHeaders(paid),
+          },
+        },
+      );
+    }
     return new Response(speech.bytes, {
       headers: {
         ...CORS,

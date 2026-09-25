@@ -363,7 +363,9 @@ export async function speakToFile(
     response = await fetch(`${FUNCTIONS}/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${access}`, apikey: SUPABASE_PUBLISHABLE_KEY },
-      body: JSON.stringify({ text, voice: options.voice, speed: options.speed, format: options.format ?? "mp3" }),
+      // The audio comes back as base64 in JSON: some filtered connections
+      // (NetFree, for one) hold back a reply that is an audio file.
+      body: JSON.stringify({ text, voice: options.voice, speed: options.speed, format: options.format ?? "mp3", encoding: "base64" }),
       signal: options.signal,
     });
   } catch (caught) {
@@ -375,8 +377,24 @@ export async function speakToFile(
     throw error.code === "not_configured" ? new AiError(error.code, NO_VOICE) : error;
   }
   announceCreditsFrom(response);
-  const bytes = await response.arrayBuffer();
-  const wav = /wav/i.test(response.headers.get("Content-Type") ?? "");
+  let bytes: ArrayBuffer;
+  let type = response.headers.get("Content-Type") ?? "";
+  try {
+    if (/json/i.test(type)) {
+      const answer = (await response.json()) as { audio?: unknown; type?: unknown };
+      if (typeof answer.audio !== "string" || !answer.audio) throw new AiError("provider_error", MESSAGES.provider_error);
+      bytes = Uint8Array.from(atob(answer.audio), (char) => char.charCodeAt(0)).buffer;
+      type = typeof answer.type === "string" ? answer.type : "";
+    } else {
+      // A server from before the JSON reply sends the file itself.
+      bytes = await response.arrayBuffer();
+    }
+  } catch (caught) {
+    if (caught instanceof AiError) throw caught;
+    if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
+    throw new AiError("network", MESSAGES.network);
+  }
+  const wav = /wav/i.test(type);
   return new File([bytes], wav ? "speech.wav" : "speech.mp3", { type: wav ? "audio/wav" : "audio/mpeg" });
 }
 
