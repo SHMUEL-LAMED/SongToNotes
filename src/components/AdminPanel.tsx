@@ -20,6 +20,7 @@ import {
   RefreshCw,
   ScrollText,
   Search,
+  UserRound,
   ShieldCheck,
   ShieldX,
   Stethoscope,
@@ -32,6 +33,7 @@ import {
 import {
   useCallback,
   useEffect,
+  Fragment,
   useMemo,
   useState,
   type CSSProperties,
@@ -39,11 +41,13 @@ import {
 } from "react";
 import {
   AdminError,
+  accountSummary,
   actionLabel,
   busiestHour,
   changeOverRange,
   compactNumber,
   describeAdminError,
+  fetchAccounts,
   fetchAudit,
   fetchFeedback,
   fetchSettings,
@@ -54,6 +58,7 @@ import {
   funnel,
   hourLabel,
   isAdmin,
+  providerLabel,
   quotaLabel,
   runAdminAction,
   series,
@@ -64,6 +69,7 @@ import {
   toolHue,
   toolLabel,
   weekdayLabel,
+  type AccountEntry,
   type AdminAuditEntry,
   type AdminCredits,
   type AdminSetting,
@@ -92,11 +98,12 @@ import {
 /**
  * The admin area: how the site is doing, and the switches that change it.
  *
- * What it does *not* show is as deliberate as what it does. There is no list
- * of people here, no titles of anybody's work, no account to open — the rows
- * it draws from carry none of that to begin with. The question it answers is
- * "how is the site being used": which tools are opened, when, for how long,
- * what finishes and what breaks.
+ * What it does *not* show is as deliberate as what it does. The measurements
+ * carry no titles of anybody's work and no account — the rows they are drawn
+ * from never had any. The question they answer is "how is the site being
+ * used": which tools are opened, when, for how long, what finishes and what
+ * breaks. The one list of people is the accounts tab, read only when opened
+ * and logged by the server each time.
  *
  * The gate is on the server. `supabase/functions/admin` checks the verified
  * address on the caller's own token before it answers, so this page is not a
@@ -105,10 +112,11 @@ import {
  * request it makes.
  */
 
-type Tab = "overview" | "tools" | "times" | "feedback" | "system";
+type Tab = "overview" | "accounts" | "tools" | "times" | "feedback" | "system";
 
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: "overview", label: "סקירה", icon: ChartNoAxesColumn },
+  { id: "accounts", label: "חשבונות", icon: UserRound },
   { id: "tools", label: "כלים", icon: Activity },
   { id: "times", label: "זמנים וקהל", icon: Clock },
   { id: "feedback", label: "משוב", icon: MessageSquareText },
@@ -1199,6 +1207,216 @@ const SETTING_PLACEHOLDERS: Record<string, string> = {
 
 /* ------------------------------------------------------------------ page */
 
+type AccountsState = { accounts: AccountEntry[]; truncated: boolean };
+
+type AccountSort = "joined" | "seen" | "works" | "bytes";
+
+const ACCOUNT_SORTS: { id: AccountSort; label: string }[] = [
+  { id: "joined", label: "הצטרפות" },
+  { id: "seen", label: "כניסה אחרונה" },
+  { id: "works", label: "עבודות" },
+  { id: "bytes", label: "אחסון" },
+];
+
+function AccountsTab({
+  state,
+  loading,
+  error,
+  onReload,
+}: {
+  state: AccountsState | null;
+  loading: boolean;
+  error: string | null;
+  onReload: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<AccountSort>("joined");
+  const [open, setOpen] = useState<string | null>(null);
+
+  const shown = useMemo(() => {
+    const wanted = query.trim().toLowerCase();
+    const rows = (state?.accounts ?? []).filter(
+      (account) =>
+        !wanted ||
+        [account.email, account.name, account.phone, account.id].some((field) => field?.toLowerCase().includes(wanted)),
+    );
+    const time = (value: string | null) => (value ? new Date(value).getTime() || 0 : 0);
+    const key: Record<AccountSort, (account: AccountEntry) => number> = {
+      joined: (account) => time(account.createdAt),
+      seen: (account) => time(account.lastSignInAt),
+      works: (account) => account.works,
+      bytes: (account) => account.bytes,
+    };
+    return [...rows].sort((a, b) => key[sort](b) - key[sort](a));
+  }, [query, sort, state]);
+
+  if (!state) {
+    return (
+      <div className="admin-skeleton" role="status">
+        <span className="admin-skeleton-bar" />
+        <p>{error ?? (loading ? "טוען את החשבונות…" : "אין נתונים.")}</p>
+      </div>
+    );
+  }
+
+  const summary = accountSummary(state.accounts);
+
+  const exportRows = () =>
+    downloadFile(
+      `${String.fromCharCode(0xfeff)}${toCsv(
+        shown.map((account) => ({
+          אימייל: account.email ?? "",
+          שם: account.name ?? "",
+          טלפון: account.phone ?? "",
+          "כניסה דרך": account.providers.map(providerLabel).join(" "),
+          הצטרפות: formatDate(account.createdAt),
+          "כניסה אחרונה": formatDate(account.lastSignInAt),
+          מאומת: account.confirmed ? "כן" : "לא",
+          עבודות: account.works,
+          קבצים: account.files,
+          אחסון: formatBytes(account.bytes),
+          קרדיטים: account.bonus ?? "",
+          חברים: account.friends,
+        })),
+      )}`,
+      "accounts.csv",
+      "text/csv;charset=utf-8",
+    );
+
+  return (
+    <div className="admin-grid">
+      <div className="admin-tiles">
+        <StatTile label="חשבונות רשומים" value={formatNumber(summary.total)} note={`${formatNumber(summary.joinedWeek)} הצטרפו השבוע`} icon={<Users size={16} />} />
+        <StatTile label="נכנסו היום" value={formatNumber(summary.today)} note="התחברו ב־24 השעות האחרונות" icon={<Zap size={16} />} hue={155} />
+        <StatTile label="נכנסו השבוע" value={formatNumber(summary.week)} note="התחברו ב־7 הימים האחרונים" icon={<Clock size={16} />} />
+        <StatTile label="נכנסו החודש" value={formatNumber(summary.month)} note="התחברו ב־30 הימים האחרונים" icon={<Activity size={16} />} />
+      </div>
+
+      <Card
+        title="פירוט החשבונות"
+        hint={query ? `${formatNumber(shown.length)} מתוך ${formatNumber(summary.total)}` : `${formatNumber(summary.total)} חשבונות`}
+        icon={<UserRound size={17} />}
+        wide
+        actions={
+          <>
+            <span className="admin-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                placeholder="אימייל, שם או טלפון"
+                aria-label="חיפוש חשבון"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </span>
+            <select value={sort} aria-label="מיון" onChange={(event) => setSort(event.target.value as AccountSort)}>
+              {ACCOUNT_SORTS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  מיון: {item.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="secondary-button compact" onClick={onReload} disabled={loading}>
+              <RefreshCw size={15} className={loading ? "is-spinning" : ""} /> רענון
+            </button>
+            <button type="button" className="secondary-button compact" onClick={exportRows} disabled={!shown.length}>
+              <Download size={15} /> ייצוא CSV
+            </button>
+          </>
+        }
+      >
+        {error && (
+          <p className="error-message admin-message" role="alert">
+            {error}
+          </p>
+        )}
+        {state.truncated && <p className="admin-foot-note">יש יותר חשבונות ממה שהשרת קורא בבת אחת; מוצגים הראשונים.</p>}
+        {shown.length ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table accounts-table">
+              <thead>
+                <tr>
+                  <th scope="col">חשבון</th>
+                  <th scope="col">כניסה דרך</th>
+                  <th scope="col">הצטרף</th>
+                  <th scope="col">כניסה אחרונה</th>
+                  <th scope="col">עבודות</th>
+                  <th scope="col">אחסון</th>
+                  <th scope="col">קרדיטים</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((account) => (
+                  <Fragment key={account.id}>
+                    <tr className={open === account.id ? "is-focus" : ""}>
+                      <th scope="row">
+                        <button
+                          type="button"
+                          className="link-button"
+                          aria-expanded={open === account.id}
+                          onClick={() => setOpen(open === account.id ? null : account.id)}
+                        >
+                          {account.email ?? account.phone ?? account.id.slice(0, 8)}
+                        </button>
+                        {account.name && <small className="account-name">{account.name}</small>}
+                      </th>
+                      <td>{account.providers.map(providerLabel).join(", ") || "—"}</td>
+                      <td title={formatDate(account.createdAt)}>{timeAgo(account.createdAt)}</td>
+                      <td title={formatDate(account.lastSignInAt)}>{timeAgo(account.lastSignInAt)}</td>
+                      <td>{account.works ? formatNumber(account.works) : "—"}</td>
+                      <td>{account.bytes ? formatBytes(account.bytes) : "—"}</td>
+                      <td>{account.bonus == null ? "—" : formatNumber(account.bonus)}</td>
+                    </tr>
+                    {open === account.id && (
+                      <tr className="account-detail">
+                        <td colSpan={7}>
+                          <dl className="account-facts">
+                            <dt>מזהה</dt>
+                            <dd dir="ltr">{account.id}</dd>
+                            <dt>אימייל</dt>
+                            <dd dir="ltr">{account.email ?? "—"}</dd>
+                            <dt>טלפון</dt>
+                            <dd dir="ltr">{account.phone ?? "—"}</dd>
+                            <dt>שם</dt>
+                            <dd>{account.name ?? "—"}</dd>
+                            <dt>מאומת</dt>
+                            <dd>{account.confirmed ? "כן" : "לא"}</dd>
+                            <dt>חסום</dt>
+                            <dd>{account.banned ? "כן" : "לא"}</dd>
+                            <dt>הצטרף</dt>
+                            <dd>{formatDate(account.createdAt)}</dd>
+                            <dt>כניסה אחרונה</dt>
+                            <dd>{formatDate(account.lastSignInAt)}</dd>
+                            <dt>עבודות שמורות</dt>
+                            <dd>{formatNumber(account.works)}</dd>
+                            <dt>קבצים בענן</dt>
+                            <dd>
+                              {formatNumber(account.files)} · {formatBytes(account.bytes)}
+                            </dd>
+                            <dt>קרדיטים שנצברו</dt>
+                            <dd>{account.bonus == null ? "—" : formatNumber(account.bonus)}</dd>
+                            <dt>חברים שהביא</dt>
+                            <dd>{formatNumber(account.friends)}</dd>
+                          </dl>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="admin-empty">{query ? "אין חשבון שמתאים לחיפוש." : "עוד אין חשבונות."}</p>
+        )}
+        <p className="admin-foot-note">
+          "כניסה אחרונה" היא הפעם האחרונה שהחשבון התחבר (לא כל ביקור באתר). כל פתיחה של הרשימה נרשמת ביומן הפעולות.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
 const FEEDBACK_KIND_LABELS: Record<FeedbackEntry["kind"], string> = { problem: "בעיה", idea: "רעיון", other: "אחר" };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -1324,6 +1542,9 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   const [checks, setChecks] = useState<HealthCheck[] | null>(null);
   const [orphans, setOrphans] = useState<{ count: number; bytes: number } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [accounts, setAccounts] = useState<AccountsState | null>(null);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1367,6 +1588,23 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     return () => window.clearTimeout(timer);
   }, [allowed, loadFeedback]);
   const waiting = feedback ? feedback.entries.filter((entry) => !entry.handled).length : 0;
+
+  const loadAccounts = useCallback(() => {
+    setAccountsLoading(true);
+    setAccountsError(null);
+    void fetchAccounts()
+      .then(setAccounts)
+      .catch((cause) => setAccountsError(cause instanceof AdminError ? cause.message : describeAdminError("storage")))
+      .finally(() => setAccountsLoading(false));
+  }, []);
+
+  // The list of people is read only when the tab is opened, not with the rest.
+  const wantAccounts = allowed && tab === "accounts" && !accounts;
+  useEffect(() => {
+    if (!wantAccounts) return;
+    const timer = window.setTimeout(loadAccounts, 0);
+    return () => window.clearTimeout(timer);
+  }, [wantAccounts, loadAccounts]);
 
   useEffect(() => {
     if (!allowed || tab !== "system") return;
@@ -1568,8 +1806,8 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
 
       <p className="admin-privacy-note">
         <ShieldCheck size={15} aria-hidden="true" />
-        המדידות כאן אנונימיות לגמרי: הן אומרות איזה כלי נפתח ומתי, ולא מי עשה מה. אין כאן רשימת
-        אנשים ואי אפשר לבנות אותה מהנתונים האלה.
+        המדידות כאן אנונימיות לגמרי: הן אומרות איזה כלי נפתח ומתי, ולא מי עשה מה. רשימת החשבונות
+        נמצאת בלשונית "חשבונות" בלבד, וכל פתיחה שלה נרשמת ביומן.
       </p>
 
       {snapshot?.alerts.map((alert) => (
@@ -1618,6 +1856,8 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
 
       {tab === "feedback" ? (
         <FeedbackTab feedback={feedback} busy={busy} onHandle={onHandleFeedback} onDelete={onDeleteFeedback} onReload={loadFeedback} />
+      ) : tab === "accounts" ? (
+        <AccountsTab state={accounts} loading={accountsLoading} error={accountsError} onReload={loadAccounts} />
       ) : !snapshot ? (
         <div className="admin-skeleton" role="status">
           <span className="admin-skeleton-bar" />

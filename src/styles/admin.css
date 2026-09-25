@@ -324,3 +324,20 @@
   .failure-list li { grid-template-columns: 1fr auto; }
   .audit-who { grid-column: 1 / -1; }
 }
+
+/* ---- accounts ---- */
+.admin-card-actions select {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-solid);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.accounts-table th[scope="row"] { text-align: start; }
+.account-name { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; font-weight: 400; }
+.account-detail td { background: var(--accent-soft); }
+.account-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 4px 0; font-size: 13.5px; }
+.account-facts dt { color: var(--text-soft); }
+.account-facts dd { margin: 0; overflow-wrap: anywhere; }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountSummary,
+  normalizeAccounts,
   busiestHour,
   changeOverRange,
   compactNumber,
@@ -255,5 +257,27 @@ describe("the visitors' feedback", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: 3, kind: "problem", handled: true });
     expect(normalizeFeedback({})).toEqual([]);
+  });
+});
+
+describe("accounts", () => {
+  it("keeps well-formed rows and fills in the gaps", () => {
+    const rows = normalizeAccounts([
+      { id: "a", email: "x@y.com", providers: ["google"], createdAt: "2026-09-01T00:00:00Z", works: "3", bonus: null },
+      { email: "no-id@y.com" },
+      null,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: "a", email: "x@y.com", name: null, works: 3, bonus: null, providers: ["google"] });
+  });
+
+  it("counts who signed in lately", () => {
+    const now = new Date("2026-09-25T12:00:00Z");
+    const rows = normalizeAccounts([
+      { id: "a", createdAt: "2026-09-24T00:00:00Z", lastSignInAt: "2026-09-25T10:00:00Z" },
+      { id: "b", createdAt: "2026-01-01T00:00:00Z", lastSignInAt: "2026-09-20T10:00:00Z" },
+      { id: "c", createdAt: "2026-01-01T00:00:00Z", lastSignInAt: null },
+    ]);
+    expect(accountSummary(rows, now)).toEqual({ total: 3, today: 1, week: 2, month: 2, joinedWeek: 1 });
   });
 });

@@ -10,9 +10,12 @@
  * on what kind of device — and never who did any of it. The rows it reads for
  * that (`site_events`) carry no account, no title and no file name to begin
  * with; the per-account tables are touched only for totals nobody can be
- * picked out of.
+ * picked out of. The one exception is `?view=accounts`, the list of accounts
+ * the owner asked for — who signed up and how much each keeps here, never the
+ * content of their work — and every opening of it is written to the audit log.
  *
  * GET  ?view=overview&days=30  everything the dashboard draws, in one reply
+ * GET  ?view=accounts          the accounts on the site, one row each
  * GET  ?view=settings          which server keys are set (never their values)
  * GET  ?view=audit             the log of what the admin area did
  * POST {action, …}             one change: a notice, maintenance, a tool off,
@@ -366,6 +369,86 @@ async function overview(admin: SupabaseClient, days: number) {
     control: notices,
     credits,
   };
+}
+
+/* --------------------------------------------------------------- accounts */
+
+/** Enough for a big site; the reply says when it was reached. */
+const MAX_ACCOUNTS = 20_000;
+
+/** How many rows of `table` each account owns, read a page at a time. */
+async function countByUser(admin: SupabaseClient, table: string) {
+  const counts = new Map<string, number>();
+  for (let from = 0; from < MAX_EVENTS; from += PAGE) {
+    const { data, error } = await admin.from(table).select("user_id").range(from, from + PAGE - 1);
+    if (error) break;
+    const batch = (data ?? []) as { user_id: string }[];
+    for (const row of batch) counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
+    if (batch.length < PAGE) break;
+  }
+  return counts;
+}
+
+/**
+ * Every account on the site, with what the owner needs to know about it: the
+ * address, how it signs in, when it joined and last signed in, and how much it
+ * keeps here. Never the content of anybody's work.
+ */
+async function accounts(admin: SupabaseClient) {
+  const users: User[] = [];
+  for (let page = 1; users.length < MAX_ACCOUNTS; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PAGE });
+    if (error) throw error;
+    users.push(...data.users);
+    if (data.users.length < PAGE) break;
+  }
+
+  const [profiles, works, transcriptions, ringtones, storage, credits] = await Promise.all([
+    admin.from("profiles").select("id, full_name"),
+    countByUser(admin, "works"),
+    countByUser(admin, "transcriptions"),
+    countByUser(admin, "ringtones"),
+    admin.rpc("admin_storage_usage"),
+    admin.from("credit_accounts").select("user_id, bonus, friends"),
+  ]);
+
+  const names = new Map(
+    ((profiles.data ?? []) as { id: string; full_name: string | null }[]).map((row) => [row.id, row.full_name]),
+  );
+  const files = new Map(
+    ((storage.data ?? []) as { user_id: string; files: number; bytes: number }[]).map((row) => [
+      String(row.user_id),
+      { files: Number(row.files ?? 0), bytes: Number(row.bytes ?? 0) },
+    ]),
+  );
+  const wallets = new Map(
+    ((credits.data ?? []) as { user_id: string; bonus: number; friends: number }[]).map((row) => [row.user_id, row]),
+  );
+
+  const list = users.map((user) => {
+    const meta = (user.user_metadata ?? {}) as Row;
+    const providers = (user.app_metadata?.providers as string[] | undefined) ??
+      (user.app_metadata?.provider ? [String(user.app_metadata.provider)] : []);
+    return {
+      id: user.id,
+      email: user.email ?? null,
+      phone: user.phone || null,
+      name: names.get(user.id) ?? (typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string" ? meta.name : null),
+      providers,
+      createdAt: user.created_at,
+      lastSignInAt: user.last_sign_in_at ?? null,
+      confirmed: Boolean(user.email_confirmed_at || user.phone_confirmed_at),
+      banned: Boolean((user as User & { banned_until?: string | null }).banned_until),
+      works: (works.get(user.id) ?? 0) + (transcriptions.get(user.id) ?? 0) + (ringtones.get(user.id) ?? 0),
+      files: files.get(user.id)?.files ?? 0,
+      bytes: files.get(user.id)?.bytes ?? 0,
+      bonus: wallets.get(user.id)?.bonus ?? null,
+      friends: wallets.get(user.id)?.friends ?? 0,
+    };
+  });
+
+  list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return { accounts: list, truncated: users.length >= MAX_ACCOUNTS };
 }
 
 /* ---------------------------------------------------------------- credits */
@@ -749,6 +832,11 @@ Deno.serve(async (req: Request) => {
           .limit(300);
         if (error) return json(200, { entries: [], missing: true });
         return json(200, { entries: data ?? [] });
+      }
+      if (view === "accounts") {
+        const reply = await accounts(admin);
+        await log(admin, user.email ?? user.id, "accounts.view", null, { count: reply.accounts.length });
+        return json(200, reply);
       }
       if (view === "audit") {
         const query = (url.searchParams.get("q") ?? "").slice(0, 60);
