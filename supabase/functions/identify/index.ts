@@ -3,6 +3,13 @@
  * recognition (https://audd.io). The token stays here, on the server; a
  * signed-in visitor gets a daily allowance of lookups.
  *
+ * One identification may take several clips — the site tries the start of
+ * the song, about 35% and about 65% of it, one after another, until one is
+ * recognised. The clips carry the same `session` id, and the allowance goes
+ * down once per session (public.identify_sessions, see
+ * supabase/identify_sessions.sql), whatever the number of clips. A session
+ * may send at most MAX_CLIPS clips.
+ *
  * Settings (function secrets, or private.stt_settings from the admin area):
  *   IDENTIFY_API_KEY   an AudD api_token — required ("test" works for a few lookups a day)
  *   IDENTIFY_DAILY     lookups per account per day, default 30
@@ -12,6 +19,12 @@ import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } fr
 const MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_DAILY = 30;
 const AUDD = "https://api.audd.io/";
+const MAX_CLIPS = 3;
+
+/** A session id from the site: letters, digits and dashes, as a UUID has. */
+function cleanSession(value: FormDataEntryValue | null) {
+  return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -40,7 +53,20 @@ Deno.serve(async (req: Request) => {
   if (file.size > MAX_BYTES) return json(413, { error: "too_large" });
 
   const { used } = await usedToday(admin, user.id, "identify");
-  if (used >= limit) return json(429, { error: "quota", used, limit });
+  const session = cleanSession(form.get("session"));
+  let charged = false;
+  if (session) {
+    const { data, error } = await admin.rpc("identify_claim", { p_user: user.id, p_session: session });
+    const claim = (Array.isArray(data) ? data[0] : data) as { attempts?: number; charged?: boolean } | null;
+    if (error || !claim) {
+      console.error("identify session", error);
+      return json(500, { error: "provider_error" });
+    }
+    if ((claim.attempts ?? 0) > MAX_CLIPS) return json(429, { error: "session_limit", used, limit });
+    charged = Boolean(claim.charged);
+  }
+  // A session already charged for this identification goes on without a new charge.
+  if (!charged && used >= limit) return json(429, { error: "quota", used, limit });
 
   const upstream = new FormData();
   upstream.append("api_token", apiKey);
@@ -77,9 +103,17 @@ Deno.serve(async (req: Request) => {
     if (code === 901 || code === 902) return json(503, { error: "provider_busy", code });
     return json(502, { error: "provider_error", status: response.status });
   }
-  await recordUsage(admin, user.id, "identify", 1);
+  // Charged once per identification: the first clip of a session that the
+  // service answers (with a song or without) is the one that counts.
+  let usedNow = used;
+  if (session) {
+    const { data: first } = await admin.rpc("identify_charge", { p_user: user.id, p_session: session });
+    if (first === true) usedNow = await recordUsage(admin, user.id, "identify", 1);
+  } else {
+    usedNow = await recordUsage(admin, user.id, "identify", 1);
+  }
   const result = parsed.result;
-  if (!result) return json(200, { found: false, used: used + 1, limit });
+  if (!result) return json(200, { found: false, used: usedNow, limit });
   const artwork = result.apple_music?.artwork?.url?.replace("{w}", "600").replace("{h}", "600") ?? result.spotify?.album?.images?.[0]?.url ?? null;
   return json(200, {
     found: true,
@@ -96,7 +130,7 @@ Deno.serve(async (req: Request) => {
       deezer: result.deezer?.link ?? null,
     },
     artwork,
-    used: used + 1,
+    used: usedNow,
     limit,
   });
 });

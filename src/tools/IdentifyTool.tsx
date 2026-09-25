@@ -1,40 +1,32 @@
-import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Search, Square } from "lucide-react";
+import { Disc3, ExternalLink, FileAudio, LogIn, Mic, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
-import { AiError, identifyAvailability, identifySong, type Identification } from "../lib/aiApi";
+import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
 import { useAuth } from "../lib/auth";
+import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
-import { encodeWav } from "../lib/wav";
 
-const CLIP_SECONDS = 12;
-const CLIP_RATE = 16_000;
-
-/** The middle of the file, downmixed and resampled to a small clip. */
-async function clipFromFile(file: File): Promise<Blob> {
-  const buffer = await decodeAudioFile(await file.arrayBuffer());
-  const Offline = window.OfflineAudioContext || (window as typeof window & { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-  if (!Offline) throw new Error("הדפדפן הזה אינו תומך בעיבוד אודיו.");
-  const start = Math.max(0, Math.min(buffer.duration - CLIP_SECONDS, buffer.duration * 0.3));
-  const seconds = Math.min(CLIP_SECONDS, buffer.duration);
-  const offline = new Offline(1, Math.ceil(seconds * CLIP_RATE), CLIP_RATE);
-  const source = offline.createBufferSource();
-  source.buffer = buffer;
-  source.connect(offline.destination);
-  source.start(0, start, seconds);
-  const rendered = await offline.startRendering();
-  return encodeWav({ channels: [rendered.getChannelData(0)], sampleRate: CLIP_RATE });
-}
-
-async function clipFromRecording(blob: Blob): Promise<Blob> {
-  return clipFromFile(new File([blob], "clip.webm", { type: blob.type }));
-}
+/** A message shown while a further clip of the same song is tried. */
+const TRYING_ANOTHER = "מנסה קטע נוסף…";
 
 /**
- * What song is this? A dozen seconds from the microphone, or from a file,
- * go to a recognition service on the server; back come the title, the
- * artist and where to listen. The service's key stays on the server.
+ * Failures a further clip cannot fix — no account, no allowance left, the
+ * service refusing the site's key or out of its own allowance. Any other
+ * failure of one clip just moves on to the next, without a word.
+ */
+const STOP_CODES = new Set(["signed_out", "quota", "not_configured", "provider_key", "provider_busy", "session_limit"]);
+
+/** Where the last identification came from, so "try another part" can go on from it. */
+type Source = { kind: "file"; buffer: AudioBuffer; round: number } | { kind: "mic" };
+
+/**
+ * What song is this? Twenty seconds from the microphone, or up to three
+ * clips of a file — its start, about 35% and about 65% — go one by one to a
+ * recognition service on the server until one is recognised; back come the
+ * title, the artist and where to listen. The service's key stays on the
+ * server, and one identification is charged once, however many clips it took.
  */
 export function IdentifyTool() {
   const { user, signInWithGoogle } = useAuth();
@@ -46,6 +38,9 @@ export function IdentifyTool() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Identification | null>(null);
+  // Every clip was tried and none was recognised: offer another part.
+  const [exhausted, setExhausted] = useState(false);
+  const [source, setSource] = useState<Source | null>(null);
   const [history, setHistory] = useState<Extract<Identification, { found: true }>[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
@@ -62,23 +57,55 @@ export function IdentifyTool() {
     recorder.cancel();
   }, [recorder]);
 
-  const lookup = async (clip: Blob) => {
-    setBusy("מזהה…");
+  /**
+   * Sends the clips one after another, until one is recognised. A clip that
+   * fails or finds nothing moves on to the next quietly; only a failure no
+   * clip can fix is shown. All the clips share one session, charged once.
+   */
+  const lookup = async (clips: (() => Promise<Blob>)[]) => {
     setError(null);
-    try {
-      const found = await identifySong(clip);
-      setResult(found);
-      if (found.found) setHistory((current) => [found, ...current.filter((item) => item.title !== found.title || item.artist !== found.artist)].slice(0, 8));
-    } catch (caught) {
-      setError(caught instanceof AiError || caught instanceof Error ? caught.message : "הזיהוי נכשל.");
-    } finally {
-      setBusy(null);
+    setResult(null);
+    setExhausted(false);
+    const session = newSession();
+    let last: Identification | null = null;
+    let answered = false;
+    for (let index = 0; index < clips.length; index += 1) {
+      setBusy(index === 0 ? "מזהה…" : TRYING_ANOTHER);
+      try {
+        const found = await identifyClip(await clips[index](), session);
+        answered = true;
+        last = found;
+        if (found.found) {
+          setResult(found);
+          setHistory((current) => [found, ...current.filter((item) => item.title !== found.title || item.artist !== found.artist)].slice(0, 8));
+          setBusy(null);
+          return;
+        }
+      } catch (caught) {
+        if (caught instanceof AiError && STOP_CODES.has(caught.code)) {
+          setError(caught.message);
+          setBusy(null);
+          return;
+        }
+        // Any other failure of one clip: on to the next.
+      }
     }
+    setResult(last);
+    setExhausted(true);
+    if (!answered) setError("לא הצלחנו לזהות את השיר כרגע. אפשר לנסות שוב בקטע אחר.");
+    setBusy(null);
+  };
+
+  const fileRound = async (buffer: AudioBuffer, round: number) => {
+    setSource({ kind: "file", buffer, round });
+    const starts = fileClipStarts(buffer, round);
+    await lookup(starts.map((start) => () => renderClip(buffer, start)));
   };
 
   const startListening = async () => {
     setError(null);
     setResult(null);
+    setExhausted(false);
     try {
       await recorder.start();
       setRecording(true);
@@ -86,7 +113,7 @@ export function IdentifyTool() {
       timerRef.current = window.setInterval(() => {
         setSeconds(recorder.elapsed);
         setLevel(recorder.level);
-        if (recorder.elapsed >= CLIP_SECONDS) void stopListening();
+        if (recorder.elapsed >= MIC_SECONDS) void stopListening();
       }, 100);
     } catch (caught) {
       setError(caught instanceof Error && caught.name === "NotAllowedError" ? "לא ניתנה גישה למיקרופון. אפשר לאשר אותה בהגדרות הדפדפן." : "לא הצלחנו להתחיל להאזין.");
@@ -100,10 +127,24 @@ export function IdentifyTool() {
     try {
       const blob = await recorder.stop();
       setBusy("מכין את הקטע…");
-      await lookup(await clipFromRecording(blob));
+      const buffer = await decodeAudioFile(await blob.arrayBuffer());
+      setSource({ kind: "mic" });
+      // The whole recording, from where the sound starts: up to 20 seconds.
+      const start = soundStart(buffer.getChannelData(0), buffer.sampleRate);
+      await lookup([() => renderClip(buffer, start, MIC_SECONDS)]);
     } catch {
       setError("ההאזנה נכשלה. נסה שוב.");
       setBusy(null);
+    }
+  };
+
+  /** "Try another part": the next places in the same file, or a fresh listen. */
+  const tryAnother = async () => {
+    if (!source) return;
+    if (source.kind === "file") {
+      await fileRound(source.buffer, source.round + 1);
+    } else {
+      await startListening();
     }
   };
 
@@ -115,10 +156,11 @@ export function IdentifyTool() {
       return;
     }
     setResult(null);
+    setExhausted(false);
     setBusy("מכין את הקטע…");
     setError(null);
     try {
-      await lookup(await clipFromFile(file));
+      await fileRound(await decodeAudioFile(await file.arrayBuffer()), 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "לא הצלחנו לקרוא את הקובץ.");
       setBusy(null);
@@ -127,7 +169,7 @@ export function IdentifyTool() {
 
   useAssistantTool("identify", {
     state: () =>
-      `מזהה שיר: ${!user ? "הגולש לא מחובר (הזיהוי דורש חשבון)" : configured === false ? "השירות לא הופעל באתר" : recording ? `מאזין (${Math.ceil(CLIP_SECONDS - seconds)} שניות נותרו)` : (busy ?? "מוכן להאזין")}${
+      `מזהה שיר: ${!user ? "הגולש לא מחובר (הזיהוי דורש חשבון)" : configured === false ? "השירות לא הופעל באתר" : recording ? `מאזין (${Math.ceil(MIC_SECONDS - seconds)} שניות נותרו)` : (busy ?? "מוכן להאזין")}${
         result ? (result.found ? `; זוהה לאחרונה: „${result.title}” של ${result.artist}${result.album ? ` (${result.album})` : ""}` : "; הניסיון האחרון לא זיהה שיר") : ""
       }.`,
     handlers: {
@@ -138,7 +180,7 @@ export function IdentifyTool() {
           if (busy) return { ok: false, message: busy };
           if (!isRecordingSupported()) return { ok: false, message: "הדפדפן הזה לא תומך בהקלטה" };
           await startListening();
-          return { ok: true, message: `מאזין ${CLIP_SECONDS} שניות למה שמתנגן; התוצאה תופיע על המסך` };
+          return { ok: true, message: `מאזין ${MIC_SECONDS} שניות למה שמתנגן; התוצאה תופיע על המסך` };
         }
         if (!recording) return { ok: false, message: "לא מאזין כרגע" };
         await stopListening();
@@ -164,7 +206,7 @@ export function IdentifyTool() {
         </span>
         <div>
           <h1>מזהה שיר</h1>
-          <p>מה השיר הזה? מקליטים כמה שניות, או מעלים קובץ, ומקבלים את השם והאמן.</p>
+          <p>מה השיר הזה? מקליטים כמה שניות, או מעלים קובץ, ומקבלים את השם והאמן. מקובץ נבדקים עד שלושה קטעים שונים.</p>
         </div>
       </div>
 
@@ -172,7 +214,7 @@ export function IdentifyTool() {
         {configured === false && (
           <div className="notice-message" role="status">
             היכולת הזאת עדיין לא הופעלה באתר. מנהל האתר צריך להזין מפתח לשירות.{" "}
-            <code dir="ltr">ACRCLOUD_HOST · ACRCLOUD_ACCESS_KEY · ACRCLOUD_ACCESS_SECRET</code>
+            <code dir="ltr">IDENTIFY_API_KEY</code>
           </div>
         )}
         {!user ? (
@@ -188,13 +230,13 @@ export function IdentifyTool() {
           <div className="identify-actions">
             <button type="button" className={`identify-listen ${recording ? "is-live" : ""}`} onClick={() => (recording ? void stopListening() : void startListening())} disabled={!isRecordingSupported() || busy !== null} aria-pressed={recording}>
               {recording ? <Square size={30} /> : <Mic size={30} />}
-              <strong>{recording ? `מאזין… ${Math.ceil(CLIP_SECONDS - seconds)}` : busy ?? "האזן למה שמתנגן"}</strong>
+              <strong>{recording ? `מאזין… ${Math.ceil(MIC_SECONDS - seconds)}` : busy ?? "האזן למה שמתנגן"}</strong>
               {recording && (
                 <div className="level-meter" aria-hidden="true">
                   <div style={{ width: `${Math.round(level * 100)}%` }} />
                 </div>
               )}
-              {!recording && !busy && <small>כ־{CLIP_SECONDS} שניות מהמיקרופון</small>}
+              {!recording && !busy && <small>כ־{MIC_SECONDS} שניות מהמיקרופון</small>}
             </button>
             <label className="identify-file">
               <input ref={inputRef} type="file" accept="audio/*,video/*" className="native-file-input" onChange={(event) => {
@@ -207,6 +249,11 @@ export function IdentifyTool() {
             </label>
           </div>
         )}
+        {busy === TRYING_ANOTHER && (
+          <div className="notice-message" role="status" aria-live="polite">
+            {TRYING_ANOTHER}
+          </div>
+        )}
         {error && (
           <div className="error-message" role="alert">
             {error}
@@ -215,8 +262,13 @@ export function IdentifyTool() {
 
         {result && !result.found && (
           <div className="notice-message" role="status">
-            לא זוהה שיר בקטע הזה. נסה להתקרב לרמקול, או קטע עם שירה ברורה. נותרו היום {Math.max(0, result.limit - result.used)} זיהויים.
+            {source?.kind === "file" ? "לא זוהה שיר באף אחד מהקטעים שנבדקו." : "לא זוהה שיר בהקלטה. נסה להתקרב לרמקול, או קטע עם שירה ברורה."} נותרו היום {Math.max(0, result.limit - result.used)} זיהויים.
           </div>
+        )}
+        {exhausted && source && !busy && !recording && (
+          <button type="button" className="secondary-button identify-retry" onClick={() => void tryAnother()}>
+            <RefreshCw size={16} /> נסה שוב בקטע אחר
+          </button>
         )}
         {result && result.found && (
           <div className="identify-result" aria-live="polite">
