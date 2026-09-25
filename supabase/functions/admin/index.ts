@@ -20,6 +20,7 @@
  *                              rules
  */
 import { CORS, adminClient, isOwner, json, visitor } from "../_shared/common.ts";
+import { PAYPAL_KEYS, paypal, type PayPalMode } from "../_shared/paypal.ts";
 import { GEMINI_TTS_MODELS, voiceServices } from "../_shared/voice.ts";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 
@@ -232,6 +233,8 @@ const KNOWN_KEYS = [
   "SEPARATION_API_KEY", "SEPARATION_MODEL", "SEPARATION_INPUT", "SEPARATION_STEMS_INPUT", "SEPARATION_DAILY",
   "TTS_API_KEY", "TTS_BASE_URL", "TTS_MODEL", "TTS_VOICE", "TTS_DAILY_CHARS",
   "IDENTIFY_API_KEY", "IDENTIFY_API_KEY_2", "IDENTIFY_API_KEY_3", "IDENTIFY_DAILY",
+  ...Object.values(PAYPAL_KEYS).flatMap((keys) => [keys.id, keys.secret, keys.webhook]),
+  "SITE_URL",
   "ADMIN_EMAILS", "STORAGE_SOFT_GB",
 ];
 
@@ -382,6 +385,12 @@ type CreditSettingsRow = {
   signup_daily_max: number;
   claim_hours: number;
   prices: Record<string, number>;
+  pay_enabled: boolean;
+  pay_mode: PayPalMode;
+  pay_currency: string;
+  pass_week_price: number;
+  pass_month_price: number;
+  pass_daily: number;
 };
 
 /** The rules and how credits moved in the range — totals only, never whose. */
@@ -408,7 +417,11 @@ const CREDIT_FIELDS: Record<string, [number, number]> = {
   visit_daily_max: [0, 10000],
   signup_daily_max: [0, 10000],
   claim_hours: [1, 8760],
+  pass_daily: [1, 1000000],
 };
+
+/** The pass prices: money, so up to two decimals. */
+const PASS_PRICES = ["pass_week_price", "pass_month_price"];
 
 const PRICE_KEYS = ["assistant", "text", "minute", "tts", "separate", "identify"];
 
@@ -420,6 +433,16 @@ function wholeNumber(value: unknown, [min, max]: [number, number]) {
 async function setCredits(admin: SupabaseClient, body: Row) {
   const patch: Row = { updated_at: new Date().toISOString() };
   if ("enabled" in body) patch.enabled = Boolean(body.enabled);
+  if ("pay_enabled" in body) patch.pay_enabled = Boolean(body.pay_enabled);
+  if (body.pay_mode === "sandbox" || body.pay_mode === "live") patch.pay_mode = body.pay_mode;
+  if (typeof body.pay_currency === "string" && /^[A-Za-z]{3}$/.test(body.pay_currency.trim())) {
+    patch.pay_currency = body.pay_currency.trim().toUpperCase();
+  }
+  for (const field of PASS_PRICES) {
+    if (!(field in body)) continue;
+    const price = Math.round(Number(body[field]) * 100) / 100;
+    if (Number.isFinite(price) && price >= 0 && price <= 100000) patch[field] = price;
+  }
   for (const [field, range] of Object.entries(CREDIT_FIELDS)) {
     if (!(field in body)) continue;
     const number = wholeNumber(body[field], range);
@@ -549,6 +572,26 @@ async function health(admin: SupabaseClient) {
     ms: 0,
   });
 
+  // PayPal, for each mode that has keys: PayPal hands out a token for them, or not.
+  for (const mode of ["live", "sandbox"] as PayPalMode[]) {
+    const keys = PAYPAL_KEYS[mode];
+    const label = mode === "live" ? "PayPal — תשלומים אמיתיים" : "PayPal — מצב ניסיון";
+    const clientId = read(keys.id);
+    const secret = read(keys.secret);
+    if (!clientId || !secret) {
+      checks.push({ service: `paypal-${mode}`, label, state: "off", note: `אין ${keys.id} או ${keys.secret}`, ms: 0 });
+      continue;
+    }
+    const started = Date.now();
+    try {
+      await paypal({ clientId, secret, mode }).check();
+      const webhook = read(keys.webhook) ? "" : ` · חסר ${keys.webhook}`;
+      checks.push({ service: `paypal-${mode}`, label, state: "good", note: `המפתחות עובדים${webhook}`, ms: Date.now() - started });
+    } catch {
+      checks.push({ service: `paypal-${mode}`, label, state: "bad", note: "PayPal לא קיבל את המפתחות", ms: Date.now() - started });
+    }
+  }
+
   return checks;
 }
 
@@ -641,6 +684,16 @@ async function act(admin: SupabaseClient, user: User, body: Row) {
       return json(200, { ok: true, orphans: result });
     }
     case "credits.set": {
+      // Selling is not switched on without the keys to sell with.
+      if (body.pay_enabled === true || (body.pay_mode && body.pay_enabled !== false)) {
+        const { data: current } = await admin.from("credit_settings").select("pay_enabled, pay_mode").maybeSingle();
+        const selling = body.pay_enabled === true || Boolean(current?.pay_enabled);
+        const mode: PayPalMode = body.pay_mode === "live" || body.pay_mode === "sandbox" ? body.pay_mode : current?.pay_mode === "live" ? "live" : "sandbox";
+        const { read } = await settingsMap(admin);
+        if (selling && (!read(PAYPAL_KEYS[mode].id) || !read(PAYPAL_KEYS[mode].secret))) {
+          return json(409, { error: "paypal_keys", mode });
+        }
+      }
       const { patch, error } = await setCredits(admin, body);
       if (error) return json(502, { error: "storage" });
       await log(admin, actor, action, null, patch);

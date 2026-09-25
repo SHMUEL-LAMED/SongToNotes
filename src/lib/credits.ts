@@ -10,7 +10,9 @@
  *    rewarded and the newcomer welcomed;
  *  - the live balance: every server reply that carries credits announces
  *    them, so the top bar moves the moment something is paid for, and a
- *    refusal raises the "out of credits" notice wherever it happened.
+ *    refusal raises the "out of credits" notice wherever it happened;
+ *  - a bought pass ("חופשי", see payments.ts): while it lasts the server
+ *    work costs no credits, up to a fair-use amount a day.
  *
  * Only the server functions spend. Nothing in the browser can add a credit:
  * the page asks, and the database decides.
@@ -43,6 +45,23 @@ export type CreditRules = {
   /** How long a new account may still say which friend brought it. */
   claimHours: number;
   prices: Record<PriceKey, number>;
+  /** Selling passes. */
+  pay: PayRules;
+};
+
+export type PassPlan = "week" | "month";
+
+export type PayRules = {
+  /** Passes are on sale. */
+  enabled: boolean;
+  /** sandbox: PayPal's test mode — only the site's owner can buy, with test money. */
+  mode: "sandbox" | "live";
+  currency: string;
+  /** The price of each pass. */
+  week: number;
+  month: number;
+  /** What a pass covers in one day (fair use); past it, the usual credits pay. */
+  passDaily: number;
 };
 
 /** The same numbers the database starts with, for when it cannot be reached. */
@@ -58,6 +77,7 @@ export const DEFAULT_RULES: CreditRules = {
   signupDailyMax: 10,
   claimHours: 72,
   prices: { assistant: 1, text: 2, minute: 1, tts: 1, separate: 5, identify: 2 },
+  pay: { enabled: false, mode: "sandbox", currency: "ILS", week: 10, month: 30, passDaily: 200 },
 };
 
 const whole = (value: unknown, fallback: number) => {
@@ -66,6 +86,27 @@ const whole = (value: unknown, fallback: number) => {
 };
 
 type Row = Record<string, unknown>;
+
+/** A price: money, so kept to two decimals. */
+const money = (value: unknown, fallback: number) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number * 100) / 100 : fallback;
+};
+
+function normalizePay(row: Row): PayRules {
+  const camel = (row.pay && typeof row.pay === "object" ? row.pay : {}) as Row;
+  const fallback = DEFAULT_RULES.pay;
+  const currency = String(row.pay_currency ?? camel.currency ?? fallback.currency).trim().toUpperCase();
+  const enabled = row.pay_enabled ?? camel.enabled;
+  return {
+    enabled: enabled === undefined ? fallback.enabled : Boolean(enabled),
+    mode: (row.pay_mode ?? camel.mode) === "live" ? "live" : "sandbox",
+    currency: /^[A-Z]{3}$/.test(currency) ? currency : fallback.currency,
+    week: money(row.pass_week_price ?? camel.week, fallback.week),
+    month: money(row.pass_month_price ?? camel.month, fallback.month),
+    passDaily: Math.max(1, whole(row.pass_daily ?? camel.passDaily, fallback.passDaily)),
+  };
+}
 
 /** The settings row, in either spelling, with anything missing filled from the defaults. */
 export function normalizeRules(raw: unknown): CreditRules {
@@ -86,6 +127,7 @@ export function normalizeRules(raw: unknown): CreditRules {
     prices: Object.fromEntries(
       PRICE_KEYS.map((key) => [key, whole(prices[key], DEFAULT_RULES.prices[key])]),
     ) as Record<PriceKey, number>,
+    pay: normalizePay(row),
   };
 }
 
@@ -123,7 +165,7 @@ export function ttsCost(characters: number, rules: CreditRules) {
 
 /* ------------------------------------------------------- the account */
 
-export type CreditEntryKind = "spend" | "refund" | "visit" | "signup" | "welcome" | "grant";
+export type CreditEntryKind = "spend" | "refund" | "visit" | "signup" | "welcome" | "grant" | "purchase";
 
 export type CreditEntry = {
   id: number;
@@ -132,8 +174,32 @@ export type CreditEntry = {
   /** What was paid for: assistant, text, transcript, lyrics, tts, separate, identify. */
   action: string | null;
   delta: number;
+  /** What a pass covered (not credits). */
+  fromPass: number;
   detail: Row;
   refunded: boolean;
+};
+
+/** A bought pass that is still running. */
+export type PassState = {
+  until: string;
+  plan: PassPlan | null;
+  /** Fair use: what it covers in a day, and what is left of that today. */
+  daily: number;
+  left: number;
+  usedToday: number;
+};
+
+export type PassPurchase = {
+  id: string;
+  at: string;
+  plan: PassPlan;
+  days: number;
+  amount: number;
+  currency: string;
+  status: "pending" | "completed" | "refunded";
+  mode: "sandbox" | "live";
+  until: string | null;
 };
 
 export type CreditStatus = {
@@ -152,10 +218,45 @@ export type CreditStatus = {
   canClaim: boolean;
   resetsAt: string | null;
   history: CreditEntry[];
+  /** The pass, when one was bought and has not ended. */
+  pass: PassState | null;
+  purchases: PassPurchase[];
   rules: CreditRules;
 };
 
-const KINDS: CreditEntryKind[] = ["spend", "refund", "visit", "signup", "welcome", "grant"];
+const KINDS: CreditEntryKind[] = ["spend", "refund", "visit", "signup", "welcome", "grant", "purchase"];
+const PURCHASE_STATES = ["pending", "completed", "refunded"];
+
+const isPlan = (value: unknown): value is PassPlan => value === "week" || value === "month";
+
+function normalizePass(row: Row): PassState | null {
+  if (typeof row.pass_until !== "string" || !row.pass_until) return null;
+  const daily = whole(row.pass_daily, DEFAULT_RULES.pay.passDaily);
+  return {
+    until: row.pass_until,
+    plan: isPlan(row.pass_plan) ? row.pass_plan : null,
+    daily,
+    left: whole(row.pass_left, daily),
+    usedToday: whole(row.pass_used_today, 0),
+  };
+}
+
+function normalizePurchases(raw: unknown): PassPurchase[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((item) => item as Row)
+    .filter((item) => isPlan(item.plan) && PURCHASE_STATES.includes(String(item.status)))
+    .map((item) => ({
+      id: String(item.id ?? ""),
+      at: String(item.at ?? ""),
+      plan: item.plan as PassPlan,
+      days: whole(item.days, 0),
+      amount: money(item.amount, 0),
+      currency: typeof item.currency === "string" ? item.currency : "ILS",
+      status: item.status as PassPurchase["status"],
+      mode: item.mode === "live" ? "live" : "sandbox",
+      until: typeof item.until === "string" ? item.until : null,
+    }));
+}
 
 export function normalizeStatus(raw: unknown): CreditStatus | null {
   if (!raw || typeof raw !== "object") return null;
@@ -171,6 +272,7 @@ export function normalizeStatus(raw: unknown): CreditStatus | null {
       kind: item.kind as CreditEntryKind,
       action: typeof item.action === "string" ? item.action : null,
       delta: Number.isFinite(Number(item.delta)) ? Math.round(Number(item.delta)) : 0,
+      fromPass: whole(item.from_pass, 0),
       detail: (item.detail && typeof item.detail === "object" ? item.detail : {}) as Row,
       refunded: Boolean(item.refunded),
     }));
@@ -189,8 +291,28 @@ export function normalizeStatus(raw: unknown): CreditStatus | null {
     canClaim: Boolean(row.can_claim),
     resetsAt: typeof row.resets_at === "string" ? row.resets_at : null,
     history,
+    pass: normalizePass(row),
+    purchases: normalizePurchases(row.purchases),
     rules: normalizeRules(row.config),
   };
+}
+
+/** Passes are on sale to this visitor: to everybody, or — in PayPal's test mode — to the owner alone. */
+export function passesOnSale(rules: CreditRules, owner: boolean) {
+  return rules.enabled && rules.pay.enabled && (rules.pay.mode === "live" || owner);
+}
+
+/** The pass is running at `now`. */
+export function passActive(pass: Pick<PassState, "until"> | null | undefined, now = Date.now()) {
+  if (!pass) return false;
+  const until = new Date(pass.until).getTime();
+  return Number.isFinite(until) && until > now;
+}
+
+/** Whole days until the pass ends, the day it ends counted. */
+export function passDaysLeft(pass: Pick<PassState, "until">, now = Date.now()) {
+  const until = new Date(pass.until).getTime();
+  return Number.isFinite(until) ? Math.max(0, Math.ceil((until - now) / 86_400_000)) : 0;
 }
 
 /** Everything the account can spend right now. */
@@ -210,6 +332,9 @@ export type CreditPulse = {
   /** Present on a refusal: what the work would have cost. */
   needed?: number;
   resetsAt: string | null;
+  /** An active pass: until when, and what it still covers today. */
+  passUntil?: string | null;
+  passLeft?: number | null;
 };
 
 export function parsePulse(raw: unknown): CreditPulse | null {
@@ -232,6 +357,7 @@ export function parsePulse(raw: unknown): CreditPulse | null {
     charged: whole(row.charged, 0),
     ...(row.needed !== undefined ? { needed: whole(row.needed, 0) } : {}),
     resetsAt: typeof row.resetsAt === "string" ? row.resetsAt : null,
+    ...(typeof row.passUntil === "string" ? { passUntil: row.passUntil, passLeft: whole(row.passLeft, 0) } : {}),
   };
 }
 
@@ -537,6 +663,35 @@ export function creditsLabel(count: number) {
   return value === 1 ? "קרדיט אחד" : `${value.toLocaleString("he-IL")} קרדיטים`;
 }
 
+/** "‏10 ₪": a price, in whole units when it is whole. */
+export function formatMoney(amount: number, currency: string) {
+  const whole = Number.isInteger(amount);
+  try {
+    return new Intl.NumberFormat("he-IL", {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${whole ? amount : amount.toFixed(2)} ${currency}`;
+  }
+}
+
+export const PASS_PLANS: Record<PassPlan, { title: string; days: number; length: string }> = {
+  week: { title: "חופשי שבועי", days: 7, length: "7 ימים" },
+  month: { title: "חופשי חודשי", days: 30, length: "30 יום" },
+};
+
+/** How much cheaper the month is than weeks for the same 30 days, in percent (0 when it is not). */
+export function monthSaving(pay: Pick<PayRules, "week" | "month">) {
+  if (pay.week <= 0 || pay.month <= 0) return 0;
+  const weeks = (pay.week * PASS_PLANS.month.days) / PASS_PLANS.week.days;
+  const saving = Math.round((1 - pay.month / weeks) * 100);
+  return saving >= 5 ? saving : 0;
+}
+
 /** "5 שעות ו־12 דקות" until the allowance renews. */
 export function untilReset(resetsAt: string | null, now = Date.now()) {
   if (!resetsAt) return null;
@@ -598,5 +753,9 @@ export function entryLabel(entry: Pick<CreditEntry, "kind" | "action" | "detail"
       return typeof entry.detail.from === "string" && entry.detail.from ? `מתנת הצטרפות · הזמנה מ${entry.detail.from}` : "מתנת הצטרפות";
     case "grant":
       return "מתנה מהאתר";
+    case "purchase": {
+      const title = isPlan(entry.action) ? PASS_PLANS[entry.action].title : "חופשי";
+      return entry.detail.refunded ? `התשלום על ${title} הוחזר` : `קנית ${title}`;
+    }
   }
 }
