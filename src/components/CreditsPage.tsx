@@ -1,5 +1,4 @@
 import {
-  BadgeCheck,
   CalendarClock,
   Check,
   CircleHelp,
@@ -22,7 +21,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import { isAdmin } from "../lib/admin";
 import { useAuth } from "../lib/auth";
 import {
-  PASS_PLANS,
   PRICE_KEYS,
   PRICE_LABELS,
   allowanceFor,
@@ -31,19 +29,12 @@ import {
   creditsLabel,
   describeClaim,
   entryLabel,
-  formatMoney,
   friendsToFullBoost,
-  monthSaving,
-  passActive,
-  passDaysLeft,
-  passesOnSale,
   referralLink,
   signed,
   untilReset,
   type CreditRules,
   type CreditStatus,
-  type PassPlan,
-  type PassPurchase,
 } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { markShared, inviteMessage } from "../lib/siteShare";
@@ -57,18 +48,11 @@ type Props = {
 };
 
 const dateTime = new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
-const dateOnly = new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
 
 function formatWhen(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : dateTime.format(date);
 }
-
-function formatDay(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : dateOnly.format(date);
-}
-
 
 /**
  * Credits and the private link, on one page: what the account holds and how
@@ -89,7 +73,6 @@ export function CreditsPage({ onOpen, onSignInError }: Props) {
 
   const signIn = () =>
     void signInWithGoogle().catch(() => onSignInError("לא הצלחנו לפתוח את ההתחברות ל־Google. נסה שוב."));
-  const onSale = passesOnSale(rules, owner);
 
   return (
     <div className="credits-page" style={{ "--accent-hue": 62 } as CSSProperties}>
@@ -153,14 +136,12 @@ export function CreditsPage({ onOpen, onSignInError }: Props) {
 
       {user && status?.canClaim && <ClaimCard rules={rules} />}
 
-      {onSale && <PassCard rules={rules} status={user ? status : null} signedIn={Boolean(user)} now={now} onSignIn={signIn} />}
-
-      <HowItWorks rules={rules} onSale={onSale} />
+      <HowItWorks rules={rules} />
       <PriceList rules={rules} onOpen={onOpen} />
 
       {user && status && <HistoryCard status={status} onRefresh={refresh} loading={loading} />}
 
-      <Questions rules={rules} onSale={onSale} />
+      <Questions rules={rules} />
     </div>
   );
 }
@@ -170,24 +151,8 @@ export function CreditsPage({ onOpen, onSignInError }: Props) {
 function BalanceCard({ status, now, owner }: { status: CreditStatus; now: number; owner: boolean }) {
   const total = balanceOf(status);
   const renews = untilReset(status.resetsAt, now);
-  const pass = status.pass && passActive(status.pass, now) ? status.pass : null;
   return (
-    <section className={`credits-balance ${pass ? "has-pass" : ""}`} aria-label="היתרה שלך">
-      {pass && (
-        <div className="credits-balance-pass">
-          <p className="credits-balance-pass-title">
-            <InfinityIcon size={18} aria-hidden="true" />
-            <b>{`${PASS_PLANS[pass.plan ?? "week"].title} פעיל`}</b>
-            <span>{`עד ${formatDay(pass.until)} · עוד ${passDaysLeft(pass, now)} ימים`}</span>
-          </p>
-          <Meter
-            label="שימוש הוגן היום"
-            value={pass.left}
-            max={pass.daily}
-            note="כל פעולות השרת בלי קרדיטים עד התקרה היומית; מעבר לה — הקרדיטים שלמטה."
-          />
-        </div>
-      )}
+    <section className="credits-balance" aria-label="היתרה שלך">
       <p className="credits-balance-label">יש לך עכשיו</p>
       <p className="credits-balance-total">
         <Zap size={30} aria-hidden="true" />
@@ -443,129 +408,9 @@ function ClaimCard({ rules }: { rules: CreditRules }) {
   );
 }
 
-/* ------------------------------------------------------------ the pass */
-
-const PURCHASE_STATUS: Record<PassPurchase["status"], string> = {
-  completed: "שולם",
-  pending: "בבדיקה אצל PayPal",
-  refunded: "הוחזר",
-};
-
-/**
- * Buying a pass: a week or a month in which the server work costs no
- * credits. Paid once through PayPal; the page never names the price to the
- * server, which has it.
- */
-function PassCard({
-  rules,
-  status,
-  signedIn,
-  now,
-  onSignIn,
-}: {
-  rules: CreditRules;
-  status: CreditStatus | null;
-  signedIn: boolean;
-  now: number;
-  onSignIn: () => void;
-}) {
-  const { buyPass, buying } = useCredits();
-  const pay = rules.pay;
-  const active = status?.pass && passActive(status.pass, now) ? status.pass : null;
-  const saving = monthSaving(pay);
-  const plans: PassPlan[] = ["week", "month"];
-  return (
-    <section className="me-panel credits-pass" id="pass" aria-labelledby="credits-pass-title">
-      <header className="me-panel-head">
-        <div>
-          <h2 id="credits-pass-title">
-            <InfinityIcon size={17} /> חופשי — כל הכלים בלי לספור קרדיטים
-          </h2>
-          <p>
-            <span>בזמן החופשי, תמלול, העוזר, הפרדת שירה, זיהוי שירים והקראה לא עולים קרדיטים. </span>
-            <span>{`שימוש הוגן: עד ${pay.passDaily} ביום.`}</span>
-          </p>
-        </div>
-        {pay.mode === "sandbox" && <span className="credits-test-badge">מצב ניסיון</span>}
-      </header>
-
-      {active && (
-        <p className="credits-pass-active" role="status">
-          <BadgeCheck size={17} aria-hidden="true" />
-          <span>{`${PASS_PLANS[active.plan ?? "week"].title} שלך פעיל עד ${formatDay(active.until)}.`}</span>
-          <span>אפשר להאריך — הימים החדשים נוספים אחרי הסוף.</span>
-        </p>
-      )}
-
-      <div className="credits-pass-plans">
-        {plans.map((plan) => (
-          <div key={plan} className={`credits-pass-plan ${plan === "month" ? "is-best" : ""}`}>
-            {plan === "month" && saving > 0 && <span className="credits-pass-ribbon">{`חוסך ${saving}%`}</span>}
-            <b>{PASS_PLANS[plan].title}</b>
-            <p className="credits-pass-price" translate="no">
-              {formatMoney(pay[plan], pay.currency)}
-            </p>
-            <small>{`${PASS_PLANS[plan].length} בלי הגבלה`}</small>
-            <button
-              type="button"
-              className={plan === "month" ? "primary-button compact" : "secondary-button compact"}
-              disabled={buying !== null}
-              onClick={() => (signedIn ? buyPass(plan) : onSignIn())}
-            >
-              {buying === plan ? "פותח את PayPal…" : !signedIn ? "להתחבר ולקנות" : active ? "להאריך" : "לקנות"}
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <p className="credits-small">
-        <span>תשלום אחד דרך PayPal — בחשבון PayPal או בכרטיס אשראי. </span>
-        <span>בלי מנוי ובלי חידוש אוטומטי.</span>
-      </p>
-      {pay.mode === "sandbox" && (
-        <p className="credits-small credits-test-note">
-          <span>מצב ניסיון: רק מנהל האתר רואה את המכירה, והתשלום הוא בכסף של בדיקה (חשבון Sandbox של PayPal). </span>
-          <span>כשהכול עובד, מעבירים לתשלומים אמיתיים בלוח הניהול.</span>
-        </p>
-      )}
-
-      {status && status.purchases.length > 0 && (
-        <div className="admin-table-wrap">
-          <table className="admin-table credits-purchases">
-            <thead>
-              <tr>
-                <th scope="col">מתי</th>
-                <th scope="col">מה</th>
-                <th scope="col">סכום</th>
-                <th scope="col">סטטוס</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.purchases.map((purchase) => (
-                <tr key={purchase.id} className={`is-${purchase.status}`}>
-                  <td>{formatWhen(purchase.at)}</td>
-                  <td>
-                    {PASS_PLANS[purchase.plan].title}
-                    {purchase.mode === "sandbox" && <small className="credits-history-badge">ניסיון</small>}
-                  </td>
-                  <td translate="no">{formatMoney(purchase.amount, purchase.currency)}</td>
-                  <td>
-                    {PURCHASE_STATUS[purchase.status]}
-                    {purchase.status === "completed" && purchase.until && <small>{` · עד ${formatDay(purchase.until)}`}</small>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
 /* ------------------------------------------------------------ the rules */
 
-function HowItWorks({ rules, onSale }: { rules: CreditRules; onSale: boolean }) {
+function HowItWorks({ rules }: { rules: CreditRules }) {
   // Each sentence is a text of its own, so each is translated on its own.
   const steps: { icon: ReactNode; title: string; text: string[] }[] = [
     {
@@ -609,18 +454,6 @@ function HowItWorks({ rules, onSale }: { rules: CreditRules; onSale: boolean }) 
       title: "הבונוס לא פג",
       text: ["קרדיטים שהרווחת נשמרים עד שמשתמשים בהם.", "בכל פעולה נוצלת קודם הקצבה היומית, ורק אחריה הבונוס."],
     },
-    ...(onSale
-      ? [
-          {
-            icon: <InfinityIcon size={20} />,
-            title: `חופשי: ${formatMoney(rules.pay.week, rules.pay.currency)} לשבוע, ${formatMoney(rules.pay.month, rules.pay.currency)} לחודש`,
-            text: [
-              "בזמן החופשי כל פעולות השרת לא עולות קרדיטים.",
-              `שימוש הוגן: עד ${rules.pay.passDaily} ביום — ומעבר לזה הקרדיטים הרגילים.`,
-            ],
-          },
-        ]
-      : []),
   ];
   return (
     <section className="me-panel credits-how" aria-labelledby="credits-how-title">
@@ -755,15 +588,9 @@ function HistoryCard({ status, onRefresh, loading }: { status: CreditStatus; onR
                 {entryLabel(entry)}
                 {entry.refunded && <small className="credits-history-badge">הוחזר</small>}
               </span>
-              {entry.kind === "purchase" || (entry.delta === 0 && entry.fromPass > 0) ? (
-                <b className="credits-history-delta is-pass">
-                  <InfinityIcon size={14} aria-hidden="true" /> {entry.kind === "purchase" ? "חופשי" : "בחופשי"}
-                </b>
-              ) : (
-                <b className="credits-history-delta" translate="no" dir="ltr">
-                  {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
-                </b>
-              )}
+              <b className="credits-history-delta" translate="no" dir="ltr">
+                {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+              </b>
             </li>
           ))}
         </ul>
@@ -774,7 +601,7 @@ function HistoryCard({ status, onRefresh, loading }: { status: CreditStatus; onR
 
 /* ------------------------------------------------------------ questions */
 
-function Questions({ rules, onSale }: { rules: CreditRules; onSale: boolean }) {
+function Questions({ rules }: { rules: CreditRules }) {
   const claimDays = Math.max(1, Math.round(rules.claimHours / 24));
   const items = [
     {
@@ -797,27 +624,10 @@ function Questions({ rules, onSale }: { rules: CreditRules; onSale: boolean }) {
       q: "פעולה נכשלה — הקרדיטים ירדו?",
       a: "לא. אם השירות נכשל, הקרדיטים חוזרים אוטומטית, וההחזר מופיע בהיסטוריה.",
     },
-    onSale
-      ? {
-          q: "אפשר לקנות קרדיטים?",
-          a: `את הקרדיטים עצמם לא קונים — אבל אפשר לקנות חופשי: ${formatMoney(rules.pay.week, rules.pay.currency)} לשבוע או ${formatMoney(rules.pay.month, rules.pay.currency)} לחודש, ובזמן הזה כל פעולות השרת לא עולות קרדיטים (שימוש הוגן: עד ${rules.pay.passDaily} ביום). התשלום חד־פעמי דרך PayPal, בלי מנוי ובלי חידוש אוטומטי.`,
-        }
-      : {
-          q: "אפשר לקנות קרדיטים?",
-          a: "לא. הקרדיטים חינמיים לגמרי: קצבה יומית לכל מי שמחובר, ועוד על כל חבר שמצטרף.",
-        },
-    ...(onSale
-      ? [
-          {
-            q: "קניתי חופשי — מה קורה עם הקרדיטים שלי?",
-            a: "הם נשארים בדיוק כמו שהם. בזמן החופשי הפעולות לא נוגעות בהם, והם מחכים לך לאחר מכן. אם קונים חופשי כשכבר יש אחד פעיל, הימים החדשים נוספים אחרי הסוף שלו.",
-          },
-          {
-            q: "משהו השתבש בתשלום",
-            a: "אם PayPal דחה את התשלום או שיצאת באמצע — לא חויבת, ואפשר פשוט לנסות שוב. אם חויבת והחופשי לא נפתח תוך כמה דקות, כתבו לנו ב'משוב והצעות' ונסדר. תשלום שמוחזר ב־PayPal מבטל גם את הימים שנקנו בו.",
-          },
-        ]
-      : []),
+    {
+      q: "אפשר לקנות קרדיטים?",
+      a: "לא. הקרדיטים חינמיים לגמרי: קצבה יומית לכל מי שמחובר, ועוד על כל חבר שמצטרף.",
+    },
   ];
   return (
     <section className="me-panel credits-faq" aria-labelledby="credits-faq-title">
