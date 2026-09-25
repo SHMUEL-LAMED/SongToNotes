@@ -531,7 +531,7 @@ function WorkspaceApp() {
         {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
         {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
         {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-        {shown === "identify" && <IdentifyTool />}
+        {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
         {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
         {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
         {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
