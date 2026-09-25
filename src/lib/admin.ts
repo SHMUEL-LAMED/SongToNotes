@@ -10,7 +10,8 @@
  * The answer says what happened on the *site*: which tools were opened, when,
  * how long they held somebody, what finished and what failed. It carries no
  * account, no title and no file name, because the rows it is counted from
- * never had any. Nothing here can be turned back into a person, by design.
+ * never had any. The one list of people is the accounts tab (`fetchAccounts`),
+ * which the owner opens on purpose and the server writes to the audit log.
  */
 import { normalizeRules, type CreditRules } from "./credits";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
@@ -418,6 +419,85 @@ export async function fetchAudit(query = ""): Promise<AdminAuditEntry[]> {
   }));
 }
 
+const optional = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
+
+/** One account on the site, as the accounts tab lists it. */
+export type AccountEntry = {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  name: string | null;
+  /** How the account signs in: email, google, … */
+  providers: string[];
+  createdAt: string;
+  lastSignInAt: string | null;
+  confirmed: boolean;
+  banned: boolean;
+  /** Saved works of every kind. */
+  works: number;
+  files: number;
+  bytes: number;
+  /** Earned credits; `null` for an account that never opened the credits page. */
+  bonus: number | null;
+  friends: number;
+};
+
+/** The rows as the page shows them; anything without an id is left out. */
+export function normalizeAccounts(raw: unknown): AccountEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((row): AccountEntry[] => {
+    if (!row || typeof row !== "object") return [];
+    const item = row as Record<string, unknown>;
+    if (typeof item.id !== "string" || !item.id) return [];
+    return [
+      {
+        id: item.id,
+        email: optional(item.email),
+        phone: optional(item.phone),
+        name: optional(item.name),
+        providers: Array.isArray(item.providers) ? item.providers.map(String).filter(Boolean) : [],
+        createdAt: String(item.createdAt ?? ""),
+        lastSignInAt: optional(item.lastSignInAt),
+        confirmed: item.confirmed === true,
+        banned: item.banned === true,
+        works: num(item.works),
+        files: num(item.files),
+        bytes: num(item.bytes),
+        bonus: item.bonus == null ? null : num(item.bonus),
+        friends: num(item.friends),
+      },
+    ];
+  });
+}
+
+/** How many accounts there are, and how many signed in lately. */
+export function accountSummary(accounts: readonly AccountEntry[], now: Date = new Date()) {
+  const since = (days: number) => now.getTime() - days * 86_400_000;
+  const after = (value: string | null, days: number) => {
+    const time = value ? new Date(value).getTime() : NaN;
+    return Number.isFinite(time) && time >= since(days);
+  };
+  return {
+    total: accounts.length,
+    today: accounts.filter((account) => after(account.lastSignInAt, 1)).length,
+    week: accounts.filter((account) => after(account.lastSignInAt, 7)).length,
+    month: accounts.filter((account) => after(account.lastSignInAt, 30)).length,
+    joinedWeek: accounts.filter((account) => after(account.createdAt, 7)).length,
+  };
+}
+
+const PROVIDER_LABELS: Record<string, string> = { email: "אימייל", google: "Google", phone: "טלפון", apple: "Apple", github: "GitHub" };
+
+export function providerLabel(provider: string) {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
+/** Every account, newest first. The server logs each time this is opened. */
+export async function fetchAccounts(): Promise<{ accounts: AccountEntry[]; truncated: boolean }> {
+  const body = await call<{ accounts?: unknown; truncated?: boolean }>("?view=accounts");
+  return { accounts: normalizeAccounts(body.accounts), truncated: body.truncated === true };
+}
+
 /** A message a visitor sent from "משוב והצעות". */
 export type FeedbackEntry = {
   id: number;
@@ -432,8 +512,6 @@ export type FeedbackEntry = {
   os: string | null;
   handled: boolean;
 };
-
-const optional = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
 
 /** The rows as the page shows them; anything malformed is left out. */
 export function normalizeFeedback(raw: unknown): FeedbackEntry[] {
@@ -636,6 +714,7 @@ const ACTION_LABELS: Record<string, string> = {
   "events.prune": "מחיקת מדידות ישנות",
   "usage.reset": "איפוס מכסות היום",
   "credits.set": "שינוי כללי הקרדיטים",
+  "accounts.view": "צפייה ברשימת החשבונות",
 };
 
 export function actionLabel(action: string) {
