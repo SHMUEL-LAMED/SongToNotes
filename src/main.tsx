@@ -6,6 +6,7 @@ import { AuthProvider } from "./lib/auth";
 import { captureReferral } from "./lib/credits";
 import { CreditsProvider } from "./lib/creditsContext";
 import { startI18n } from "./lib/i18n";
+import { takePaymentReturn } from "./lib/payments";
 import { watchForNewBuild } from "./lib/staleBuild";
 import { authCallbackPending, getSupabase } from "./lib/supabase";
 // The typeface ships with the site: no request to a font host, and it works offline.
@@ -16,6 +17,8 @@ import "./styles/index.css";
 void startI18n();
 // A friend's private link (?ref=…) is kept, and taken out of the address.
 captureReferral();
+// Back from PayPal (?pay=…): the purchase is kept for the credits page to settle.
+takePaymentReturn();
 
 // A tab left open across a deploy loads the new build, instead of failing on
 // the old build's pieces that are gone from the server.

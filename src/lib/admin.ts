@@ -131,8 +131,30 @@ export type CreditStats = {
   refunds: number;
   /** Credits given, by why: visit, signup, welcome, grant. */
   granted: Record<string, number>;
+  /** What each kind of work used, a pass's share included. */
   byAction: { action: string; credits: number; count: number }[];
   daily: { day: string; spent: number }[];
+  /** What passes covered in the range, and how many are running now. */
+  passUsed: number;
+  passesActive: number;
+  /** Real money taken in the range, by currency, and passes sold by plan. */
+  revenue: Record<string, number>;
+  sales: Record<string, number>;
+  /** Test-mode payments completed in the range. */
+  testSales: number;
+  recentPurchases: AdminPurchase[];
+};
+
+/** A payment for a pass, as the admin area sees it: what and how it went, never who. */
+export type AdminPurchase = {
+  at: string;
+  plan: string;
+  amount: number;
+  currency: string;
+  status: string;
+  mode: "sandbox" | "live";
+  orderId: string | null;
+  captureId: string | null;
 };
 
 export type AdminCredits = { rules: CreditRules | null; stats: CreditStats | null };
@@ -193,6 +215,7 @@ const MESSAGES: Record<string, string> = {
   storage: "השרת לא הצליח לבצע את הפעולה. נסה שוב.",
   network: "החיבור לשרת נכשל. בדוק את האינטרנט ונסה שוב.",
   not_deployed: "פונקציית הניהול עדיין לא הועלתה לפרויקט (supabase/functions/admin).",
+  paypal_keys: "כדי להפעיל את המכירה צריך קודם להזין את המפתחות של PayPal למצב שנבחר, בטבלת המפתחות שלמטה.",
 };
 
 export function describeAdminError(code: string) {
@@ -356,6 +379,16 @@ export function normalizeSnapshot(raw: Record<string, unknown>): AdminSnapshot {
   };
 }
 
+/** An object of numbers ({"ILS": 40}), with anything else left out. */
+function numbers(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .map(([key, value]) => [key, Number(value)] as const)
+      .filter(([, value]) => Number.isFinite(value)),
+  );
+}
+
 export function normalizeAdminCredits(raw: unknown): AdminCredits {
   const row = (raw ?? {}) as Record<string, unknown>;
   const stats = row.stats && typeof row.stats === "object" ? (row.stats as Record<string, unknown>) : null;
@@ -381,6 +414,24 @@ export function normalizeAdminCredits(raw: unknown): AdminCredits {
           daily: (Array.isArray(stats.daily) ? stats.daily : []).map((item) => {
             const entry = item as Record<string, unknown>;
             return { day: String(entry.day ?? ""), spent: num(entry.spent) };
+          }),
+          passUsed: num(stats.pass_used),
+          passesActive: num(stats.passes_active),
+          revenue: numbers(stats.revenue),
+          sales: numbers(stats.sales),
+          testSales: num(stats.test_sales),
+          recentPurchases: (Array.isArray(stats.recent_purchases) ? stats.recent_purchases : []).map((item) => {
+            const entry = item as Record<string, unknown>;
+            return {
+              at: String(entry.at ?? ""),
+              plan: String(entry.plan ?? ""),
+              amount: Number(entry.amount) || 0,
+              currency: String(entry.currency ?? ""),
+              status: String(entry.status ?? ""),
+              mode: entry.mode === "live" ? "live" : "sandbox",
+              orderId: typeof entry.order_id === "string" ? entry.order_id : null,
+              captureId: typeof entry.capture_id === "string" ? entry.capture_id : null,
+            };
           }),
         }
       : null,

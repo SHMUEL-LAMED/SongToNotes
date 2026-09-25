@@ -21,7 +21,7 @@ import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
 import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
 import { useAuth } from "./lib/auth";
-import { balanceOf, referralLink, untilReset } from "./lib/credits";
+import { balanceOf, passActive, passesOnSale, referralLink, untilReset } from "./lib/credits";
 import { useCredits } from "./lib/creditsContext";
 import { useRoute } from "./lib/router";
 import { useSiteControl } from "./lib/siteControl";
@@ -280,7 +280,7 @@ function WorkspaceApp() {
   // What the assistant may do on the site itself, from any page.
   useAssistantTool("site", {
     state: () =>
-      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : credits ? "דף הקרדיטים והזמנת חברים" : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; שפת הממשק: ${langForModel()} (ענה בשפה הזאת); צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}${credit.status ? `; קרדיטים זמינים: ${balanceOf(credit.status)} (${credit.status.dailyLeft} מהקצבה היומית ו־${credit.status.bonus} בונוס)` : ""}.`,
+      `האתר: הגולש ${user ? "מחובר לחשבון" : "לא מחובר (בלי חשבון אין שמירה לענן ואין שירותי שרת)"}; העמוד הפתוח: ${tool ? `${tool.title} (${tool.id})` : credits ? "דף הקרדיטים והזמנת חברים" : "דף הבית עם כל הכלים"}; ערכת נושא: ${theme.preference}; שפת הממשק: ${langForModel()} (ענה בשפה הזאת); צבע: ${accent.hue === null ? "ברירת מחדל" : ACCENT_CHOICES.find((item) => item.hue === accent.hue)?.label ?? accent.hue}${accent.everywhere ? " בכל הכלים" : ""}; האזור האישי ${accountOpen ? "פתוח" : "סגור"}${credit.status ? `; קרדיטים זמינים: ${balanceOf(credit.status)} (${credit.status.dailyLeft} מהקצבה היומית ו־${credit.status.bonus} בונוס)` : ""}${credit.status?.pass && passActive(credit.status.pass) ? `; יש לו חופשי פעיל עד ${credit.status.pass.until} (פעולות השרת בלי קרדיטים, נשארו ${credit.status.pass.left} לשימוש הוגן היום)` : ""}.`,
     handlers: {
       "credits.open": () => {
         go("credits");
@@ -289,11 +289,15 @@ function WorkspaceApp() {
       "credits.read": () => {
         const { rules, status } = credit;
         const prices = Object.entries(rules.prices).map(([key, price]) => `${key}=${price}`).join(", ");
+        // Passes, when they are on sale to this visitor.
+        const passes = passesOnSale(rules, isAdmin(user))
+          ? { week: rules.pay.week, month: rules.pay.month, currency: rules.pay.currency, fairUsePerDay: rules.pay.passDaily, where: "דף הקרדיטים" }
+          : null;
         if (!status) {
           return {
             ok: true,
             message: user ? "הקרדיטים עוד נטענים" : "הגולש לא מחובר: קרדיטים וקישור אישי ניתנים אחרי התחברות",
-            data: { signedIn: Boolean(user), rules: { daily: rules.daily, signupBonus: rules.signupBonus, friendDaily: rules.friendDaily, friendDailyMax: rules.friendDailyMax, welcomeBonus: rules.welcomeBonus, visitBonus: rules.visitBonus, visitDailyMax: rules.visitDailyMax, prices } },
+            data: { signedIn: Boolean(user), rules: { daily: rules.daily, signupBonus: rules.signupBonus, friendDaily: rules.friendDaily, friendDailyMax: rules.friendDailyMax, welcomeBonus: rules.welcomeBonus, visitBonus: rules.visitBonus, visitDailyMax: rules.visitDailyMax, prices }, passes },
           };
         }
         return {
@@ -310,6 +314,8 @@ function WorkspaceApp() {
             earned: status.earned,
             privateLink: referralLink(status.code),
             prices,
+            pass: status.pass && passActive(status.pass) ? { plan: status.pass.plan, until: status.pass.until, fairUseLeftToday: status.pass.left } : null,
+            passes,
           },
         };
       },

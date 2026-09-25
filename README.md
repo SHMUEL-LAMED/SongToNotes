@@ -162,6 +162,43 @@ npm run dev
 ב־`supabase/credits.sql`; הדף עצמו `#/credits` (`src/components/CreditsPage.tsx`),
 והיתרה בסרגל העליון.
 
+### חופשי ותשלומים (PayPal)
+
+אפשר לקנות **חופשי**: שבוע (10 ₪) או חודש (30 ₪) שבהם פעולות השרת לא עולות
+קרדיטים, עד תקרת שימוש הוגן יומית (200 כברירת מחדל), ומעבר לה — הקרדיטים
+הרגילים. תשלום חד־פעמי ב־PayPal, בלי מנוי ובלי חידוש; חופשי שנקנה כשיש אחד
+פעיל מתחיל אחרי הסוף שלו. המחירים, התקרה, המטבע, המכירה עצמה (כבויה עד שמגדירים
+את PayPal) ומצב ניסיון/אמת — כולם ב־`credit_settings`, ונערכים מאזור הניהול.
+
+הזרימה: הדף מבקש מ־`supabase/functions/pay` הזמנה (רק את סוג החבילה — המחיר
+נלקח מההגדרות בשרת), ושולח את הקונה ל־PayPal; PayPal מחזיר אותו ל־
+`?pay=return&purchase=…`, הדף מנקה את הכתובת (`src/lib/payments.ts`) ומבקש
+לגבות, והשרת נותן את החופשי רק כשהגבייה הושלמה בסכום ובמטבע שנדרשו —
+פעם אחת, מי שמדווח ראשון (`credit_purchase_complete`, בנעילת שורה). ה־Webhook
+של PayPal מכסה קונה שסגר את הלשונית בדרך חזרה, תשלום שעבר לבדיקה, והחזר כספי
+— שמבטל את הימים שנקנו. הודעות ה־Webhook נבדקות מול PayPal עצמו. במצב ניסיון
+(Sandbox) רק בעל האתר יכול לקנות: כל אחד יכול לפתוח חשבון בדיקה ב־PayPal.
+על הקונה לא נשמר דבר מלבד החשבון באתר ומזהי ההזמנה והגבייה של PayPal
+(`credit_purchases`).
+
+החיבור, פעם אחת, מאזור הניהול (לשונית "מערכת", כרטיס הקרדיטים — שם גם
+המדריך המלא):
+
+1. ב־[developer.paypal.com](https://developer.paypal.com/dashboard/applications),
+   Apps & Credentials, יוצרים אפליקציה ב־Sandbox ומזינים בטבלת המפתחות
+   `PAYPAL_SANDBOX_CLIENT_ID` ו־`PAYPAL_SANDBOX_CLIENT_SECRET`.
+2. באפליקציה מוסיפים Webhook לכתובת
+   `https://<project>.supabase.co/functions/v1/pay/webhook?mode=sandbox`, עם
+   האירועים Checkout order approved ו־Payment capture completed / pending /
+   denied / refunded / reversed, ומזינים את ה־Webhook ID כ־`PAYPAL_SANDBOX_WEBHOOK_ID`.
+3. מפעילים מכירה במצב ניסיון, וקונים עם חשבון הבדיקה (Sandbox → Accounts).
+4. חוזרים על 1–2 ב־Live (`?mode=live`, והשמות בלי `SANDBOX_`), ובוחרים
+   "תשלומים אמיתיים".
+
+כפתור הבדיקה בכרטיס בריאות השירותים מוודא שהמפתחות עובדים. את התרחישים של
+מסד הנתונים (קנייה, תקרה, החזר, הארכה, מצב ניסיון) אפשר להריץ על Postgres
+מקומי: `supabase/tests/credits-passes.sql`.
+
 ### האזור האישי
 
 `#/me` הוא דף שלם, לא רק מגירה: גלריה של כל מה שנשמר בכל הכלים, עם
