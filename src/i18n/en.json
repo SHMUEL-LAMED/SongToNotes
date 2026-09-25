@@ -2534,5 +2534,21 @@
  "· יש לך רק {0}": "· you have only {0}",
  "· יש לך {0}": "· you have {0}",
  "מה זה?": "What's this?",
- "· {0} להודעה": "· {0} per message"
+ "· {0} להודעה": "· {0} per message",
+ "לימוד:": "Lesson:",
+ "מצב הלימוד": "Lesson mode",
+ "צפייה": "Watch",
+ "שוב": "Again",
+ "מההתחלה": "From the start",
+ "{0} נכונים": "{0} correct",
+ "{0} טעויות": "{0} mistakes",
+ "סיימת!": "Finished!",
+ "סגירת הלימוד": "Close the lesson",
+ "בתרגול השיר מחכה לך: נגן את המקשים המוארים — בעכבר, במגע, במקלדת המחשב או במקלדת MIDI.": "In practice the song waits for you: play the lit keys — with the mouse, by touch, on the computer keyboard or on a MIDI keyboard.",
+ "רוצים ללמוד שיר? זהו את התווים שלו ב„שיר לתווים” ולחצו „ללמוד בפסנתר”: התווים ייפלו על המקשים.": "Want to learn a song? Find its notes in “Song to notes” and press “Learn on piano”: the notes will fall onto the keys.",
+ "לשיר לתווים": "Go to Song to notes",
+ "ללמוד בפסנתר": "Learn on piano",
+ "אין תווים ללמוד": "No notes to learn",
+ "הפסנתר הווירטואלי נפתח עם השיר: בצפייה הוא מתנגן לבד, ובתרגול הוא מחכה לכל תו": "The virtual piano opened with the song: watching, it plays itself; practising, it waits for every note",
+ "בזמן לימוד שיר המקשים קבועים; כדי לשנות אוקטבה צריך לסגור את הלימוד": "While a song is being learned the keys stay put; close the lesson to change the octave"
 }

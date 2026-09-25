@@ -105,7 +105,7 @@ export const ACTIONS: ActionSpec[] = [
   define(null, "write", "account.close", "סגירת האזור האישי", "סוגר את האזור האישי."),
   define(null, "write", "theme.set", "ערכת נושא", "מחליף בין ערכת נושא בהירה, כהה או לפי המערכת.", ["theme:light|dark|system"]),
   define(null, "write", "theme.color", "צבע האתר", "מחליף את צבע האתר; everywhere צובע בו גם את כל הכלים.", ["color:default|סגול|ורוד|אדום|כתום|זהב|ירוק|טורקיז|כחול|אינדיגו", "everywhere?:boolean"]),
-  define(null, "read", "works.list", "רשימת העבודות השמורות", "העבודות השמורות של הגולש (כותרת, סוג, תיאור, מזהה), החדשות קודם.", ["kind?:notes|ringtone|vocals|speed|piano|analysis|ear|metronome|tuner|transcript|chords|song|convert|rhythm|mix|lyrics|tts", ["query?", "סינון לפי טקסט בכותרת"], "limit?:number"]),
+  define(null, "read", "works.list", "רשימת העבודות השמורות", "העבודות השמורות של הגולש (כותרת, סוג, תיאור, מזהה), החדשות קודם.", ["kind?:notes|ringtone|vocals|speed|piano|analysis|ear|metronome|tuner|transcript|chords|song|convert|rhythm|mix|lyrics|tts|identify", ["query?", "סינון לפי טקסט בכותרת"], "limit?:number"]),
   define(null, "write", "works.open", "פתיחת עבודה שמורה", "פותח עבודה שמורה בכלי שיצר אותה.", [["id", "מזהה מתוך works.list"]]),
   define(null, "write", "works.rename", "שינוי שם לעבודה", "משנה את הכותרת של עבודה שמורה.", ["id", "title"]),
   define(null, "write", "works.delete", "מחיקת עבודה", "מוחק עבודה מהאזור האישי (הגולש מאשר קודם).", ["id"], true),
@@ -209,6 +209,7 @@ export const ACTIONS: ActionSpec[] = [
   define("notes", "write", "notes.playback", "הגדרות נגינה", "כלי נגינה, מהירות (0.5..1.5), עוצמה (0..100), מטרונום ולולאה על הקטע המסומן.", ["instrument?:piano|strings|organ|synth|marimba", "rate?:number", "volume?:number", "click?:boolean", "loop?:boolean"]),
   define("notes", "write", "notes.tab", "תצוגה", "תווים, Piano Roll, רשימת תווים או טאבים לגיטרה.", ["tab:sheet|piano|notes|tab"]),
   define("notes", "write", "notes.download", "הורדת התוצאה", "מוריד את התוצאה בפורמט המבוקש, או מדפיס.", ["format:musicxml|midi|abc|csv|svg|tab|print"]),
+  define("notes", "write", "notes.learn", "ללמוד בפסנתר", "פותח את הפסנתר הווירטואלי עם התווים שזוהו: הם נופלים על המקשים, בצפייה השיר מתנגן לבד ובתרגול הוא מחכה שהגולש ינגן כל תו."),
   define("notes", "write", "notes.reset", "שיר חדש", "מנקה את הקובץ והתוצאה (הגולש מאשר קודם).", [], true),
 
   // ---- chords ----

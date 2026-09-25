@@ -11,6 +11,7 @@ import {
   ListMusic,
   ListMusic as ListIcon,
   Pause,
+  Piano,
   Play,
   Printer,
   Repeat,
@@ -40,6 +41,7 @@ import { saveTranscription } from "../lib/history";
 import { saveWork } from "../lib/works";
 import { scoreToMusicXml } from "../lib/musicxml";
 import { scoreToTab } from "../lib/tab";
+import { lessonFromScore, savePianoLesson } from "../lib/pianoLesson";
 import { currentLang } from "../lib/i18n";
 import { quantizeNotes } from "../lib/quantize";
 import { DEFAULT_REFINE, noteSpan, refineNotes } from "../lib/refine";
@@ -208,6 +210,12 @@ export function TranscriberTool({ initial }: Props) {
   );
   // Guitar tablature of the same score, its header in the site's language.
   const guitarTab = useMemo(() => scoreToTab(score, { lang: currentLang() }), [score]);
+
+  // The same score, handed to the virtual piano to learn: its notes fall onto the keys.
+  const learnOnPiano = () => {
+    savePianoLesson({ title, notes: lessonFromScore(score) });
+    window.location.assign("#/piano");
+  };
 
   const duration = useMemo(() => noteSpan(notes), [notes]);
   const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
@@ -718,6 +726,11 @@ export function TranscriberTool({ initial }: Props) {
         download(format as "midi" | "musicxml" | "abc" | "csv" | "svg" | "tab");
         return { ok: true, message: `קובץ ${String(format).toUpperCase()} ירד` };
       },
+      "notes.learn": () => {
+        if (!hasResults || !notes.length) return { ok: false, message: "אין תווים ללמוד" };
+        learnOnPiano();
+        return { ok: true, message: "הפסנתר הווירטואלי נפתח עם השיר: בצפייה הוא מתנגן לבד, ובתרגול הוא מחכה לכל תו" };
+      },
       "notes.reset": () => {
         reset();
         return { ok: true, message: "הקובץ והתוצאה נוקו; אפשר לבחור שיר חדש" };
@@ -925,9 +938,16 @@ export function TranscriberTool({ initial }: Props) {
               </div>
               <h2>התווים של „{title}”</h2>
             </div>
-            <button className="secondary-button" onClick={reset} type="button">
-              <RotateCcw size={17} /> שיר חדש
-            </button>
+            <div className="results-header-actions">
+              {notes.length > 0 && (
+                <button className="secondary-button" onClick={learnOnPiano} type="button">
+                  <Piano size={17} /> ללמוד בפסנתר
+                </button>
+              )}
+              <button className="secondary-button" onClick={reset} type="button">
+                <RotateCcw size={17} /> שיר חדש
+              </button>
+            </div>
           </div>
 
           <div className="stats-grid">
