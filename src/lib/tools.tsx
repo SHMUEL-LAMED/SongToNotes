@@ -363,7 +363,6 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["זיהוי שיר", "שאזאם", "מה השיר", "אמן"],
     related: ["chords", "lyrics", "analyze"],
     server: true,
-    hidden: true,
   },
   {
     id: "analyze",
