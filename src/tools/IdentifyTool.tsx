@@ -1,4 +1,4 @@
-import { Disc3, ExternalLink, FileAudio, LogIn, Mic, RefreshCw, Search, Square } from "lucide-react";
+import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateAudioFile } from "../components/AudioPicker";
 import { AiError, identifyAvailability, type Identification } from "../lib/aiApi";
@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { MIC_SECONDS, fileClipStarts, identifyClip, newSession, renderClip, soundStart } from "../lib/identifyClips";
 import { MicRecorder, isRecordingSupported } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
+import { youtubeEmbedUrl, youtubeStillUrl, youtubeVideoId } from "../lib/youtube";
 
 /** A message shown while a further clip of the same song is tried. */
 const TRYING_ANOTHER = "מנסה קטע נוסף…";
@@ -31,6 +32,36 @@ export function YouTubeLink({ href }: { href?: string | null }) {
         <span aria-hidden="true">▶</span> YouTube
       </span>
     </a>
+  );
+}
+
+/**
+ * The song's video, played inside the result. Until the visitor presses play
+ * it is only the video's still, so the player loads when it is wanted.
+ */
+export function YouTubePlayer({ href, title }: { href?: string | null; title: string }) {
+  const [playing, setPlaying] = useState(false);
+  const id = youtubeVideoId(href);
+  if (!id) return null;
+  return (
+    <div className="identify-video">
+      {playing ? (
+        <iframe
+          src={youtubeEmbedUrl(id)}
+          title={title}
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      ) : (
+        <button type="button" className="identify-video-still" onClick={() => setPlaying(true)} aria-label={`נגן כאן: ${title}`}>
+          <img src={youtubeStillUrl(id)} alt="" />
+          <span aria-hidden="true">
+            <Play size={30} />
+          </span>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -323,6 +354,7 @@ export function IdentifyTool() {
                 {result.timecode ? `הקטע נמצא בדקה ${result.timecode} של השיר · ` : ""}נותרו היום {Math.max(0, result.limit - result.used)} זיהויים
               </small>
             </div>
+            <YouTubePlayer key={result.links.youtube ?? ""} href={result.links.youtube} title={[result.title, result.artist].filter(Boolean).join(" — ")} />
           </div>
         )}
 
