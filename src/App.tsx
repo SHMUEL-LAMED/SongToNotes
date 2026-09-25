@@ -7,13 +7,13 @@ import { AppShell } from "./components/AppShell";
 import { AppearanceDialog } from "./components/AppearanceDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { Home } from "./components/Home";
-import { IdentifyPromo } from "./components/IdentifyPromo";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
 import { SharePage } from "./components/SharePage";
 import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { SiteFooter } from "./components/SiteFooter";
+import { ToolPromo } from "./components/ToolPromo";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
@@ -24,7 +24,7 @@ import { useSiteControl } from "./lib/siteControl";
 import { langForModel } from "./lib/i18n";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
-import { useIdentifyPromo } from "./lib/identifyPromo";
+import { useToolPromo } from "./lib/toolPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
@@ -167,13 +167,14 @@ function WorkspaceApp() {
     paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || closed || admin,
     sharing: shareOpen,
   });
-  // Once a visit, after a little while on screen, an invitation to the song
-  // identifier — never on the identifier itself, over a dialog, beside the
-  // request to share, or while the tool is switched off.
-  const identifyPromo = useIdentifyPromo({
-    paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || closed || admin || sharePrompt.open,
-    available: Boolean(findTool("identify")) && !control.disabledTools.includes("identify"),
-    here: tool?.id === "identify",
+  // Once a visit, after a little while on screen, an invitation to one of the
+  // tools that are not only for musicians, taking turns — never to the tool on
+  // screen or one that is off, over a dialog, or beside the request to share.
+  const toolPromo = useToolPromo({
+    paused:
+      paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || feedbackOpen || closed || admin || sharePrompt.open,
+    current: tool?.id ?? null,
+    disabledTools: control.disabledTools,
   });
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
@@ -473,13 +474,14 @@ function WorkspaceApp() {
             onClose={sharePrompt.close}
           />
         )}
-        {identifyPromo.open && (
-          <IdentifyPromo
+        {toolPromo.promo && (
+          <ToolPromo
+            promo={toolPromo.promo}
             onOpen={() => {
-              identifyPromo.accept();
-              go("identify");
+              const target = toolPromo.accept();
+              if (target) go(target);
             }}
-            onClose={identifyPromo.dismiss}
+            onClose={toolPromo.dismiss}
           />
         )}
       </AppNotices>
