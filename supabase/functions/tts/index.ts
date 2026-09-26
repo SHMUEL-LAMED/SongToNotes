@@ -6,7 +6,9 @@
  * Arabic, English and more than a hundred other languages, with the same
  * GEMINI_API_KEY the assistant can use. A text longer than one request
  * carries is read in pieces at the same time and stitched into one WAV,
- * which the page turns into an MP3. A service of the project's own choosing,
+ * which the page turns into an MP3. Google answers with the speech in several
+ * audio blocks, and all of them are joined; a reading that still stops well
+ * short of its text is asked for again. A service of the project's own choosing,
  * set with TTS_API_KEY, still goes first: voiceServices() in
  * ../_shared/voice.ts has the order.
  *
@@ -32,10 +34,14 @@ import {
   SAMPLE_RATE,
   type Trouble,
   type VoiceService,
-  audioFromInteraction,
+  audioBlocksOf,
+  expectedSeconds,
   fromBase64,
+  joinPcm,
   paceStyle,
   pcmOf,
+  readsWhole,
+  secondsOf,
   splitText,
   troubleOf,
   voiceServices,
@@ -52,8 +58,21 @@ const DEFAULT_DAILY = 60_000;
  */
 const BUDGET_MS = 120_000;
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
+/**
+ * How many times one piece is asked for when Google's reading of it stops
+ * well short of the text. Each time tries the models in order again.
+ */
+const READINGS = 3;
 
-type Speech = { bytes: Uint8Array; type: string; model: string };
+type Pcm = { samples: Uint8Array; sampleRate: number };
+/** One piece as Google read it, and how that went: for the logs, and for the page to show. */
+type Reading = Pcm & { model: string; blocks: number; seconds: number; tries: number; refused: string[] };
+type Speech = {
+  bytes: Uint8Array;
+  type: string;
+  model: string;
+  readings?: { model: string; blocks: number; seconds: number; expected: number; tries: number; refused: string[] }[];
+};
 
 /** A refusal from a voice service, and what it means. */
 class VoiceError extends Error {
@@ -80,49 +99,101 @@ async function refusal(response: Response, model: string) {
   return new VoiceError(troubleOf(response.status, detail), response.status, `${model}: ${detail}`);
 }
 
-/** One piece of the text in Google's voice, from the first model that reads it. */
-async function geminiPiece(apiKey: string, text: string, style: string | undefined, signal: AbortSignal) {
-  let failure = new VoiceError("other", 502, "no model tried");
-  for (const model of GEMINI_TTS_MODELS) {
-    const response = await fetch(`${GEMINI}/interactions`, {
-      method: "POST",
-      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        input: [{ type: "user_input", content: [{ type: "text", text, ...(style ? { annotations: [{ type: "speech_metadata", style }] } : {}) }] }],
-        response_format: { type: "audio", mime_type: "audio/l16", sample_rate: SAMPLE_RATE },
-        generation_config: { speech_config: [{ voice: GEMINI_VOICE }] },
-        // Nothing of the visitor's text is kept on Google's side once the audio is back.
-        store: false,
-      }),
-      signal,
-    });
-    if (response.ok) {
-      const audio = audioFromInteraction(await response.json().catch(() => null));
-      const pcm = audio ? pcmOf(fromBase64(audio.data), audio.mimeType) : null;
-      if (pcm?.samples.length) return { ...pcm, model };
-      failure = new VoiceError("other", 502, `${model}: no audio in the answer`);
-      continue;
-    }
-    failure = await refusal(response, model);
-    // A key Google turns down is turned down for every model.
-    if (failure.trouble === "key") break;
+/**
+ * The speech in one answer: all its audio blocks, joined in order. Blocks
+ * that each hold the whole reading, rather than parts of one, would say it
+ * twice when joined; then the longest of them is the reading.
+ */
+function speechOf(answer: unknown, text: string, speed: number): (Pcm & { blocks: number }) | null {
+  const blocks = audioBlocksOf(answer);
+  const parts = blocks
+    .map((block) => pcmOf(fromBase64(block.data), block.mimeType))
+    .filter((pcm): pcm is Pcm => pcm !== null && pcm.samples.length > 0);
+  if (!parts.length) return null;
+  const longest = parts.reduce((a, b) => (b.samples.length > a.samples.length ? b : a));
+  const joined = joinPcm(parts) ?? longest;
+  const expected = expectedSeconds(text, speed);
+  if (parts.length > 1 && expected >= 2 && secondsOf(joined) > expected * 1.8 && readsWhole(secondsOf(longest), text, speed)) {
+    return { ...longest, blocks: blocks.length };
   }
+  return { ...joined, blocks: blocks.length };
+}
+
+/**
+ * One piece of the text in Google's voice. The models are tried in order,
+ * and a reading that stops well short of the text is asked for again, up to
+ * READINGS times; if none is whole, the longest is kept.
+ */
+async function geminiPiece(apiKey: string, text: string, speed: number, signal: AbortSignal): Promise<Reading> {
+  const style = paceStyle(speed);
+  let failure = new VoiceError("other", 502, "no model tried");
+  let best: Reading | null = null;
+  const refused: string[] = [];
+  for (let tries = 1; tries <= READINGS; tries += 1) {
+    let heard = false;
+    for (const model of GEMINI_TTS_MODELS) {
+      const response = await fetch(`${GEMINI}/interactions`, {
+        method: "POST",
+        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          input: [{ type: "user_input", content: [{ type: "text", text, ...(style ? { annotations: [{ type: "speech_metadata", style }] } : {}) }] }],
+          response_format: { type: "audio", mime_type: "audio/l16", sample_rate: SAMPLE_RATE },
+          generation_config: { speech_config: [{ voice: GEMINI_VOICE }] },
+          // Nothing of the visitor's text is kept on Google's side once the audio is back.
+          store: false,
+        }),
+        signal,
+      });
+      if (!response.ok) {
+        failure = await refusal(response, model);
+        if (refused.length < 6) refused.push(`${model} ${response.status}`);
+        console.warn("speech model refused", model, response.status, failure.trouble);
+        // A key Google turns down is turned down for every model.
+        if (failure.trouble === "key") throw failure;
+        continue;
+      }
+      const speech = speechOf(await response.json().catch(() => null), text, speed);
+      if (!speech) {
+        failure = new VoiceError("other", 502, `${model}: no audio in the answer`);
+        continue;
+      }
+      const reading: Reading = { ...speech, model, seconds: secondsOf(speech), tries, refused };
+      if (readsWhole(reading.seconds, text, speed)) return reading;
+      console.warn("speech stopped short", model, reading.seconds.toFixed(2), expectedSeconds(text, speed).toFixed(2), speech.blocks);
+      if (!best || reading.seconds > best.seconds) best = reading;
+      heard = true;
+      break;
+    }
+    // Every model refused: asking again at once would only be refused again.
+    if (!heard) break;
+  }
+  if (best) return best;
   throw failure;
 }
 
 /** The whole text in Google's voice: its pieces read at once, joined into one WAV. */
 async function geminiSpeech(apiKey: string, text: string, speed: number, signal: AbortSignal): Promise<Speech> {
-  const style = paceStyle(speed);
   // A piece that fails stops the rest: the recording is whole or not at all.
   const stop = new AbortController();
   const pieceSignal = AbortSignal.any([signal, stop.signal]);
   try {
-    const pieces = await Promise.all(splitText(text).map((piece) => geminiPiece(apiKey, piece, style, pieceSignal)));
+    const parts = splitText(text);
+    const pieces = await Promise.all(parts.map((piece) => geminiPiece(apiKey, piece, speed, pieceSignal)));
     const rate = pieces[0].sampleRate;
     if (pieces.some((piece) => piece.sampleRate !== rate)) throw new VoiceError("other", 502, "pieces came back at different rates");
     const models = [...new Set(pieces.map((piece) => piece.model))].join(",");
-    return { bytes: wavFile(pieces.map((piece) => piece.samples), rate), type: "audio/wav", model: models };
+    const round = (seconds: number) => Math.round(seconds * 100) / 100;
+    const readings = pieces.map((piece, index) => ({
+      model: piece.model,
+      blocks: piece.blocks,
+      seconds: round(piece.seconds),
+      expected: round(expectedSeconds(parts[index], speed)),
+      tries: piece.tries,
+      refused: piece.refused,
+    }));
+    console.log("speech", text.length, JSON.stringify(readings));
+    return { bytes: wavFile(pieces.map((piece) => piece.samples), rate), type: "audio/wav", model: models, readings };
   } finally {
     stop.abort();
   }
@@ -212,7 +283,13 @@ Deno.serve(async (req: Request) => {
     await recordUsage(admin, user.id, "tts", text.length);
     if (asJson) {
       return new Response(
-        JSON.stringify({ audio: toBase64(speech.bytes), type: speech.type, provider: service.id, model: speech.model }),
+        JSON.stringify({
+          audio: toBase64(speech.bytes),
+          type: speech.type,
+          provider: service.id,
+          model: speech.model,
+          ...(speech.readings ? { readings: speech.readings } : {}),
+        }),
         {
           headers: {
             ...CORS,

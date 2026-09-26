@@ -6,10 +6,14 @@ import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES,
   PIECE_CHARS,
-  audioFromInteraction,
+  audioBlocksOf,
+  expectedSeconds,
   fromBase64,
+  joinPcm,
   paceStyle,
   pcmOf,
+  readsWhole,
+  secondsOf,
   splitText,
   troubleOf,
   voiceServices,
@@ -99,25 +103,68 @@ describe("paceStyle", () => {
   });
 });
 
-describe("audioFromInteraction", () => {
-  it("reads the last audio of the model's output, as the Interactions API returns it", () => {
+describe("audioBlocksOf", () => {
+  it("keeps every audio block of the model's output, in order, since only all of them are the whole reading", () => {
     const answer = {
       id: "v1_abc",
       status: "completed",
       steps: [
         { type: "thought", content: [{ type: "text", text: "…" }] },
         { type: "model_output", content: [{ type: "audio", data: "AAA=", mime_type: "audio/l16;rate=24000" }] },
-        { type: "model_output", content: [{ type: "audio", data: "AQE=", mime_type: "audio/l16;rate=24000" }] },
+        {
+          type: "model_output",
+          content: [
+            { type: "audio", data: "AQE=", mime_type: "audio/l16;rate=24000" },
+            { type: "audio", data: "AgI=", mime_type: "audio/l16;rate=24000" },
+          ],
+        },
       ],
     };
-    expect(audioFromInteraction(answer)).toEqual({ data: "AQE=", mimeType: "audio/l16;rate=24000" });
+    expect(audioBlocksOf(answer).map((block) => block.data)).toEqual(["AAA=", "AQE=", "AgI="]);
   });
 
-  it("also reads the older outputs list, and nothing from anything else", () => {
-    expect(audioFromInteraction({ outputs: [{ type: "audio", data: "AAA=", mimeType: "audio/wav" }] })).toEqual({ data: "AAA=", mimeType: "audio/wav" });
-    expect(audioFromInteraction({ steps: [{ type: "model_output", content: [{ type: "text", text: "no" }] }] })).toBeNull();
-    expect(audioFromInteraction(null)).toBeNull();
-    expect(audioFromInteraction({ steps: "nope", outputs: [null] })).toBeNull();
+  it("takes the list with more audio when both have some, never both", () => {
+    const first = { type: "audio", data: "AAA=", mime_type: "audio/l16" };
+    const rest = { type: "audio", data: "AQEBAQ==", mime_type: "audio/l16" };
+    // An answer that repeats its first block in the older list is read from the steps alone.
+    expect(audioBlocksOf({ steps: [{ content: [first, rest] }], outputs: [first] }).map((block) => block.data)).toEqual(["AAA=", "AQEBAQ=="]);
+    expect(audioBlocksOf({ steps: [{ content: [first] }], outputs: [first, rest] }).map((block) => block.data)).toEqual(["AAA=", "AQEBAQ=="]);
+  });
+
+  it("also reads the older outputs list, the rate beside the type, and nothing from anything else", () => {
+    expect(audioBlocksOf({ outputs: [{ type: "audio", data: "AAA=", mimeType: "audio/wav" }] })).toEqual([{ data: "AAA=", mimeType: "audio/wav" }]);
+    expect(audioBlocksOf({ steps: [{ content: [{ type: "audio", data: "AAA=", mime_type: "audio/l16", sample_rate: 16000 }] }] })).toEqual([
+      { data: "AAA=", mimeType: "audio/l16;rate=16000" },
+    ]);
+    expect(audioBlocksOf({ steps: [{ content: [{ type: "audio", data: "AAA=", sample_rate: 22050 }] }] })[0].mimeType).toBe("audio/l16;rate=22050");
+    expect(audioBlocksOf({ steps: [{ type: "model_output", content: [{ type: "text", text: "no" }] }] })).toEqual([]);
+    expect(audioBlocksOf(null)).toEqual([]);
+    expect(audioBlocksOf({ steps: "nope", outputs: [null] })).toEqual([]);
+  });
+});
+
+describe("a whole reading", () => {
+  // The page's own announcement, which Google read only in part: its first
+  // sentence (3 seconds), its first three (6), or a tenth of a second.
+  const announcement =
+    "עוד לא הצבעתם למצעד האלבומים של ראש בראש? ההצבעה תיסגר בימים הקרובים. מהרו להשפיע! להצבעה בטלפון חייגו: אפס שבע שבע, שתיים שתיים שש, שתיים שתיים שבע אחת. לאחר מכן הקישו שלוחה שמונה. ראש בראש — הקול שלכם קובע!";
+
+  it("expects the time its letters and digits take, at the pace asked for", () => {
+    expect(expectedSeconds("abcdefghijkl")).toBe(1);
+    expect(expectedSeconds("שלום, עולם! 12")).toBeCloseTo(10 / 12);
+    expect(expectedSeconds("abcdefghijkl", 2)).toBe(0.5);
+    // A speed near the middle is not asked for, so it does not change the pace.
+    expect(expectedSeconds("abcdefghijkl", 1.05)).toBe(1);
+  });
+
+  it("tells a reading that stopped short from a whole one", () => {
+    expect(readsWhole(0.12, announcement)).toBe(false);
+    expect(readsWhole(3.05, announcement)).toBe(false);
+    expect(readsWhole(5.95, announcement)).toBe(false);
+    expect(readsWhole(14, announcement)).toBe(true);
+    expect(readsWhole(9, announcement)).toBe(true);
+    // A word or two is not judged.
+    expect(readsWhole(0.1, "שלום")).toBe(true);
   });
 });
 
@@ -159,6 +206,18 @@ describe("the audio", () => {
     new DataView(stereo.buffer).setUint16(22, 2, true);
     expect(pcmOf(stereo)).toBeNull();
     expect(pcmOf(samples(1), "audio/mpeg")).toBeNull();
+  });
+
+  it("joins the blocks of one reading end to end, and tells how long they play", () => {
+    const joined = joinPcm([
+      { samples: samples(1, 2), sampleRate: 8000 },
+      { samples: samples(3), sampleRate: 8000 },
+    ]);
+    expect([...new Int16Array(joined!.samples.slice().buffer)]).toEqual([1, 2, 3]);
+    expect(joined!.sampleRate).toBe(8000);
+    expect(secondsOf({ samples: new Uint8Array(48_000), sampleRate: 24_000 })).toBe(1);
+    expect(joinPcm([])).toBeNull();
+    expect(joinPcm([{ samples: samples(1), sampleRate: 8000 }, { samples: samples(2), sampleRate: 16000 }])).toBeNull();
   });
 
   it("decodes base64, and nothing from what is not", () => {
