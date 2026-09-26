@@ -94,23 +94,62 @@ export function paceStyle(speed: number): string | undefined {
 }
 
 /**
- * The last audio in an answer from Google's Interactions API: base64 in
- * `steps[].content[]` (and in `outputs[]`, the shape it had before).
+ * Letters and digits the voice says in a second, about, at its own pace —
+ * Hebrew (written without vowels) and English alike. Gemini's voice read this
+ * site's Hebrew at 11 to 12.
  */
-export function audioFromInteraction(answer: unknown): { data: string; mimeType: string } | null {
-  const found: { data: string; mimeType: string }[] = [];
-  const read = (blocks: unknown) => {
-    if (!Array.isArray(blocks)) return;
-    for (const block of blocks as { type?: unknown; data?: unknown; mime_type?: unknown; mimeType?: unknown }[]) {
-      if (block?.type === "audio" && typeof block.data === "string" && block.data) {
-        found.push({ data: block.data, mimeType: String(block.mime_type ?? block.mimeType ?? "") });
+export const LETTERS_PER_SECOND = 12;
+
+/** About how long reading `text` aloud takes, in seconds: its letters and digits at the pace asked for. */
+export function expectedSeconds(text: string, speed = 1) {
+  const letters = text.match(/[\p{L}\p{N}]/gu)?.length ?? 0;
+  const pace = paceStyle(speed) ? Math.max(0.5, Math.min(2, speed)) : 1;
+  return letters / LETTERS_PER_SECOND / pace;
+}
+
+/**
+ * Whether `seconds` of speech can be all of `text`: at least half the time it
+ * takes to read. A reading that stopped after its first sentence is far below
+ * that; one read quickly, or a text with symbols no one says, is not. A text
+ * of a word or two is not judged.
+ */
+export function readsWhole(seconds: number, text: string, speed = 1) {
+  const expected = expectedSeconds(text, speed);
+  return expected < 2 || seconds >= expected / 2;
+}
+
+/** One block of audio in an answer from Google: its base64, and its type. */
+export type AudioBlock = { data: string; mimeType: string };
+
+/**
+ * All the audio in an answer from Google's Interactions API, block by block
+ * and in order: base64 in `steps[].content[]` (or in `outputs[]`, the shape it
+ * had before). The speech comes in several blocks, a short text's too, and it
+ * is whole only with all of them: one block alone was a first sentence, or a
+ * tenth of a second. When both lists carry audio, the one with more of it is
+ * taken, not both, which would say part of the text twice.
+ */
+export function audioBlocksOf(answer: unknown): AudioBlock[] {
+  const read = (blocks: unknown): AudioBlock[] => {
+    if (!Array.isArray(blocks)) return [];
+    const found: AudioBlock[] = [];
+    for (const block of blocks as { type?: unknown; data?: unknown; mime_type?: unknown; mimeType?: unknown; sample_rate?: unknown }[]) {
+      if (block?.type !== "audio" || typeof block.data !== "string" || !block.data) continue;
+      let mimeType = String(block.mime_type ?? block.mimeType ?? "");
+      // The rate can come beside the type rather than inside it.
+      const rate = Number(block.sample_rate);
+      if (rate > 0 && !/rate=/i.test(mimeType) && (!mimeType || /^audio\/l16\b/i.test(mimeType))) {
+        mimeType = `${mimeType || "audio/l16"};rate=${rate}`;
       }
+      found.push({ data: block.data, mimeType });
     }
+    return found;
   };
   const { steps, outputs } = (answer ?? {}) as { steps?: unknown; outputs?: unknown };
-  if (Array.isArray(steps)) for (const step of steps) read((step as { content?: unknown } | null)?.content);
-  read(outputs);
-  return found.at(-1) ?? null;
+  const fromSteps = Array.isArray(steps) ? steps.flatMap((step) => read((step as { content?: unknown } | null)?.content)) : [];
+  const fromOutputs = read(outputs);
+  const size = (blocks: AudioBlock[]) => blocks.reduce((sum, block) => sum + block.data.length, 0);
+  return size(fromOutputs) > size(fromSteps) ? fromOutputs : fromSteps;
 }
 
 /** Base64 to bytes, with nothing but the platform; nothing for anything that is not base64. */
@@ -157,6 +196,25 @@ export function pcmOf(bytes: Uint8Array, mimeType = ""): { samples: Uint8Array; 
   if (mimeType && !/^audio\/l16\b/i.test(mimeType)) return null;
   const rate = Number(/rate=(\d+)/i.exec(mimeType)?.[1]) || SAMPLE_RATE;
   return { samples: bytes.subarray(0, bytes.length - (bytes.length % 2)), sampleRate: rate };
+}
+
+/** Pieces of 16-bit samples end to end, with nothing between them; null when there are none, or their rates differ. */
+export function joinPcm(pieces: { samples: Uint8Array; sampleRate: number }[]): { samples: Uint8Array; sampleRate: number } | null {
+  if (!pieces.length) return null;
+  const sampleRate = pieces[0].sampleRate;
+  if (pieces.some((piece) => piece.sampleRate !== sampleRate)) return null;
+  const samples = new Uint8Array(pieces.reduce((sum, piece) => sum + piece.samples.length, 0));
+  let at = 0;
+  for (const piece of pieces) {
+    samples.set(piece.samples, at);
+    at += piece.samples.length;
+  }
+  return { samples, sampleRate };
+}
+
+/** How long 16-bit mono samples play, in seconds. */
+export function secondsOf(pcm: { samples: Uint8Array; sampleRate: number }) {
+  return pcm.samples.length / 2 / pcm.sampleRate;
 }
 
 /** One WAV from pieces of 16-bit mono PCM, with a breath of silence between them. */
