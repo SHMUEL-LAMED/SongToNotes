@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ANNOUNCEMENT,
+  ANNOUNCEMENTS,
   ANNOUNCEMENT_AFTER_MS,
   ASSISTANT_TARGET,
   PROMOS,
@@ -8,7 +8,7 @@ import {
   REST_ALL_AFTER_DISMISS_MS,
   REST_TOOL_AFTER_DISMISS_MS,
   afterDismiss,
-  announcementDue,
+  nextAnnouncement,
   afterShown,
   parseState,
   pickPromo,
@@ -113,20 +113,26 @@ describe("what the device remembers", () => {
 });
 
 describe("the news", () => {
-  it("names a tool the site shows, with words in both languages", () => {
-    if (!ANNOUNCEMENT) return;
-    if (ANNOUNCEMENT.tool !== ASSISTANT_TARGET) expect(findTool(ANNOUNCEMENT.tool)).not.toBeNull();
-    for (const words of [ANNOUNCEMENT.he, ANNOUNCEMENT.en]) {
-      expect(words.title && words.text && words.cta).toBeTruthy();
+  it("names tools the site shows (or the assistant), with distinct ids and words in both languages", () => {
+    const ids = ANNOUNCEMENTS.map((item) => item.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const item of ANNOUNCEMENTS) {
+      if (item.tool !== ASSISTANT_TARGET) expect(findTool(item.tool), item.id).not.toBeNull();
+      for (const words of [item.he, item.en]) expect(words.title && words.text && words.cta, item.id).toBeTruthy();
     }
   });
 
-  it("rises after a few seconds, once a visit, until the device is done with it", () => {
-    if (!ANNOUNCEMENT) return;
-    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS - 1, done: null, shownThisVisit: false })).toBe(false);
-    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: null, shownThisVisit: false })).toBe(true);
-    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: null, shownThisVisit: true })).toBe(false);
-    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: ANNOUNCEMENT.id, shownThisVisit: false })).toBe(false);
-    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: "older-news", shownThisVisit: false })).toBe(true);
+  it("rises a few seconds in, one piece after the other, until the device is done with each", () => {
+    const at = (spent: number, since: number, done: string[], skip: (tool: string) => boolean = none) => nextAnnouncement({ spent, since, done, skip });
+    expect(at(ANNOUNCEMENT_AFTER_MS - 1, 0, [])).toBeNull();
+    expect(at(ANNOUNCEMENT_AFTER_MS, 0, [])).toBe(0);
+    const first = ANNOUNCEMENTS[0]?.id;
+    if (!first || ANNOUNCEMENTS.length < 2) return;
+    // The next piece waits its few seconds after the last one closed.
+    expect(at(20_000, 15_000, [first])).toBeNull();
+    expect(at(15_000 + ANNOUNCEMENT_AFTER_MS, 15_000, [first])).toBe(1);
+    expect(at(60_000, 0, ANNOUNCEMENTS.map((item) => item.id))).toBeNull();
+    // A piece about the tool on screen waits; the next one goes first.
+    expect(at(ANNOUNCEMENT_AFTER_MS, 0, [], (tool) => tool === ANNOUNCEMENTS[0].tool)).toBe(1);
   });
 });
