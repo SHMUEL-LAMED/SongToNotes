@@ -53,11 +53,11 @@ export const DEFAULT_RULES: CreditRules = {
   friendDaily: 5,
   friendDailyMax: 100,
   welcomeBonus: 10,
-  visitBonus: 1,
+  visitBonus: 20,
   visitDailyMax: 10,
   signupDailyMax: 10,
   claimHours: 72,
-  prices: { assistant: 1, text: 2, minute: 1, tts: 1, separate: 5, identify: 2 },
+  prices: { assistant: 2, text: 2, minute: 1, tts: 1, separate: 5, identify: 2 },
 };
 
 const whole = (value: unknown, fallback: number) => {
@@ -553,7 +553,7 @@ export function untilReset(resetsAt: string | null, now = Date.now()) {
 
 /** What the price list calls each price, and what one of it buys. */
 export const PRICE_LABELS: Record<PriceKey, { title: string; unit: string; tools: string[] }> = {
-  assistant: { title: "הודעה לעוזר", unit: "לכל הודעה (וכל סבב אוטומטי במצב סוכן)", tools: [] },
+  assistant: { title: "שיחה עם העוזר", unit: "לכל שיחה — כל ההודעות בה כלולות, גם הסבבים במצב סוכן", tools: [] },
   minute: { title: "תמלול לטקסט ומילים מסונכרנות", unit: "לכל דקת הקלטה", tools: ["transcript", "lyrics"] },
   text: { title: "עיבוד טקסט ב־AI", unit: "לכל 10,000 תווים — פיסוק, סיכום, תרגום, דוברים, הסבר שיר", tools: ["transcript"] },
   tts: { title: "הקראה לקובץ MP3", unit: "לכל 1,000 תווים", tools: ["tts"] },
@@ -562,7 +562,7 @@ export const PRICE_LABELS: Record<PriceKey, { title: string; unit: string; tools
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  assistant: "הודעה לעוזר",
+  assistant: "שיחה עם העוזר",
   transcript: "תמלול לטקסט",
   lyrics: "מילים מסונכרנות",
   tts: "הקראה לקובץ MP3",

@@ -33,10 +33,11 @@
  *   AI_DAILY_TOKENS   default 5000000
  *   <NAME>_API_KEY    a key for one of the known providers
  *
- * Every request is paid for in credits (supabase/credits.sql): a message to
- * the assistant is the "assistant" price, and the text work the "text" price
- * for every 10,000 characters. A request the services could not answer gives
- * its credits back.
+ * Every request is paid for in credits (supabase/credits.sql): a conversation
+ * with the assistant is the "assistant" price once — its first message pays,
+ * and the rest of that conversation (the page sends its id as `chat`) is
+ * free — and the text work the "text" price for every 10,000 characters. A
+ * request the services could not answer gives its credits back.
  */
 import { CORS, adminClient, json, recordUsage, settings, usedToday, visitor } from "../_shared/common.ts";
 import { charge, creditHeaders, creditSummary, refund, refused } from "../_shared/credits.ts";
@@ -438,6 +439,7 @@ Deno.serve(async (req: Request) => {
     detailed?: boolean;
     mode?: "question" | "plan" | "execute";
     context?: { state?: string; catalog?: string };
+    chat?: string;
   };
   try {
     body = await req.json();
@@ -502,13 +504,33 @@ Deno.serve(async (req: Request) => {
 
   // The price, taken before any service is asked and given back if none answers.
   const chatting = action === "chat";
+  // A conversation pays once: when this account already paid for this
+  // conversation (and was not refunded), the message is free. A page that
+  // sends no id pays for every message, as before.
+  const chatId = chatting && typeof body.chat === "string" ? body.chat.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) : "";
+  let paidBefore = false;
+  if (chatId) {
+    const { data, error } = await admin
+      .from("credit_ledger")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("kind", "spend")
+      .eq("action", "assistant")
+      .eq("refunded", false)
+      .contains("detail", { chat: chatId })
+      .limit(1);
+    if (error) console.error("could not look up the conversation's payment", error.message);
+    paidBefore = Boolean(data?.length);
+  }
   const paid = await charge(
     admin,
     user,
     chatting ? "assistant" : "text",
     chatting ? "assistant" : "text",
-    chatting ? 1 : textUnits(textLength),
-    chatting ? { mode: body.mode === "execute" || body.mode === "plan" ? body.mode : "question" } : { job: action },
+    chatting ? (paidBefore ? 0 : 1) : textUnits(textLength),
+    chatting
+      ? { mode: body.mode === "execute" || body.mode === "plan" ? body.mode : "question", ...(chatId ? { chat: chatId } : {}) }
+      : { job: action },
   );
   if (!paid.ok) return refused(paid);
   const fail = async (status: number, reply: Record<string, unknown>) => {

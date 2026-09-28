@@ -1,7 +1,7 @@
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Sparkles, X } from "lucide-react";
 import type { CSSProperties } from "react";
 import { currentLang } from "../lib/i18n";
-import type { ToolPromoSpec } from "../lib/toolPromo";
+import { ASSISTANT_TARGET, type ToolPromoSpec } from "../lib/toolPromo";
 import { findAnyTool } from "../lib/tools";
 
 /**
@@ -22,7 +22,7 @@ export function ToolPromo({
   const tool = findAnyTool(promo.tool);
   const english = currentLang() === "en";
   const words = english ? promo.en : promo.he;
-  const Icon = tool?.icon;
+  const Icon = promo.tool === ASSISTANT_TARGET ? Sparkles : tool?.icon;
 
   return (
     <div

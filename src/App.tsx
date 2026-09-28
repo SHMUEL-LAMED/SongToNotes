@@ -28,7 +28,7 @@ import { useSiteControl } from "./lib/siteControl";
 import { langForModel } from "./lib/i18n";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
-import { useToolPromo } from "./lib/toolPromo";
+import { ASSISTANT_TARGET, useToolPromo } from "./lib/toolPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
@@ -532,7 +532,8 @@ function WorkspaceApp() {
             promo={toolPromo.promo}
             onOpen={() => {
               const target = toolPromo.accept();
-              if (target) go(target);
+              if (target === ASSISTANT_TARGET) setAssistantOpen(true);
+              else if (target) go(target);
             }}
             onClose={toolPromo.dismiss}
           />
