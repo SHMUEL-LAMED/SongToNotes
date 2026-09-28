@@ -157,6 +157,8 @@ export type ChatOptions = {
   signal?: AbortSignal;
   /** Told which model is answering, as soon as the reply starts. */
   onModel?: (model: string) => void;
+  /** The conversation's id: the server charges a conversation once, on its first message. */
+  chat?: string;
 };
 
 /** The assistant's next reply to a conversation, all at once. */
@@ -164,7 +166,7 @@ export function chat(messages: ChatMessage[], options: ChatOptions = {}) {
   return call<AiReply & { tools?: string[] }>("ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false, mode: options.mode ?? "question", context: options.context }),
+    body: JSON.stringify({ action: "chat", messages, tool: options.tool ?? undefined, detailed: options.detailed ?? false, mode: options.mode ?? "question", context: options.context, chat: options.chat }),
     signal: options.signal,
   });
 }
@@ -196,6 +198,7 @@ export async function chatStream(
         detailed: options.detailed ?? false,
         mode: options.mode ?? "question",
         context: options.context,
+        chat: options.chat,
         stream: true,
       }),
       signal: options.signal,

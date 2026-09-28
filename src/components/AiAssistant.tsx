@@ -566,6 +566,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
           detailed: prefs.detailed,
           mode: runMode,
           context,
+          chat: chatRef.current.id,
           signal: controller.signal,
           onModel: (name) => {
             answeredBy = name;
@@ -1147,7 +1148,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                 <small className="assistant-hint">
                   Enter לשליחה · Shift+Enter לשורה חדשה
                   {creditRules.enabled && creditRules.prices.assistant > 0 && (
-                    <span className="assistant-cost">{` · ${creditsLabel(creditRules.prices.assistant)} להודעה`}</span>
+                    <span className="assistant-cost">{` · ${creditsLabel(creditRules.prices.assistant)} לשיחה`}</span>
                   )}
                 </small>
                 {busy ? (

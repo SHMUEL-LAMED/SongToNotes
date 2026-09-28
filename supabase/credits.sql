@@ -40,17 +40,17 @@ create table if not exists public.credit_settings (
   friend_daily integer not null default 5 check (friend_daily between 0 and 10000),
   friend_daily_max integer not null default 100 check (friend_daily_max between 0 and 100000),
   welcome_bonus integer not null default 10 check (welcome_bonus between 0 and 100000),
-  visit_bonus integer not null default 1 check (visit_bonus between 0 and 10000),
+  visit_bonus integer not null default 20 check (visit_bonus between 0 and 10000),
   visit_daily_max integer not null default 10 check (visit_daily_max between 0 and 10000),
   -- A guard against accounts opened only to farm the bonus.
   signup_daily_max integer not null default 10 check (signup_daily_max between 0 and 10000),
   -- How long a new account may still say which friend brought it.
   claim_hours integer not null default 72 check (claim_hours between 1 and 8760),
-  -- assistant: a message to the assistant · text: every 10,000 characters of
+  -- assistant: a conversation with the assistant (its first message pays) · text: every 10,000 characters of
   -- language-model text work · minute: a minute of transcription or synced
   -- lyrics · tts: every 1,000 characters read into an MP3 · separate: one AI
   -- vocal separation · identify: one song identification.
-  prices jsonb not null default '{"assistant": 1, "text": 2, "minute": 1, "tts": 1, "separate": 5, "identify": 2}'::jsonb,
+  prices jsonb not null default '{"assistant": 2, "text": 2, "minute": 1, "tts": 1, "separate": 5, "identify": 2}'::jsonb,
   updated_at timestamptz not null default now()
 );
 
@@ -441,11 +441,18 @@ begin
     return jsonb_build_object('ok', true, 'name', v_name, 'counted', false);
   end if;
 
+  -- Rewarded only for a new address: one this link has never seen from
+  -- another browser, and one that has not rewarded any other link today, so
+  -- a single person cannot farm credits for several accounts of their own.
   if coalesce(v_config.enabled, false)
      and coalesce(v_config.visit_bonus, 0) > 0
      and (v_ip is null or not exists (
        select 1 from public.referral_visits v
        where v.referrer = v_referrer and v.ip = v_ip and v.visitor <> v_visitor
+     ))
+     and (v_ip is null or not exists (
+       select 1 from public.referral_visits v
+       where v.ip = v_ip and v.day = v_today and v.rewarded and v.referrer <> v_referrer
      ))
      and (select count(*) from public.referral_visits v
           where v.referrer = v_referrer and v.day = v_today and v.rewarded) < coalesce(v_config.visit_daily_max, 0)

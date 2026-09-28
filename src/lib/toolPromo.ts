@@ -131,23 +131,27 @@ export const PROMOS: ToolPromoSpec[] = [
   },
 ];
 
+/** A target that is not a tool page: the AI assistant's side panel. */
+export const ASSISTANT_TARGET = "assistant";
+
 /**
- * News about one tool, ahead of the turns: it rises sooner, to every visitor
- * once, until they open the tool from it or say "not now". A new `id` brings
- * the next piece of news to everybody again; `null` when there is none.
+ * News about one tool (or the assistant), ahead of the turns: it rises
+ * sooner, to every visitor once, until they open it from the card or say
+ * "not now". A new `id` brings the next piece of news to everybody again;
+ * `null` when there is none.
  */
 export const ANNOUNCEMENT: (ToolPromoSpec & { id: string }) | null = {
-  id: "vocals-ai-2026-09",
-  tool: "vocals",
+  id: "assistant-price-2026-09",
+  tool: ASSISTANT_TARGET,
   he: {
-    title: "חדש: הפרדת שירה מלאה עם AI עובדת עכשיו!",
-    text: "מודל AI אמיתי מפריד את הקול מהמוזיקה ישר בדפדפן — בחינם, בלי להתחבר, וגם ברשתות מסוננות כמו נטפרי.",
-    cta: "לנסות עכשיו",
+    title: "עוזר ה־AI ירד הרבה במחיר!",
+    text: "שיחה שלמה עם העוזר עולה עכשיו 2 קרדיטים בלבד — וכל ההודעות בשיחה כלולות, כמה שתרצו.",
+    cta: "לפתוח את העוזר",
   },
   en: {
-    title: "New: full AI vocal separation now works!",
-    text: "A real AI model separates the voice from the music right in the browser — free, no sign-in, on filtered networks too.",
-    cta: "Try it now",
+    title: "The AI assistant just got much cheaper!",
+    text: "A whole conversation with the assistant now costs just 2 credits — every message in it included, as many as you like.",
+    cta: "Open the assistant",
   },
 };
 
@@ -374,7 +378,7 @@ export function useToolPromo({
 
   useEffect(() => {
     const disabled = new Set(off ? off.split(",") : []);
-    const unavailable = (tool: string) => !findTool(tool) || disabled.has(tool);
+    const unavailable = (tool: string) => tool !== ASSISTANT_TARGET && (!findTool(tool) || disabled.has(tool));
     let clock: PromptClock = { spent: readSpent(), at: Date.now() };
     const timer = window.setInterval(() => {
       const now = Date.now();
@@ -423,6 +427,9 @@ export function useToolPromo({
     setOpen(null);
   }, [open, promo]);
 
-  const visible = promo && promo.tool !== current && findTool(promo.tool) && !disabledTools.includes(promo.tool);
+  const visible =
+    promo &&
+    promo.tool !== current &&
+    (promo.tool === ASSISTANT_TARGET || (findTool(promo.tool) && !disabledTools.includes(promo.tool)));
   return { promo: visible ? promo : null, accept, dismiss };
 }

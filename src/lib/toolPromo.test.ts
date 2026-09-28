@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANNOUNCEMENT,
   ANNOUNCEMENT_AFTER_MS,
+  ASSISTANT_TARGET,
   PROMOS,
   PROMO_AFTER_MS,
   REST_ALL_AFTER_DISMISS_MS,
@@ -114,7 +115,7 @@ describe("what the device remembers", () => {
 describe("the news", () => {
   it("names a tool the site shows, with words in both languages", () => {
     if (!ANNOUNCEMENT) return;
-    expect(findTool(ANNOUNCEMENT.tool)).not.toBeNull();
+    if (ANNOUNCEMENT.tool !== ASSISTANT_TARGET) expect(findTool(ANNOUNCEMENT.tool)).not.toBeNull();
     for (const words of [ANNOUNCEMENT.he, ANNOUNCEMENT.en]) {
       expect(words.title && words.text && words.cta).toBeTruthy();
     }

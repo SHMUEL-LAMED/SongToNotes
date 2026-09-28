@@ -118,7 +118,7 @@ describe("the account", () => {
 
   it("names every line of the history", () => {
     const [refund, spend] = normalizeStatus(raw)!.history;
-    expect(entryLabel(refund)).toBe("החזר: הודעה לעוזר");
+    expect(entryLabel(refund)).toBe("החזר: שיחה עם העוזר");
     expect(entryLabel(spend)).toBe("עיבוד טקסט ב־AI · סיכום");
     expect(entryLabel({ kind: "signup", action: null, detail: {} })).toBe("חבר הצטרף דרך הקישור שלך");
     expect(entryLabel({ kind: "welcome", action: null, detail: { from: "דני" } })).toBe("מתנת הצטרפות · הזמנה מדני");

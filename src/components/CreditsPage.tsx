@@ -488,7 +488,7 @@ function PriceList({ rules, onOpen }: { rules: CreditRules; onOpen: (route: stri
   const freeTools = useMemo(() => TOOLS.filter((tool) => !tool.server), []);
   const examples = [
     rules.prices.minute > 0 ? `לתמלל ${Math.floor(rules.daily / rules.prices.minute)} דקות` : null,
-    rules.prices.assistant > 0 ? `לשלוח ${Math.floor(rules.daily / rules.prices.assistant)} הודעות לעוזר` : null,
+    rules.prices.assistant > 0 ? `לפתוח ${Math.floor(rules.daily / rules.prices.assistant)} שיחות עם העוזר` : null,
     rules.prices.separate > 0 ? `להפריד שירה ב־${Math.floor(rules.daily / rules.prices.separate)} שירים` : null,
   ].filter(Boolean);
   return (
