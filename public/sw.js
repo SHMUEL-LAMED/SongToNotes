@@ -12,7 +12,7 @@
  *  - The ONNX runtime WebAssembly binary (~27MB) and anything else oversized is
  *    never stored, because filling the origin's storage quota would evict the
  *    caches that actually matter. The one large file worth keeping — the
- *    vocal-separation model — is stored by the page itself, under a cache
+ *    vocal-separation model, with its engine — is stored by the page itself, under a cache
  *    name outside the `musictools-` prefix so the clean-up below leaves it be.
  */
 
@@ -70,6 +70,10 @@ function isStorable(url, response) {
   if (!response || !response.ok || response.type !== "basic") return false;
   // The runtime binary alone is larger than the budget for everything else.
   if (/\.wasm$/i.test(url.pathname)) return false;
+  // The separation model and engine arrive as dozens of text parts; the page
+  // keeps the joined file itself, and the parts would push everything else
+  // out of this cache.
+  if (/\/parts\//.test(url.pathname)) return false;
   return !isOversized(response);
 }
 

@@ -1,4 +1,5 @@
 import type { DemucsResult, DemucsStem } from "demucs-web";
+import { downloadParts, readPartsManifest } from "./textParts";
 
 export type SeparationProgress = {
   phase: "model" | "separation";
@@ -69,7 +70,10 @@ let processorPromise: Promise<import("demucs-web").DemucsProcessor> | null = nul
  * the background prefetch joins it — and gets its progress — rather than
  * starting a second 180MB download beside it.
  */
-let transfer: { promise: Promise<boolean>; listeners: Set<ProgressListener> } | null = null;
+let transfer: { promise: Promise<Blob>; listeners: Set<ProgressListener> } | null = null;
+
+/** The engine's WebAssembly, fetched once per page; see {@link loadRuntimeBinary}. */
+let runtimeBinaryPromise: Promise<ArrayBuffer | undefined> | null = null;
 
 /** Set once a tool has asked for the prefetch; a failed one is not retried. */
 let prefetchArmed = false;
@@ -146,11 +150,20 @@ async function openModelResponse(): Promise<{ response: Response; expectedBytes:
   return { response, expectedBytes };
 }
 
+function modelProgress(loaded: number, total: number): SeparationProgress {
+  const fraction = total ? Math.min(1, loaded / total) : 0;
+  return {
+    phase: "model",
+    progress: fraction,
+    message: total
+      ? `מכין את ההפרדה בפעם הראשונה… ${Math.round(fraction * 100)}%`
+      : "מכין את ההפרדה בפעם הראשונה…",
+  };
+}
+
 /**
- * Streams a response to its end, reporting how far along it is. With `keep`
- * the bytes are gathered and returned; without it they are counted and
- * dropped, which is all that is needed while a clone of the same response is
- * landing in the cache. `expectedBytes` is the size known from the build,
+ * Streams a response to its end, reporting how far along it is, and returns
+ * its bytes. `expectedBytes` is the size known from the build,
  * used when the server does not say; a server that compresses on the fly
  * reports the compressed size, which the decoded count then overtakes, so the
  * fraction is clamped rather than trusted.
@@ -158,14 +171,10 @@ async function openModelResponse(): Promise<{ response: Response; expectedBytes:
 async function drain(
   response: Response,
   expectedBytes: number,
-  keep: boolean,
   onProgress: ProgressListener,
-): Promise<ArrayBuffer | null> {
+): Promise<ArrayBuffer> {
   const total = Number(response.headers.get("content-length")) || expectedBytes;
-  if (!response.body) {
-    const buffer = await response.arrayBuffer();
-    return keep ? buffer : null;
-  }
+  if (!response.body) return response.arrayBuffer();
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -174,22 +183,14 @@ async function drain(
     const { done, value } = await reader.read();
     if (done) break;
     if (value) {
-      if (keep) chunks.push(value);
+      chunks.push(value);
       loaded += value.byteLength;
-      const fraction = total ? Math.min(1, loaded / total) : 0;
-      onProgress({
-        phase: "model",
-        progress: fraction,
-        message: total
-          ? `מכין את ההפרדה בפעם הראשונה… ${Math.round(fraction * 100)}%`
-          : "מכין את ההפרדה בפעם הראשונה…",
-      });
+      onProgress(modelProgress(loaded, total));
     }
   }
   if (total && loaded < total) {
     throw new SeparationError(INCOMPLETE_MESSAGE);
   }
-  if (!keep) return null;
   const combined = new Uint8Array(loaded);
   let offset = 0;
   for (const chunk of chunks) {
@@ -200,27 +201,73 @@ async function drain(
 }
 
 /**
- * Puts the model into the cache, sharing one transfer between a prefetch and
- * a click. Resolves true once the cached copy is in place, false when the
- * cache would not take it (a full quota), and rejects when the transfer
- * itself failed.
+ * Fetches a set of text parts, turning what goes wrong into a sentence for
+ * the screen: a request that never got an answer is the connection, and
+ * anything else is a transfer that did not complete.
  */
-function fillCache(cache: Cache, onProgress?: ProgressListener): Promise<boolean> {
+async function downloadPartsFor(
+  name: string,
+  manifest: NonNullable<Awaited<ReturnType<typeof readPartsManifest>>>,
+  onBytes?: (loaded: number, total: number) => void,
+): Promise<Blob> {
+  try {
+    return await downloadParts(name, manifest, onBytes);
+  } catch (error) {
+    throw new SeparationError(error instanceof TypeError ? NETWORK_MESSAGE : INCOMPLETE_MESSAGE, {
+      cause: error,
+    });
+  }
+}
+
+async function readManifest(name: string) {
+  try {
+    return await readPartsManifest(name);
+  } catch (error) {
+    throw new SeparationError(NETWORK_MESSAGE, { cause: error });
+  }
+}
+
+/**
+ * The model's bytes. The site publishes them as small base64 JSON parts,
+ * which filtered connections (NetFree, for one) let through where they hold
+ * back a single 180MB binary; a build without the parts, such as a dev
+ * server, downloads the file directly.
+ */
+async function downloadModel(onProgress: ProgressListener): Promise<Blob> {
+  const manifest = await readManifest("htdemucs");
+  if (manifest) {
+    return downloadPartsFor("htdemucs", manifest, (loaded, total) =>
+      onProgress(modelProgress(loaded, total)),
+    );
+  }
+  const { response, expectedBytes } = await openModelResponse();
+  const buffer = await drain(response, expectedBytes, onProgress);
+  if (!buffer.byteLength) {
+    throw new SeparationError(UNAVAILABLE_MESSAGE);
+  }
+  return new Blob([buffer]);
+}
+
+/**
+ * Downloads the model and keeps a copy in the cache for next time, sharing
+ * one transfer between a prefetch and a click. A cache that will not take
+ * the copy (a full quota) costs only the next visit's wait.
+ */
+function transferModel(onProgress?: ProgressListener): Promise<Blob> {
   if (!transfer) {
     const listeners = new Set<ProgressListener>();
     const report: ProgressListener = (update) => {
       for (const listener of listeners) listener(update);
     };
     const promise = (async () => {
-      const { response, expectedBytes } = await openModelResponse();
-      // The copy for next time is written as the bytes stream past, so it
-      // costs no second pass over 180MB and no 180MB held in memory.
-      const stored = cache.put(SITE_MODEL_URL, response.clone()).then(
-        () => true,
-        () => false,
-      );
-      await drain(response, expectedBytes, false, report);
-      return stored;
+      const blob = await downloadModel(report);
+      const cache = await openModelCache();
+      if (cache) {
+        await cache
+          .put(SITE_MODEL_URL, new Response(blob, { headers: { "content-length": String(blob.size) } }))
+          .catch(() => undefined);
+      }
+      return blob;
     })().finally(() => {
       transfer = null;
     });
@@ -236,19 +283,41 @@ async function loadModelWeights(onProgress: ProgressListener): Promise<ArrayBuff
   if (cache) {
     const cached = await readCached(cache);
     if (cached) return cached;
-    if (await fillCache(cache, onProgress)) {
-      const fresh = await readCached(cache);
-      if (fresh) return fresh;
-    }
   }
+  const blob = await transferModel(onProgress);
+  return blob.arrayBuffer();
+}
 
-  // No usable cache: the plain download, straight into memory.
-  const { response, expectedBytes } = await openModelResponse();
-  const buffer = await drain(response, expectedBytes, true, onProgress);
-  if (!buffer?.byteLength) {
-    throw new SeparationError(UNAVAILABLE_MESSAGE);
+/**
+ * The engine's WebAssembly (27MB), from the same kind of text parts as the
+ * model and for the same reason, and kept in the same cache. `undefined`
+ * where the build has no parts, which leaves the engine to fetch its own
+ * file as usual.
+ */
+function loadRuntimeBinary(): Promise<ArrayBuffer | undefined> {
+  if (!runtimeBinaryPromise) {
+    runtimeBinaryPromise = (async () => {
+      const manifest = await readPartsManifest("ort-wasm").catch(() => null);
+      if (!manifest?.parts.length) return undefined;
+      // The first part's name carries the file's hash, so a new engine
+      // version never picks up the old one's copy.
+      const key = `${import.meta.env.BASE_URL}parts/ort-wasm/${manifest.parts[0]}#whole`;
+      const cache = await openModelCache();
+      const stored = await cache?.match(key).catch(() => undefined);
+      if (stored) {
+        const buffer = await stored.arrayBuffer();
+        if (buffer.byteLength === manifest.bytes) return buffer;
+        await cache?.delete(key).catch(() => false);
+      }
+      const blob = await downloadPartsFor("ort-wasm", manifest);
+      await cache?.put(key, new Response(blob)).catch(() => undefined);
+      return blob.arrayBuffer();
+    })().catch((error) => {
+      runtimeBinaryPromise = null;
+      throw error;
+    });
   }
-  return buffer;
+  return runtimeBinaryPromise;
 }
 
 /**
@@ -280,9 +349,10 @@ export function prefetchSeparationModel(): void {
   prefetchArmed = true;
   window.setTimeout(() => {
     void (async () => {
+      await loadRuntimeBinary();
       const cache = await openModelCache();
       if (!cache || (await readCached(cache))) return;
-      await fillCache(cache);
+      await transferModel();
     })().catch(() => undefined);
   }, PREFETCH_DELAY_MS);
 }
@@ -317,12 +387,14 @@ function sumInstrumental(result: DemucsResult): [Float32Array, Float32Array] {
 async function getProcessor(onProgress: (update: SeparationProgress) => void) {
   if (!processorPromise) {
     processorPromise = (async () => {
-      const [ort, demucs, model] = await Promise.all([
+      const [ort, demucs, model, runtimeBinary] = await Promise.all([
         import("onnxruntime-web"),
         import("demucs-web"),
         loadModelWeights(onProgress),
+        loadRuntimeBinary(),
       ]);
       ort.env.wasm.numThreads = 1;
+      if (runtimeBinary) ort.env.wasm.wasmBinary = runtimeBinary;
       onProgress({ phase: "model", progress: 1, message: "כמעט מוכן…" });
       const makeProcessor = (executionProviders: string[]) =>
         new demucs.DemucsProcessor({

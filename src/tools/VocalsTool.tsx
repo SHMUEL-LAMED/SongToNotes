@@ -254,8 +254,10 @@ export function VocalsTool({ initial = null }: Props) {
       } else if (caught instanceof AiError && caught.code === "credits") {
         setOutOfCredits(true);
         setAiStatus("אין מספיק קרדיטים להפרדה בשרת. אפשר להפריד כאן בדפדפן, בחינם — זה מוריד רשת של 180MB בפעם הראשונה.");
+      } else if (caught instanceof AiError) {
+        setAiStatus(caught.message);
       } else {
-        setAiStatus(caught instanceof Error ? caught.message : "ההפרדה נכשלה.");
+        setAiStatus(describeSeparationError(caught));
       }
     } finally {
       if (aiAbortRef.current === controller) {
@@ -879,7 +881,10 @@ export function VocalsTool({ initial = null }: Props) {
                 <button
                   className="primary-button compact"
                   type="button"
-                  onClick={runAi}
+                  // Once the page has said the separation runs here, the click
+                  // goes straight to it: asking the server again would stop a
+                  // signed-out visitor at a sign-in the text says is not needed.
+                  onClick={serverMissing === true ? runAiInBrowser : runAi}
                   disabled={busy}
                 >
                   <Sparkles size={17} />

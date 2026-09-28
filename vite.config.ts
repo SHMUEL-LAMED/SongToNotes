@@ -1,4 +1,5 @@
-import { statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
@@ -61,6 +62,62 @@ function separationModelBytes() {
   }
 }
 
+/** Raw bytes per part; about 5MB of text each once written as base64. */
+const TEXT_PART_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Large binaries the separation needs, and where their parts are published.
+ * Filtered connections (NetFree, for one) hold back or damage big binary
+ * downloads — the pitch model above is inlined into the JS for the same
+ * reason — so each file also ships as a set of small JSON files holding
+ * base64 text, with a manifest next to them. See `src/lib/textParts.ts`.
+ */
+const TEXT_PART_ASSETS = [
+  { name: "htdemucs", src: "./models/htdemucs_embedded.onnx" },
+  {
+    name: "ort-wasm",
+    src: "./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm",
+  },
+];
+
+function binaryAsTextParts(): Plugin {
+  return {
+    name: "binary-as-text-parts",
+    apply: "build",
+    generateBundle() {
+      for (const { name, src } of TEXT_PART_ASSETS) {
+        let bytes: Buffer;
+        try {
+          bytes = readFileSync(new URL(src, import.meta.url));
+        } catch {
+          // A build without the model (no prebuild) keeps the page's
+          // fallback to the direct download.
+          continue;
+        }
+        // The hash in the names keeps a stale part from an older deploy out
+        // of a newer file.
+        const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+        const parts: string[] = [];
+        for (let offset = 0; offset < bytes.byteLength; offset += TEXT_PART_BYTES) {
+          const fileName = `parts/${name}/${hash}-${parts.length}.json`;
+          const slice = bytes.subarray(offset, offset + TEXT_PART_BYTES);
+          this.emitFile({
+            type: "asset",
+            fileName,
+            source: JSON.stringify(slice.toString("base64")),
+          });
+          parts.push(fileName.slice(`parts/${name}/`.length));
+        }
+        this.emitFile({
+          type: "asset",
+          fileName: `parts/${name}/manifest.json`,
+          source: JSON.stringify({ bytes: bytes.byteLength, parts }),
+        });
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: "/SongToNotes/",
   define: {
@@ -69,6 +126,7 @@ export default defineConfig({
   plugins: [
     react(),
     inlineBasicPitchModel(),
+    binaryAsTextParts(),
     viteStaticCopy({
       targets: [
         {
