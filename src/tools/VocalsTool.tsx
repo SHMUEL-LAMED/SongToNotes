@@ -123,7 +123,18 @@ export function VocalsTool({ initial = null }: Props) {
     buffer: AudioBuffer;
     wasMono: boolean;
   } | null>(null);
-  const [usedAi, setUsedAi] = useState(false);
+  // The AI's two tracks for the song on screen, kept until the song changes
+  // or the tool is left: flipping between karaoke and voice, or a look at
+  // pro mode, only picks which one is shown — it never throws a separation
+  // away. Either track may be missing (the server sends only the one asked
+  // for); the other is fetched when it is asked for.
+  const [aiTracks, setAiTracks] = useState<{
+    url: string;
+    vocals: AudioBuffer | null;
+    instrumental: AudioBuffer | null;
+  } | null>(null);
+  // "Show the quick separation" puts the AI result aside without dropping it.
+  const [showFast, setShowFast] = useState(false);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiBusy, setAiBusy] = useState(false);
@@ -151,18 +162,38 @@ export function VocalsTool({ initial = null }: Props) {
     if (audio && serverMissing === true) prefetchSeparationModel();
   }, [audio, serverMissing]);
 
+  const keepAi = useCallback(
+    (url: string, tracks: { vocals: AudioBuffer | null; instrumental: AudioBuffer | null }) => {
+      setAiTracks((current) => {
+        const same = current?.url === url ? current : null;
+        return {
+          url,
+          vocals: tracks.vocals ?? same?.vocals ?? null,
+          instrumental: tracks.instrumental ?? same?.instrumental ?? null,
+        };
+      });
+      setShowFast(false);
+    },
+    [],
+  );
+  const aiForSong = audio && aiTracks?.url === audio.url ? aiTracks : null;
+  const aiResult = aiForSong && !showFast
+    ? target === "instrumental" ? aiForSong.instrumental : aiForSong.vocals
+    : null;
+  const usedAi = aiResult !== null;
+
   const runFast = separation.run;
   const settingsKey = audio
     ? `${audio.url}|${target}|${strength}|${keepBass}`
     : "";
 
   useEffect(() => {
-    if (!audio || !settingsKey) return;
+    // An AI result on screen stays there: the quick separation only runs
+    // for what the AI has not produced, or when it is asked for.
+    if (!audio || !settingsKey || usedAi) return;
     // The gap debounces a dragged slider, so passing through five values
     // still costs one separation rather than five.
     const timer = window.setTimeout(() => {
-      setUsedAi(false);
-      setAiStatus(null);
       void runFast(audio.buffer, {
         target,
         strength: strength / 100,
@@ -185,7 +216,7 @@ export function VocalsTool({ initial = null }: Props) {
         });
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [audio, keepBass, runFast, settingsKey, strength, target]);
+  }, [audio, keepBass, runFast, settingsKey, strength, target, usedAi]);
 
   // A change of settings is a different result, so the save button offers
   // to save again rather than still saying "נשמר" over a new rendering.
@@ -193,8 +224,8 @@ export function VocalsTool({ initial = null }: Props) {
 
   // An AI result is keyed to the settings that asked for it too, so the two
   // paths can hand their output to the same player and download button.
-  const matches = rendered !== null && rendered.key === settingsKey;
-  const result = matches ? rendered.buffer : null;
+  const matches = !usedAi && rendered !== null && rendered.key === settingsKey;
+  const result = aiResult ?? (matches ? rendered.buffer : null);
   const wasMono = matches ? rendered.wasMono : false;
 
   /** The server path: upload, wait, fetch the stem the visitor asked for. */
@@ -217,13 +248,10 @@ export function VocalsTool({ initial = null }: Props) {
           setAiStatus(progress.message);
         });
         if (controller.signal.aborted) return;
-        const localPicked = target === "instrumental" ? localStems.instrumental : localStems.vocals;
-        setRendered({
-          key: settingsKey,
-          buffer: channelsToBuffer(context, localPicked, localStems.sampleRate),
-          wasMono: false,
+        keepAi(audio.url, {
+          vocals: channelsToBuffer(context, localStems.vocals, localStems.sampleRate),
+          instrumental: channelsToBuffer(context, localStems.instrumental, localStems.sampleRate),
         });
-        setUsedAi(true);
         setAiProgress(100);
         setAiStatus("הפרדת ה־AI הושלמה.");
         return;
@@ -242,8 +270,7 @@ export function VocalsTool({ initial = null }: Props) {
       if (controller.signal.aborted) return;
       const picked = target === "instrumental" ? stems.instrumental : stems.vocals;
       if (!picked) throw new AiError("provider_error", "השרת לא החזיר את הערוץ המבוקש.");
-      setRendered({ key: settingsKey, buffer: picked, wasMono: false });
-      setUsedAi(true);
+      keepAi(audio.url, { vocals: stems.vocals, instrumental: stems.instrumental });
       setAiProgress(100);
       setAiStatus(`ההפרדה הושלמה בשרת. נוצלו היום ${stems.used} מתוך ${stems.limit} שירים.`);
     } catch (caught) {
@@ -265,7 +292,7 @@ export function VocalsTool({ initial = null }: Props) {
         setAiBusy(false);
       }
     }
-  }, [audio, context, settingsKey, target]);
+  }, [audio, context, keepAi, target]);
 
   /** Pro mode: every stem the server can give, into faders. */
   const runStems = useCallback(async () => {
@@ -315,7 +342,6 @@ export function VocalsTool({ initial = null }: Props) {
           color: STEM_HUES[name] ?? 180,
         })),
       });
-      setUsedAi(true);
       setAiProgress(100);
       setAiStatus(`ההפרדה הושלמה: ${names.length} ערוצים. נוצלו היום ${result.used} מתוך ${result.limit} שירים.`);
     } catch (caught) {
@@ -385,13 +411,10 @@ export function VocalsTool({ initial = null }: Props) {
         setAiStatus(progress.message);
       };
       const stems = await separateStems(audio.buffer, report);
-      const picked = target === "instrumental" ? stems.instrumental : stems.vocals;
-      setRendered({
-        key: settingsKey,
-        buffer: channelsToBuffer(context, picked, stems.sampleRate),
-        wasMono: false,
+      keepAi(audio.url, {
+        vocals: channelsToBuffer(context, stems.vocals, stems.sampleRate),
+        instrumental: channelsToBuffer(context, stems.instrumental, stems.sampleRate),
       });
-      setUsedAi(true);
       setAiProgress(100);
       setAiStatus("ההפרדה הושלמה.");
     } catch (caught) {
@@ -399,7 +422,7 @@ export function VocalsTool({ initial = null }: Props) {
     } finally {
       setAiBusy(false);
     }
-  }, [audio, context, settingsKey, target]);
+  }, [audio, context, keepAi]);
 
   const buildFile = () => {
     if (!result || !audio) return null;
@@ -575,13 +598,15 @@ export function VocalsTool({ initial = null }: Props) {
           onPick={(file) => {
             setError(null);
             setRendered(null);
-            setUsedAi(false);
+            setAiTracks(null);
             setAiStatus(null);
             stopStems(true);
             void load(file);
           }}
           onClear={() => {
             setRendered(null);
+            setAiTracks(null);
+            setAiStatus(null);
             stopStems(true);
             clear();
           }}
@@ -663,7 +688,11 @@ export function VocalsTool({ initial = null }: Props) {
                     value={strength}
                     onChange={(event) => setStrength(Number(event.target.value))}
                   />
-                  <small>הפחת את העוצמה להשארת חלק מהצליל המקורי.</small>
+                  <small>
+                    {usedAi
+                      ? "חל על ההפרדה המהירה; תוצאת ה־AI נשארת כמו שהיא."
+                      : "הפחת את העוצמה להשארת חלק מהצליל המקורי."}
+                  </small>
                 </label>
                 {target === "instrumental" && (
                   <label className="checkbox-field">
@@ -844,7 +873,22 @@ export function VocalsTool({ initial = null }: Props) {
 
             {usedAi && (
               <p className="engine-note">
-                תוצאת AI. שינוי ההגדרות יחזיר להפרדה מהירה.
+                תוצאת AI. היא נשמרת עד שיוצאים מהכלי או בוחרים שיר אחר.{" "}
+                <button type="button" className="link-button" onClick={() => setShowFast(true)}>
+                  הצג את ההפרדה המהירה
+                </button>
+              </p>
+            )}
+            {!usedAi && aiForSong && (aiForSong.vocals || aiForSong.instrumental) && (
+              <p className="engine-note">
+                {showFast
+                  ? "מוצגת ההפרדה המהירה. תוצאת ה־AI נשמרה."
+                  : `ל${target === "instrumental" ? "ליווי" : "שירה"} עוד אין תוצאת AI; לחץ על הכפתור למטה.`}{" "}
+                {showFast && (
+                  <button type="button" className="link-button" onClick={() => setShowFast(false)}>
+                    חזרה לתוצאת ה־AI
+                  </button>
+                )}
               </p>
             )}
             {!usedAi && result && !wasMono && (
