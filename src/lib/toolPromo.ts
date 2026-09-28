@@ -12,10 +12,10 @@
  * and it never suggests the tool on screen or a tool that is switched off.
  * "Not now" rests that tool for two weeks, and every invitation for a day.
  *
- * News about a tool (ANNOUNCEMENT) goes ahead of the turns, sooner, until the
- * visitor opens the tool from it or puts it away.
+ * News (ANNOUNCEMENTS) goes ahead of the turns, sooner, one card after the
+ * other, until the visitor has opened or put away each of them.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { advanceClock, type PromptClock } from "./siteShare";
 import { findTool } from "./tools";
 
@@ -134,29 +134,48 @@ export const PROMOS: ToolPromoSpec[] = [
 /** A target that is not a tool page: the AI assistant's side panel. */
 export const ASSISTANT_TARGET = "assistant";
 
+export type Announcement = ToolPromoSpec & { id: string };
+
 /**
- * News about one tool (or the assistant), ahead of the turns: it rises
- * sooner, to every visitor once, until they open it from the card or say
- * "not now". A new `id` brings the next piece of news to everybody again;
- * `null` when there is none.
+ * News about a tool (or the assistant), ahead of the turns and in this
+ * order: each rises a few seconds after the page opens or after the one
+ * before it was closed, to every visitor once, until they open it from the
+ * card or say "not now". A new `id` brings a piece of news to everybody
+ * again; an empty list when there is none.
  */
-export const ANNOUNCEMENT: (ToolPromoSpec & { id: string }) | null = {
-  id: "assistant-price-2026-09",
-  tool: ASSISTANT_TARGET,
-  he: {
-    title: "עוזר ה־AI ירד הרבה במחיר!",
-    text: "שיחה שלמה עם העוזר עולה עכשיו 2 קרדיטים בלבד — וכל ההודעות בשיחה כלולות, כמה שתרצו.",
-    cta: "לפתוח את העוזר",
+export const ANNOUNCEMENTS: Announcement[] = [
+  {
+    id: "vocals-ai-2026-09",
+    tool: "vocals",
+    he: {
+      title: "חדש: הפרדת שירה מלאה עם AI עובדת עכשיו!",
+      text: "מודל AI אמיתי מפריד את הקול מהמוזיקה ישר בדפדפן — בחינם, בלי להתחבר, וגם ברשתות מסוננות כמו נטפרי.",
+      cta: "לנסות עכשיו",
+    },
+    en: {
+      title: "New: full AI vocal separation now works!",
+      text: "A real AI model separates the voice from the music right in the browser — free, no sign-in, on filtered networks too.",
+      cta: "Try it now",
+    },
   },
-  en: {
-    title: "The AI assistant just got much cheaper!",
-    text: "A whole conversation with the assistant now costs just 2 credits — every message in it included, as many as you like.",
-    cta: "Open the assistant",
+  {
+    id: "assistant-price-2026-09",
+    tool: ASSISTANT_TARGET,
+    he: {
+      title: "עוזר ה־AI ירד הרבה במחיר!",
+      text: "שיחה שלמה עם העוזר עולה עכשיו 2 קרדיטים בלבד — וכל ההודעות בשיחה כלולות, כמה שתרצו.",
+      cta: "לפתוח את העוזר",
+    },
+    en: {
+      title: "The AI assistant just got much cheaper!",
+      text: "A whole conversation with the assistant now costs just 2 credits — every message in it included, as many as you like.",
+      cta: "Open the assistant",
+    },
   },
-};
+];
 
 const DAY_MS = 24 * 60 * 60_000;
-/** Time on screen, within one visit, before the news rises. */
+/** Time on screen, within one visit, before a piece of news rises — or since the last one closed. */
 export const ANNOUNCEMENT_AFTER_MS = 8_000;
 /** Time on screen, within one visit, before an invitation rises. */
 export const PROMO_AFTER_MS = 40_000;
@@ -175,8 +194,10 @@ const STATE_KEY = "musictools.tool-promos.v2";
 const SPENT_KEY = "musictools.tool-promos.spent.v1";
 /** Whether an invitation already rose in this visit. */
 const SHOWN_KEY = "musictools.tool-promos.shown.v1";
-/** The news this device is done with: opened or put away. */
-const ANNOUNCED_KEY = "musictools.announcement.done.v1";
+/** The news this device is done with: opened or put away (a list of ids). */
+const ANNOUNCED_KEY = "musictools.announcement.done.v2";
+/** v1 remembered a single id. */
+const ANNOUNCED_KEY_V1 = "musictools.announcement.done.v1";
 
 export type PromoState = {
   /** Until when each tool's invitation rests, after "not now". */
@@ -228,18 +249,26 @@ export function promoDue({
   return spent >= PROMO_AFTER_MS;
 }
 
-/** Time for the news: a few seconds on screen, nothing else up this visit, and not yet done with. */
-export function announcementDue({
+/**
+ * The next piece of news due, as its place in ANNOUNCEMENTS: the first the
+ * device is not done with and that is not skipped (on screen, off), once
+ * the page has been on screen a few seconds since it opened or since the
+ * last piece of news closed (`since`).
+ */
+export function nextAnnouncement({
   spent,
+  since,
   done,
-  shownThisVisit,
+  skip,
 }: {
   spent: number;
-  done: string | null;
-  shownThisVisit: boolean;
-}) {
-  if (!ANNOUNCEMENT || done === ANNOUNCEMENT.id || shownThisVisit) return false;
-  return spent >= ANNOUNCEMENT_AFTER_MS;
+  since: number;
+  done: readonly string[];
+  skip: (tool: string) => boolean;
+}): number | null {
+  if (spent - since < ANNOUNCEMENT_AFTER_MS) return null;
+  const index = ANNOUNCEMENTS.findIndex((item) => !done.includes(item.id) && !skip(item.tool));
+  return index === -1 ? null : index;
 }
 
 /**
@@ -304,20 +333,25 @@ function recordDismiss(tool: string) {
 }
 
 /** Kept for the visit too, for a browser that will not store anything. */
-let announcedThisVisit: string | null = null;
+const announcedThisVisit = new Set<string>();
 
-function readAnnounced() {
+function readAnnounced(): string[] {
+  const done = new Set(announcedThisVisit);
   try {
-    return localStorage.getItem(ANNOUNCED_KEY) ?? announcedThisVisit;
+    const raw = JSON.parse(localStorage.getItem(ANNOUNCED_KEY) ?? "[]") as unknown;
+    if (Array.isArray(raw)) for (const id of raw) if (typeof id === "string") done.add(id);
+    const old = localStorage.getItem(ANNOUNCED_KEY_V1);
+    if (old) done.add(old);
   } catch {
-    return announcedThisVisit;
+    // This visit's memory, then.
   }
+  return [...done];
 }
 
 function recordAnnounced(id: string) {
-  announcedThisVisit = id;
+  announcedThisVisit.add(id);
   try {
-    localStorage.setItem(ANNOUNCED_KEY, id);
+    localStorage.setItem(ANNOUNCED_KEY, JSON.stringify([...new Set([...readAnnounced(), id])]));
   } catch {
     // Remembered for this visit only.
   }
@@ -372,8 +406,10 @@ export function useToolPromo({
   current: string | null;
   disabledTools: readonly string[];
 }) {
-  // The card that is up: a place in PROMOS, or "news" for the announcement.
-  const [open, setOpen] = useState<number | "news" | null>(null);
+  // The card that is up: a place in PROMOS, or a piece of news by its place in ANNOUNCEMENTS.
+  const [open, setOpen] = useState<number | { news: number } | null>(null);
+  // Time on screen when the last piece of news closed, so the next waits its few seconds.
+  const newsClosedAt = useRef(0);
   const off = disabledTools.join(",");
 
   useEffect(() => {
@@ -385,19 +421,21 @@ export function useToolPromo({
       clock = advanceClock(clock, now, document.visibilityState === "visible");
       writeSpent(clock.spent);
       if (open !== null) {
-        const { tool } = open === "news" ? ANNOUNCEMENT! : PROMOS[open];
+        const { tool } = typeof open === "number" ? PROMOS[open] : ANNOUNCEMENTS[open.news];
         if (tool === current || unavailable(tool)) setOpen(null);
         return;
       }
       if (paused) return;
-      if (
-        ANNOUNCEMENT &&
-        ANNOUNCEMENT.tool !== current &&
-        !unavailable(ANNOUNCEMENT.tool) &&
-        announcementDue({ spent: clock.spent, done: readAnnounced(), shownThisVisit: readShown() })
-      ) {
+      const news = nextAnnouncement({
+        spent: clock.spent,
+        since: newsClosedAt.current,
+        done: readAnnounced(),
+        skip: (tool) => tool === current || unavailable(tool),
+      });
+      if (news !== null) {
+        // The news takes this visit's place: no invitation rises after it.
         markShown();
-        setOpen("news");
+        setOpen({ news });
         return;
       }
       const state = readState();
@@ -411,21 +449,27 @@ export function useToolPromo({
     return () => window.clearInterval(timer);
   }, [current, off, open, paused]);
 
-  const promo = open === null ? null : open === "news" ? ANNOUNCEMENT : PROMOS[open];
+  const promo = open === null ? null : typeof open === "number" ? PROMOS[open] : ANNOUNCEMENTS[open.news];
+
+  const closeNews = useCallback(() => {
+    if (open === null || typeof open === "number") return false;
+    recordAnnounced(ANNOUNCEMENTS[open.news].id);
+    newsClosedAt.current = readSpent();
+    return true;
+  }, [open]);
 
   /** The visitor took the invitation. Returns the tool to open; it keeps its turn. */
   const accept = useCallback(() => {
-    if (open === "news" && ANNOUNCEMENT) recordAnnounced(ANNOUNCEMENT.id);
+    closeNews();
     setOpen(null);
     return promo?.tool ?? null;
-  }, [open, promo]);
+  }, [closeNews, promo]);
 
   /** "Not now": this tool rests two weeks, and every invitation a day. The news just goes. */
   const dismiss = useCallback(() => {
-    if (open === "news" && ANNOUNCEMENT) recordAnnounced(ANNOUNCEMENT.id);
-    else if (promo) recordDismiss(promo.tool);
+    if (!closeNews() && promo) recordDismiss(promo.tool);
     setOpen(null);
-  }, [open, promo]);
+  }, [closeNews, promo]);
 
   const visible =
     promo &&
