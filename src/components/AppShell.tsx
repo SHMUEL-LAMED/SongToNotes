@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   LockKeyhole,
   Menu,
+  MessageSquareText,
   Search,
   Share2,
   ShieldCheck,
@@ -41,6 +42,8 @@ type Props = PropsWithChildren<{
   onOpenPalette: () => void;
   onOpenShortcuts: () => void;
   onOpenShare: () => void;
+  /** The feedback form: a problem, an idea, anything. */
+  onOpenFeedback: () => void;
   /** The page about credits and the private link. */
   onOpenCredits: () => void;
 }>;
@@ -66,6 +69,7 @@ export function AppShell({
   onOpenPalette,
   onOpenShortcuts,
   onOpenShare,
+  onOpenFeedback,
   onOpenCredits,
   children,
 }: Props) {
@@ -209,6 +213,13 @@ export function AppShell({
         </nav>
 
         <div className="sidebar-foot">
+          <button type="button" className="sidebar-feedback" onClick={onOpenFeedback}>
+            <MessageSquareText size={18} />
+            <span>
+              <strong>יש לך רעיון או בעיה?</strong>
+              <small>ספר לנו — אנחנו קוראים כל הודעה</small>
+            </span>
+          </button>
           <p className="sidebar-note">
             <LockKeyhole size={14} />
             <span>רוב הכלים עובדים כולם בדפדפן, חינם. כלים שנעזרים בשרת משתמשים בקרדיטים — וכל יום מקבלים חדשים.</span>
@@ -281,6 +292,10 @@ export function AppShell({
               <Share2 size={16} />
               <span>שיתוף</span>
             </button>
+            <button type="button" className="share-site-button feedback-button" onClick={onOpenFeedback} aria-label="משוב והצעות" title="משוב והצעות: בעיה, רעיון או כל דבר אחר">
+              <MessageSquareText size={16} />
+              <span>משוב</span>
+            </button>
             <button type="button" className="icon-button topbar-search" onClick={openPalette} aria-label="חיפוש">
               <Search size={17} />
             </button>
@@ -332,6 +347,9 @@ export function AppShell({
         </button>
         <button type="button" onClick={openPalette}>
           <Search size={20} /> חיפוש
+        </button>
+        <button type="button" className="tabbar-feedback" onClick={onOpenFeedback}>
+          <MessageSquareText size={20} /> משוב
         </button>
         <button type="button" className={me ? "is-current" : ""} onClick={() => go("me")}>
           <UserRound size={20} /> אישי

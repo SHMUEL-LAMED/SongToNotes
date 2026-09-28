@@ -255,6 +255,30 @@
 }
 .sidebar-note svg { flex: none; margin-top: 2px; color: var(--success); }
 
+/* The way to tell the site something: a clear card, not a line in the footer. */
+.sidebar-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--success) 45%, transparent);
+  background: color-mix(in oklab, var(--success) 12%, var(--surface));
+  color: var(--text);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.sidebar-feedback:hover { border-color: var(--success); }
+.sidebar-feedback:active { transform: scale(0.98); }
+.sidebar-feedback svg { flex: none; color: var(--success); }
+.sidebar-feedback span { display: grid; gap: 1px; }
+.sidebar-feedback strong { font-size: 13px; }
+.sidebar-feedback small { font-size: 11.5px; color: var(--text-muted); }
+
 .sidebar-scrim { display: none; }
 
 /* ---- the top bar ---- */
@@ -355,6 +379,12 @@
 }
 .share-site-button:hover { border-color: var(--accent); }
 .share-site-button:active { transform: scale(0.96); }
+.feedback-button {
+  border-color: color-mix(in oklab, var(--success) 45%, transparent);
+  background: color-mix(in oklab, var(--success) 12%, var(--surface));
+  color: color-mix(in oklab, var(--success) 75%, var(--text));
+}
+.feedback-button:hover { border-color: var(--success); }
 
 /* ---- small square buttons ---- */
 
@@ -609,7 +639,7 @@
     bottom: 0;
     z-index: 70;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     padding: 6px 8px max(8px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface-solid) 88%, transparent);
@@ -631,6 +661,9 @@
     cursor: pointer;
   }
   .tabbar button.is-current { color: var(--accent-text); }
+  /* With the tab bar on screen, feedback lives there rather than in the crowded top bar. */
+  .tabbar .tabbar-feedback { color: var(--success); }
+  .topbar .feedback-button { display: none; }
   .tabbar button.is-current svg { transform: translateY(-1px); }
   .page-content { padding-bottom: 96px; }
 }

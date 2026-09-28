@@ -468,6 +468,7 @@ function WorkspaceApp() {
       onOpenPalette={openPalette}
       onOpenShortcuts={() => setShortcutsOpen(true)}
       onOpenShare={() => setShareOpen(true)}
+      onOpenFeedback={openFeedback}
       onOpenCredits={() => go("credits")}
     >
       <AccountDrawer
