@@ -11,6 +11,9 @@
  * beside the request to share the site, in the admin area or on a closed site,
  * and it never suggests the tool on screen or a tool that is switched off.
  * "Not now" rests that tool for two weeks, and every invitation for a day.
+ *
+ * News about a tool (ANNOUNCEMENT) goes ahead of the turns, sooner, until the
+ * visitor opens the tool from it or puts it away.
  */
 import { useCallback, useEffect, useState } from "react";
 import { advanceClock, type PromptClock } from "./siteShare";
@@ -128,7 +131,29 @@ export const PROMOS: ToolPromoSpec[] = [
   },
 ];
 
+/**
+ * News about one tool, ahead of the turns: it rises sooner, to every visitor
+ * once, until they open the tool from it or say "not now". A new `id` brings
+ * the next piece of news to everybody again; `null` when there is none.
+ */
+export const ANNOUNCEMENT: (ToolPromoSpec & { id: string }) | null = {
+  id: "vocals-ai-2026-09",
+  tool: "vocals",
+  he: {
+    title: "חדש: הפרדת שירה מלאה עם AI עובדת עכשיו!",
+    text: "מודל AI אמיתי מפריד את הקול מהמוזיקה ישר בדפדפן — בחינם, בלי להתחבר, וגם ברשתות מסוננות כמו נטפרי.",
+    cta: "לנסות עכשיו",
+  },
+  en: {
+    title: "New: full AI vocal separation now works!",
+    text: "A real AI model separates the voice from the music right in the browser — free, no sign-in, on filtered networks too.",
+    cta: "Try it now",
+  },
+};
+
 const DAY_MS = 24 * 60 * 60_000;
+/** Time on screen, within one visit, before the news rises. */
+export const ANNOUNCEMENT_AFTER_MS = 8_000;
 /** Time on screen, within one visit, before an invitation rises. */
 export const PROMO_AFTER_MS = 40_000;
 /** How long a tool's invitation rests after "not now". */
@@ -146,6 +171,8 @@ const STATE_KEY = "musictools.tool-promos.v2";
 const SPENT_KEY = "musictools.tool-promos.spent.v1";
 /** Whether an invitation already rose in this visit. */
 const SHOWN_KEY = "musictools.tool-promos.shown.v1";
+/** The news this device is done with: opened or put away. */
+const ANNOUNCED_KEY = "musictools.announcement.done.v1";
 
 export type PromoState = {
   /** Until when each tool's invitation rests, after "not now". */
@@ -195,6 +222,20 @@ export function promoDue({
   if (shownThisVisit) return false;
   if (now < state.pauseAll) return false;
   return spent >= PROMO_AFTER_MS;
+}
+
+/** Time for the news: a few seconds on screen, nothing else up this visit, and not yet done with. */
+export function announcementDue({
+  spent,
+  done,
+  shownThisVisit,
+}: {
+  spent: number;
+  done: string | null;
+  shownThisVisit: boolean;
+}) {
+  if (!ANNOUNCEMENT || done === ANNOUNCEMENT.id || shownThisVisit) return false;
+  return spent >= ANNOUNCEMENT_AFTER_MS;
 }
 
 /**
@@ -258,6 +299,26 @@ function recordDismiss(tool: string) {
   writeState(afterDismiss(readState(), tool, Date.now()));
 }
 
+/** Kept for the visit too, for a browser that will not store anything. */
+let announcedThisVisit: string | null = null;
+
+function readAnnounced() {
+  try {
+    return localStorage.getItem(ANNOUNCED_KEY) ?? announcedThisVisit;
+  } catch {
+    return announcedThisVisit;
+  }
+}
+
+function recordAnnounced(id: string) {
+  announcedThisVisit = id;
+  try {
+    localStorage.setItem(ANNOUNCED_KEY, id);
+  } catch {
+    // Remembered for this visit only.
+  }
+}
+
 function readShown() {
   try {
     if (sessionStorage.getItem(SHOWN_KEY) === "1") return true;
@@ -307,7 +368,8 @@ export function useToolPromo({
   current: string | null;
   disabledTools: readonly string[];
 }) {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // The card that is up: a place in PROMOS, or "news" for the announcement.
+  const [open, setOpen] = useState<number | "news" | null>(null);
   const off = disabledTools.join(",");
 
   useEffect(() => {
@@ -318,36 +380,48 @@ export function useToolPromo({
       const now = Date.now();
       clock = advanceClock(clock, now, document.visibilityState === "visible");
       writeSpent(clock.spent);
-      if (openIndex !== null) {
-        const { tool } = PROMOS[openIndex];
-        if (tool === current || unavailable(tool)) setOpenIndex(null);
+      if (open !== null) {
+        const { tool } = open === "news" ? ANNOUNCEMENT! : PROMOS[open];
+        if (tool === current || unavailable(tool)) setOpen(null);
         return;
       }
       if (paused) return;
+      if (
+        ANNOUNCEMENT &&
+        ANNOUNCEMENT.tool !== current &&
+        !unavailable(ANNOUNCEMENT.tool) &&
+        announcementDue({ spent: clock.spent, done: readAnnounced(), shownThisVisit: readShown() })
+      ) {
+        markShown();
+        setOpen("news");
+        return;
+      }
       const state = readState();
       if (!promoDue({ spent: clock.spent, state, shownThisVisit: readShown(), now })) return;
       const index = pickPromo(state, now, (tool) => tool === current || unavailable(tool));
       if (index === null) return;
       writeState(afterShown(state, index));
       markShown();
-      setOpenIndex(index);
+      setOpen(index);
     }, TICK_MS);
     return () => window.clearInterval(timer);
-  }, [current, off, openIndex, paused]);
+  }, [current, off, open, paused]);
 
-  const promo = openIndex === null ? null : PROMOS[openIndex];
+  const promo = open === null ? null : open === "news" ? ANNOUNCEMENT : PROMOS[open];
 
   /** The visitor took the invitation. Returns the tool to open; it keeps its turn. */
   const accept = useCallback(() => {
-    setOpenIndex(null);
+    if (open === "news" && ANNOUNCEMENT) recordAnnounced(ANNOUNCEMENT.id);
+    setOpen(null);
     return promo?.tool ?? null;
-  }, [promo]);
+  }, [open, promo]);
 
-  /** "Not now": this tool rests two weeks, and every invitation a day. */
+  /** "Not now": this tool rests two weeks, and every invitation a day. The news just goes. */
   const dismiss = useCallback(() => {
-    if (promo) recordDismiss(promo.tool);
-    setOpenIndex(null);
-  }, [promo]);
+    if (open === "news" && ANNOUNCEMENT) recordAnnounced(ANNOUNCEMENT.id);
+    else if (promo) recordDismiss(promo.tool);
+    setOpen(null);
+  }, [open, promo]);
 
   const visible = promo && promo.tool !== current && findTool(promo.tool) && !disabledTools.includes(promo.tool);
   return { promo: visible ? promo : null, accept, dismiss };

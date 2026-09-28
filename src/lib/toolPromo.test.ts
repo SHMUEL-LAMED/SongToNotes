@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANNOUNCEMENT,
+  ANNOUNCEMENT_AFTER_MS,
   PROMOS,
   PROMO_AFTER_MS,
   REST_ALL_AFTER_DISMISS_MS,
   REST_TOOL_AFTER_DISMISS_MS,
   afterDismiss,
+  announcementDue,
   afterShown,
   parseState,
   pickPromo,
@@ -105,5 +108,24 @@ describe("what the device remembers", () => {
       pauseAll: 0,
       next: 0,
     });
+  });
+});
+
+describe("the news", () => {
+  it("names a tool the site shows, with words in both languages", () => {
+    if (!ANNOUNCEMENT) return;
+    expect(findTool(ANNOUNCEMENT.tool)).not.toBeNull();
+    for (const words of [ANNOUNCEMENT.he, ANNOUNCEMENT.en]) {
+      expect(words.title && words.text && words.cta).toBeTruthy();
+    }
+  });
+
+  it("rises after a few seconds, once a visit, until the device is done with it", () => {
+    if (!ANNOUNCEMENT) return;
+    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS - 1, done: null, shownThisVisit: false })).toBe(false);
+    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: null, shownThisVisit: false })).toBe(true);
+    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: null, shownThisVisit: true })).toBe(false);
+    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: ANNOUNCEMENT.id, shownThisVisit: false })).toBe(false);
+    expect(announcementDue({ spent: ANNOUNCEMENT_AFTER_MS, done: "older-news", shownThisVisit: false })).toBe(true);
   });
 });
