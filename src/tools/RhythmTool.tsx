@@ -55,6 +55,23 @@ function loadProgress(): Progress {
 type Props = { initial?: SavedWork | null };
 
 /**
+ * The audio-clock time the visitor was hearing at a moment on the page's
+ * clock. `currentTime` runs ahead of the speakers by the output latency
+ * (tens of milliseconds, far more over Bluetooth), so judging taps by it
+ * called every visitor late by that much. The output timestamp says which
+ * frame the device was playing when, which pins the tap to what was heard.
+ */
+function heardAt(ctx: AudioContext, eventTime: number) {
+  const stamp = typeof ctx.getOutputTimestamp === "function" ? ctx.getOutputTimestamp() : null;
+  if (stamp?.contextTime && stamp.performanceTime) {
+    const heard = stamp.contextTime + (eventTime - stamp.performanceTime) / 1000;
+    // A stamp that disagrees wildly with the clock is a broken one; ignore it.
+    if (heard <= ctx.currentTime + 0.05 && heard > ctx.currentTime - 1) return heard;
+  }
+  return ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+}
+
+/**
  * A rhythm trainer: a click counts one bar in, a pattern plays for two, and
  * the visitor taps along — space, any key, a tap on the pad. Each tap is
  * measured against the audio clock, so the verdict is about timing, not
@@ -79,11 +96,17 @@ export function RhythmTool({ initial = null }: Props) {
   const frameRef = useRef(0);
   const tapsRef = useRef<TapResult[]>([]);
   const hitsRef = useRef<number[]>([]);
+  // The round's count-in and pattern are scheduled ahead on the audio clock;
+  // they go through this node so that stopping the round silences them too,
+  // instead of the clicks playing on for up to three bars.
+  const roundOutRef = useRef<GainNode | null>(null);
+  const startingRef = useRef(false);
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
   const pattern = useMemo<Pattern>(() => PATTERNS.find((item) => item.id === patternId) ?? patternsFor(level)[0], [level, patternId]);
   const beatSeconds = 60 / bpm;
+  const busy = phase === "countin" || phase === "playing";
   const barSeconds = beatSeconds * 4;
 
   useEffect(() => {
@@ -108,7 +131,7 @@ export function RhythmTool({ initial = null }: Props) {
     return contextRef.current;
   };
 
-  const click = useCallback((ctx: AudioContext, time: number, kind: "count" | "hit" | "tap") => {
+  const click = useCallback((ctx: AudioContext, time: number, kind: "count" | "hit" | "tap", out: AudioNode = ctx.destination) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = kind === "tap" ? "triangle" : "sine";
@@ -117,7 +140,7 @@ export function RhythmTool({ initial = null }: Props) {
     gain.gain.exponentialRampToValueAtTime(kind === "tap" ? 0.5 : 0.7, time + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + (kind === "count" ? 0.05 : 0.09));
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(out);
     osc.start(time);
     osc.stop(time + 0.1);
   }, []);
@@ -126,6 +149,8 @@ export function RhythmTool({ initial = null }: Props) {
     if (timerRef.current) window.clearTimeout(timerRef.current);
     cancelAnimationFrame(frameRef.current);
     timerRef.current = null;
+    roundOutRef.current?.disconnect();
+    roundOutRef.current = null;
     setPhase("idle");
     setBeat(-1);
   }, []);
@@ -149,9 +174,20 @@ export function RhythmTool({ initial = null }: Props) {
 
   const start = async () => {
     const ctx = context();
-    if (!ctx) return;
-    if (ctx.state === "suspended") await ctx.resume();
+    // A second press while the context is still resuming would schedule a
+    // second count-in on top of the first.
+    if (!ctx || startingRef.current) return;
+    startingRef.current = true;
+    try {
+      if (ctx.state === "suspended") await ctx.resume();
+    } finally {
+      startingRef.current = false;
+    }
+    if (ctx.state === "closed") return;
     stop();
+    const out = ctx.createGain();
+    out.connect(ctx.destination);
+    roundOutRef.current = out;
     setScore(null);
     setTaps([]);
     setLastVerdict(null);
@@ -160,10 +196,10 @@ export function RhythmTool({ initial = null }: Props) {
     const playFrom = startAt + COUNT_IN_BARS * barSeconds;
     startAtRef.current = playFrom;
     // The count-in: four clicks; then the pattern, twice, unless muted.
-    for (let index = 0; index < COUNT_IN_BARS * 4; index += 1) click(ctx, startAt + index * beatSeconds, "count");
+    for (let index = 0; index < COUNT_IN_BARS * 4; index += 1) click(ctx, startAt + index * beatSeconds, "count", out);
     const hits = hitTimes(pattern, bpm, PLAY_BARS);
     hitsRef.current = hits;
-    if (!muteHits) for (const hit of hits) click(ctx, playFrom + hit, "hit");
+    if (!muteHits) for (const hit of hits) click(ctx, playFrom + hit, "hit", out);
     setPhase("countin");
     const tick = () => {
       const now = ctx.currentTime;
@@ -180,10 +216,12 @@ export function RhythmTool({ initial = null }: Props) {
     timerRef.current = window.setTimeout(finish, (playFrom - ctx.currentTime + PLAY_BARS * barSeconds + beatSeconds * 0.5) * 1000);
   };
 
-  const tap = useCallback(() => {
+  const tap = useCallback((eventTime: number) => {
     const ctx = contextRef.current;
     if (!ctx || (phase !== "playing" && phase !== "countin")) return;
-    const at = ctx.currentTime - startAtRef.current;
+    // An event stamp from another clock base (very old browsers) is useless.
+    const when = Math.abs(eventTime - performance.now()) < 1000 ? eventTime : performance.now();
+    const at = heardAt(ctx, when) - startAtRef.current;
     click(ctx, ctx.currentTime, "tap");
     if (at < -0.2) return;
     const result = judgeTap(at, hitsRef.current);
@@ -194,17 +232,23 @@ export function RhythmTool({ initial = null }: Props) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      // Between rounds the keys are the page's: Enter and Space press the
+      // focused button (level, start, save), as they should for keyboard users.
+      if (!busy) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      if (target?.isContentEditable) return;
       if (event.key === " " || event.key === "Enter" || /^[a-zA-Zא-ת]$/.test(event.key)) {
+        // Repeats are swallowed too, or a held space bar scrolls the page.
         event.preventDefault();
-        tap();
+        if (event.repeat) return;
+        tap(event.timeStamp);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tap]);
+  }, [busy, tap]);
 
   const save = () => {
     if (!score) return Promise.resolve(null);
@@ -218,7 +262,6 @@ export function RhythmTool({ initial = null }: Props) {
 
   const verdictLabel = (verdict: TapResult["verdict"]) =>
     verdict === "perfect" ? "מושלם" : verdict === "good" ? "טוב" : verdict === "early" ? "מוקדם" : verdict === "late" ? "מאוחר" : "החטאה";
-  const busy = phase === "countin" || phase === "playing";
 
   useAssistantTool("rhythm", {
     state: () =>
@@ -363,19 +406,24 @@ export function RhythmTool({ initial = null }: Props) {
           className={`rhythm-pad ${busy ? "is-live" : ""} ${lastVerdict ? `is-${lastVerdict.verdict}` : ""}`}
           onPointerDown={(event) => {
             event.preventDefault();
-            tap();
+            tap(event.timeStamp);
           }}
           disabled={!busy}
           aria-label="הקש כאן בקצב"
         >
           <Hand size={30} />
           <strong>
-            {phase === "countin" ? `${Math.min(4, beat + 1)}…` : phase === "playing" ? (lastVerdict ? verdictLabel(lastVerdict.verdict) : "עכשיו!") : "הקש כאן, או רווח במקלדת"}
+            {/* The first frames come before the first click, when the beat is still -1. */}
+            {phase === "countin" ? `${Math.max(1, Math.min(4, beat + 1))}…` : phase === "playing" ? (lastVerdict ? verdictLabel(lastVerdict.verdict) : "עכשיו!") : "הקש כאן, או רווח במקלדת"}
           </strong>
           {phase === "playing" && lastVerdict && lastVerdict.target !== null && (
             <small>
-              {lastVerdict.offset > 0 ? "+" : ""}
-              {lastVerdict.offset} אלפיות
+              {/* Kept left-to-right, or the RTL line shows "-30" as "30-". */}
+              <bdi dir="ltr">
+                {lastVerdict.offset > 0 ? "+" : ""}
+                {lastVerdict.offset}
+              </bdi>{" "}
+              אלפיות
             </small>
           )}
         </button>

@@ -27,7 +27,26 @@ type Reading = {
   level: number;
 };
 
-const HISTORY = 6;
+// Readings kept for the median. The detector runs on every other frame
+// (~30 a second), so four of them span about 130 ms.
+const HISTORY = 4;
+
+/**
+ * The lowest frequency worth searching for, and how many of the newest samples
+ * to search. The detector's default floor (55 Hz) is above a bass's low E
+ * (41 Hz) and A (55 Hz), which then never read at all; and correlating a full
+ * 4096-sample window at 60 frames a second costs a busy core for nothing when
+ * the lowest note is a guitar's 82 Hz. So both follow the instrument: the floor
+ * sits a few semitones under its lowest string (or under a bass's low E for the
+ * chromatic tuner), and the window holds about two and a half periods of it.
+ */
+function searchRange(strings: number[] | null, referenceA4: number, sampleRate: number, bufferSize: number) {
+  const lowest = strings ? Math.min(...strings) : 28;
+  const minFrequency = midiToFrequency(lowest, referenceA4) * 0.75;
+  const maxLag = sampleRate / minFrequency;
+  const window = Math.min(bufferSize, Math.ceil((maxLag * 2.5) / 1024) * 1024);
+  return { minFrequency, window };
+}
 
 type Props = {
   initial?: SavedWork | null;
@@ -57,6 +76,9 @@ export function TunerTool({ initial = null }: Props) {
   const [presetId, setPresetId] = useState(restored.presetId);
   const [referenceA4, setReferenceA4] = useState(restored.referenceA4);
   const [listening, setListening] = useState(false);
+  // Waiting for the browser to hand over the microphone (the permission
+  // prompt can sit open for a while); the button already offers to cancel.
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState<Reading | null>(null);
   const [toneMidi, setToneMidi] = useState<number | null>(null);
@@ -69,6 +91,16 @@ export function TunerTool({ initial = null }: Props) {
   const lastGoodRef = useRef(0);
   const referenceRef = useRef(referenceA4);
   const toneRef = useRef<{ osc: OscillatorNode; gain: GainNode } | null>(null);
+  // The reference tone has its own context: sharing the microphone's meant
+  // that stopping the listening killed a sounding tone (its button stayed
+  // lit), and listening after a tone orphaned the tone's context, still
+  // playing, with nothing left to stop it.
+  const toneContextRef = useRef<AudioContext | null>(null);
+  // Bumped by every start and stop, so a microphone that is granted after
+  // the visitor pressed stop, pressed start twice, or left the tool is
+  // released at once instead of staying open with nothing reading it.
+  const sessionRef = useRef(0);
+  const stringsRef = useRef<number[] | null>(null);
 
   const preset = useMemo(
     () => PRESETS.find((item) => item.id === presetId) ?? PRESETS[0],
@@ -90,9 +122,11 @@ export function TunerTool({ initial = null }: Props) {
 
   useEffect(() => {
     referenceRef.current = referenceA4;
-  }, [referenceA4]);
+    stringsRef.current = preset.strings;
+  }, [preset.strings, referenceA4]);
 
   const stop = useCallback(() => {
+    sessionRef.current += 1;
     cancelAnimationFrame(frameRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -101,24 +135,35 @@ export function TunerTool({ initial = null }: Props) {
     contextRef.current = null;
     historyRef.current = [];
     setListening(false);
+    setStarting(false);
     setReading(null);
   }, []);
 
   const start = useCallback(async () => {
     setError(null);
+    // Any earlier session (still waiting for permission, or running) ends here.
+    stop();
+    const session = sessionRef.current;
+    setStarting(true);
+    let stream: MediaStream | null = null;
+    let context: AudioContext | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
         },
       });
+      if (session !== sessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const Context =
         window.AudioContext ||
         (window as typeof window & { webkitAudioContext?: typeof AudioContext })
           .webkitAudioContext;
-      const context = new Context();
+      context = new Context();
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 4096;
@@ -127,15 +172,24 @@ export function TunerTool({ initial = null }: Props) {
       contextRef.current = context;
       streamRef.current = stream;
       analyserRef.current = analyser;
+      setStarting(false);
       setListening(true);
 
       const buffer = new Float32Array(analyser.fftSize);
+      let frame = 0;
       const tick = () => {
         const node = analyserRef.current;
         const audio = contextRef.current;
         if (!node || !audio) return;
+        frame += 1;
+        if (frame % 2 === 1) {
+          frameRef.current = requestAnimationFrame(tick);
+          return;
+        }
         node.getFloatTimeDomainData(buffer);
-        const pitch = detectPitch(buffer, audio.sampleRate);
+        const range = searchRange(stringsRef.current, referenceRef.current, audio.sampleRate, buffer.length);
+        // The newest samples are at the end of the analyser's buffer.
+        const pitch = detectPitch(buffer.subarray(buffer.length - range.window), audio.sampleRate, range.minFrequency);
         const now = performance.now();
         if (pitch.frequency > 0 && pitch.clarity > 0.8) {
           historyRef.current.push(pitch.frequency);
@@ -152,34 +206,56 @@ export function TunerTool({ initial = null }: Props) {
           });
         } else if (now - lastGoodRef.current > 600) {
           historyRef.current = [];
-          setReading((current) => (current ? { ...current, clarity: 0, level: Math.min(1, pitch.rms * 6) } : null));
+          const level = Math.min(1, pitch.rms * 6);
+          // In silence the reading only carries the level meter; leaving it
+          // alone when nothing visible moved spares a render every frame.
+          setReading((current) =>
+            !current || (current.clarity === 0 && Math.abs(current.level - level) < 0.01)
+              ? current
+              : { ...current, clarity: 0, level },
+          );
         }
         frameRef.current = requestAnimationFrame(tick);
       };
       frameRef.current = requestAnimationFrame(tick);
     } catch (caught) {
+      stream?.getTracks().forEach((track) => track.stop());
+      void context?.close();
+      if (session !== sessionRef.current) return;
+      contextRef.current = null;
+      streamRef.current = null;
+      analyserRef.current = null;
+      setListening(false);
+      setStarting(false);
       setError(
         caught instanceof Error && caught.name === "NotAllowedError"
           ? "לא ניתנה גישה למיקרופון. אפשר לאשר אותה בהגדרות הדפדפן."
           : "לא הצלחנו לפתוח את המיקרופון.",
       );
     }
-  }, []);
-
-  useEffect(() => () => stop(), [stop]);
+  }, [stop]);
 
   const stopTone = useCallback(() => {
     const tone = toneRef.current;
-    if (tone && contextRef.current) {
-      const now = contextRef.current.currentTime;
+    const context = toneContextRef.current;
+    if (tone && context) {
+      const now = context.currentTime;
       tone.gain.gain.setTargetAtTime(0.0001, now, 0.05);
       tone.osc.stop(now + 0.3);
-    } else if (tone) {
-      tone.osc.stop();
     }
     toneRef.current = null;
     setToneMidi(null);
   }, []);
+
+  useEffect(
+    () => () => {
+      stop();
+      toneRef.current = null;
+      void toneContextRef.current?.close();
+      toneContextRef.current = null;
+    },
+    [stop],
+  );
 
   const playTone = useCallback(
     (midi: number) => {
@@ -188,15 +264,15 @@ export function TunerTool({ initial = null }: Props) {
         return;
       }
       stopTone();
-      if (!contextRef.current) {
+      if (!toneContextRef.current) {
         const Context =
           window.AudioContext ||
           (window as typeof window & { webkitAudioContext?: typeof AudioContext })
             .webkitAudioContext;
         if (!Context) return;
-        contextRef.current = new Context();
+        toneContextRef.current = new Context();
       }
-      const context = contextRef.current;
+      const context = toneContextRef.current;
       void context.resume();
       const osc = context.createOscillator();
       const gain = context.createGain();
@@ -232,7 +308,7 @@ export function TunerTool({ initial = null }: Props) {
 
   useAssistantTool("tuner", {
     state: () =>
-      `מכוון כלים: ${preset.label}, לה = ${referenceA4} Hz, ${listening ? "מאזין למיקרופון" : "לא מאזין"}${display ? `; נקלט ${scientificName(display.midi)} (${display.cents > 0 ? "+" : ""}${Math.round(display.cents)} סנט, ${display.frequency.toFixed(1)} Hz)` : ""}${toneMidi !== null ? `; מושמע צליל ייחוס ${scientificName(toneMidi)}` : ""}.`,
+      `מכוון כלים: ${preset.label}, לה = ${referenceA4} Hz, ${listening ? "מאזין למיקרופון" : "לא מאזין"}${display ? `; נקלט ${scientificName(display.midi)} (${Math.round(display.cents) > 0 ? "+" : ""}${Math.round(display.cents)} סנט, ${display.frequency.toFixed(1)} Hz)` : ""}${toneMidi !== null ? `; מושמע צליל ייחוס ${scientificName(toneMidi)}` : ""}.`,
     handlers: {
       "tuner.set": ({ instrument, referenceA4: reference }) => {
         const done: string[] = [];
@@ -251,7 +327,7 @@ export function TunerTool({ initial = null }: Props) {
       },
       "tuner.listen": async ({ on }) => {
         if (on) {
-          if (!listening) await start();
+          if (!listening && !starting) await start();
           return { ok: true, message: "מאזין למיקרופון; נגן צליל" };
         }
         stop();
@@ -350,8 +426,15 @@ export function TunerTool({ initial = null }: Props) {
               <strong className="tuner-note">{scientificName(display.midi)}</strong>
               <span className="tuner-hebrew">{hebrewNoteName(display.midi)}</span>
               <span className="tuner-cents">
-                {display.cents > 0 ? "+" : ""}
-                {Math.round(display.cents)} סנט · {display.frequency.toFixed(1)} Hz
+                {/* Isolated left-to-right, or the RTL line moves the sign to
+                    the far side of the number ("12-" for flat). The sign
+                    follows the rounded value, so a note 0.4 cents sharp does
+                    not read "+0". */}
+                <bdi dir="ltr">
+                  {Math.round(display.cents) > 0 ? "+" : ""}
+                  {Math.round(display.cents)}
+                </bdi>{" "}
+                סנט · <bdi dir="ltr">{display.frequency.toFixed(1)} Hz</bdi>
               </span>
               <span className="tuner-hint">
                 {inTune ? "מכוון ✓" : display.cents > 0 ? "גבוה מדי — שחרר" : "נמוך מדי — מתח"}
@@ -375,11 +458,11 @@ export function TunerTool({ initial = null }: Props) {
       <div className="metronome-actions">
         <button
           className="primary-button"
-          onClick={() => (listening ? stop() : void start())}
+          onClick={() => (listening || starting ? stop() : void start())}
           type="button"
         >
-          {listening ? <MicOff size={20} /> : <Mic size={20} />}
-          {listening ? "עצור האזנה" : "התחל להאזין"}
+          {listening || starting ? <MicOff size={20} /> : <Mic size={20} />}
+          {listening || starting ? "עצור האזנה" : "התחל להאזין"}
         </button>
       </div>
 

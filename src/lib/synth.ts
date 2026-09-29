@@ -126,7 +126,11 @@ export class NotePlayer {
       this.master.connect(compressor);
       compressor.connect(this.context.destination);
     }
-    if (this.context.state === "suspended") await this.context.resume();
+    const context = this.context;
+    if (context.state === "suspended") await context.resume().catch(() => undefined);
+    // Disposed (the tool closed) or stopped for good while the context was
+    // resuming: starting now would read a context that is gone.
+    if (this.context !== context || context.state === "closed") return;
 
     this.stopTimer();
     this.silence();

@@ -234,7 +234,8 @@ export function EarTrainingTool({ initial = null }: Props) {
     const onKey = (event: KeyboardEvent) => {
       // Ctrl+R, Cmd+R and Ctrl+1 belong to the browser, not to the trainer.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
+      // A key event sent to the window itself has no element to look inside.
+      const target = event.target instanceof HTMLElement ? event.target : null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
       if (target?.isContentEditable) return;
       // The account panel opens over a mounted tool, and its keystrokes bubble
@@ -251,12 +252,14 @@ export function EarTrainingTool({ initial = null }: Props) {
       const onControl = Boolean(target?.closest("button, a[href], summary"));
       if (event.key === "Enter" && !onControl && (answered || !question)) {
         event.preventDefault();
-        nextQuestion();
+        // A held Enter would otherwise skip through questions unheard.
+        if (!event.repeat) nextQuestion();
         return;
       }
-      if (event.key.toLowerCase() === "r" && question) {
+      // By physical key: with the Hebrew layout on, R types "ר".
+      if (event.code === "KeyR" && question) {
         event.preventDefault();
-        play(question);
+        if (!event.repeat) play(question);
         return;
       }
       const digit = Number(event.key);

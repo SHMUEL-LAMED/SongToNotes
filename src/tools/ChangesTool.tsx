@@ -128,9 +128,14 @@ export function ChangesTool() {
       if (event.repeat || (event.code !== "Space" && event.key !== "Enter")) return;
       const tag = (event.target as HTMLElement | null)?.tagName;
       if (tag && /^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (phase === "running") {
         event.preventDefault();
         tap();
+      } else if (phase === "countdown") {
+        // Focus is still on the start button, which is now "ביטול": a space
+        // pressed a moment early, ready to count, used to cancel the round.
+        event.preventDefault();
       } else if (event.code === "Space" && (phase === "idle" || phase === "done") && tag !== "BUTTON") {
         event.preventDefault();
         start();
@@ -153,6 +158,8 @@ export function ChangesTool() {
       "changes.set": ({ first: nextFirst, second: nextSecond, seconds: nextSeconds }) => {
         if (nextFirst !== undefined && !findDrillChord(String(nextFirst))) return { ok: false, message: `אין אקורד ${String(nextFirst)} במאמן` };
         if (nextSecond !== undefined && !findDrillChord(String(nextSecond))) return { ok: false, message: `אין אקורד ${String(nextSecond)} במאמן` };
+        // The pickers never allow a chord against itself; neither does the assistant.
+        if (String(nextFirst ?? first) === String(nextSecond ?? second)) return { ok: false, message: "צריך שני אקורדים שונים" };
         if (nextFirst !== undefined) setFirst(String(nextFirst));
         if (nextSecond !== undefined) setSecond(String(nextSecond));
         if (nextSeconds !== undefined && DURATIONS.includes(Number(nextSeconds))) setSeconds(Number(nextSeconds));
