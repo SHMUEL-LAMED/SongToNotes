@@ -212,13 +212,6 @@ export function AppShell({
         </nav>
 
         <div className="sidebar-foot">
-          <button type="button" className="sidebar-feedback" onClick={onOpenFeedback}>
-            <MessageSquareText size={18} />
-            <span>
-              <strong>יש לך רעיון או בעיה?</strong>
-              <small>ספר לנו — אנחנו קוראים כל הודעה</small>
-            </span>
-          </button>
           <p className="sidebar-note">
             <LockKeyhole size={14} />
             <span>רוב הכלים עובדים כולם בדפדפן, חינם. כלים שנעזרים בשרת משתמשים בקרדיטים — וכל יום מקבלים חדשים.</span>
