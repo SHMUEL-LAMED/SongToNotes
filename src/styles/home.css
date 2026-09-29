@@ -571,16 +571,68 @@
   padding-top: 22px;
   border-top: 1px solid var(--line);
 }
-.tool-video h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 18px; }
-.tool-video video {
+.tool-video-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.tool-video-head > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.tool-video-head h2 { margin: 0; font-size: 18px; }
+.tool-video-head small { font-size: 12.5px; color: var(--text-muted); }
+.tool-video-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+}
+/* The recording is the site itself, so it gets the column's full width —
+   smaller, its text is too small to read. */
+.tool-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.tool-video-frame video {
   display: block;
   width: 100%;
-  max-width: 720px;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
+  height: 100%;
+  object-fit: contain;
   background: #000;
+}
+.tool-video-frame:not(.is-started) video { background: var(--surface); }
+.tool-video-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: linear-gradient(180deg, rgba(10, 8, 20, 0.04), rgba(10, 8, 20, 0.28));
+  cursor: pointer;
+}
+.tool-video-play-mark {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 0 0 10px var(--accent-ring), var(--shadow-lg);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+/* The triangle points right on a Hebrew page too — it is the play mark, not an arrow. */
+.tool-video-play-mark svg { transform: translateX(2px); }
+.tool-video-play:hover .tool-video-play-mark,
+.tool-video-play:focus-visible .tool-video-play-mark { transform: scale(1.07); box-shadow: 0 0 0 14px var(--accent-ring), var(--shadow-lg); }
+.tool-video-play:focus-visible { outline-offset: -4px; }
+@media (max-width: 560px) {
+  .tool-video-frame { border-radius: var(--radius); }
+  .tool-video-play-mark { width: 60px; height: 60px; }
 }
 
 .next-steps {

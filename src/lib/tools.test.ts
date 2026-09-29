@@ -78,10 +78,12 @@ describe("tool families", () => {
 });
 
 describe("how-to videos", () => {
-  it("exist for every tool that shows one, and every video belongs to a tool", () => {
-    const dir = new URL("../../public/videos/", import.meta.url);
-    const files = readdirSync(dir).filter((name) => name.endsWith(".mp4"));
-    const withVideo = ALL_TOOLS.filter((tool) => tool.video).map((tool) => `${tool.id}.mp4`);
-    expect([...files].sort()).toEqual([...withVideo].sort());
+  it("exist, with a still, for every tool that shows one, and every video belongs to a tool", () => {
+    const files = readdirSync(new URL("../../public/videos/", import.meta.url));
+    const withVideo = ALL_TOOLS.filter((tool) => tool.video).map((tool) => tool.id).sort();
+    for (const extension of [".mp4", ".webp"]) {
+      const ids = files.filter((name) => name.endsWith(extension)).map((name) => name.slice(0, -extension.length));
+      expect(ids.sort(), extension).toEqual(withVideo);
+    }
   });
 });
