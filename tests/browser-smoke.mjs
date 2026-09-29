@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 33, "hub renders all 33 tool cards", `found ${cards}`);
+log(cards === 24, "hub renders a card for each of the 24 tools in the menu (tabs live inside them)", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);

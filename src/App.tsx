@@ -203,9 +203,10 @@ function WorkspaceApp() {
   });
 
   // An unknown hash — a stale bookmark, a typo — lands on the hub rather
-  // than an empty page.
+  // than an empty page. Replacing, not pushing: a pushed entry left Back on
+  // the bad address, which pushed home again, so Back could never leave.
   useEffect(() => {
-    if (route !== "home" && !tool && !shareToken && !admin && !me && !credits) navigate("home");
+    if (route !== "home" && !tool && !shareToken && !admin && !me && !credits) navigate("home", { replace: true });
   }, [admin, credits, me, navigate, route, shareToken, tool]);
 
   useEffect(() => {
