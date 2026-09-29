@@ -111,6 +111,9 @@ export function SetlistTool({ onOpenWork }: Props) {
   const starts = useMemo(() => runningStarts(entries), [entries]);
   const numbers = useMemo(() => songNumbers(entries), [entries]);
   const target = targetStatus(totals.total, active.targetMinutes);
+  // A stage left open over a list that was emptied (the assistant removing
+  // the last song) would otherwise spring back up at the next song added.
+  if (stageOpen && !entries.length) setStageOpen(false);
 
   // Every change is written straight away: a setlist is edited in the
   // rehearsal room and opened again at the venue, often with no signal.
@@ -233,48 +236,64 @@ export function SetlistTool({ onOpenWork }: Props) {
 
   // Pointer-based drag: the row follows the finger by swapping with its
   // neighbour whenever the pointer passes the neighbour's middle. Rows differ
-  // in height, so measuring live is simpler and sturdier than a fixed grid,
-  // and pointer capture keeps the gesture alive when the finger leaves the handle.
+  // in height, so measuring live is simpler and sturdier than a fixed grid.
+  // The move and release are heard on the window, not on the handle: when
+  // React reorders the rows it moves the dragged row's DOM node, and a moved
+  // node loses its pointer capture — handle-only listeners then stopped the
+  // drag after the first swap down and never heard the release, leaving the
+  // row stuck in its dragging state.
   const onHandleDown = (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    // Capture still helps until the first swap (a mouse leaving the window); the window listeners take over after.
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { id, pointerId: event.pointerId, pending: false };
     setDraggingId(id);
   };
 
-  const onHandleMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId || !listRef.current) return;
-    const y = event.clientY;
-    // Near the viewport's edges the page scrolls, so a long set can be dragged end to end.
-    // "instant" because the site sets smooth scrolling, which would queue up animations here.
-    if (y < 70) window.scrollBy({ top: -12, behavior: "instant" });
-    else if (y > window.innerHeight - 90) window.scrollBy({ top: 12, behavior: "instant" });
-    if (drag.pending) return;
-    const rows = Array.from(listRef.current.querySelectorAll<HTMLElement>("[data-entry-id]"));
-    const index = rows.findIndex((row) => row.dataset.entryId === drag.id);
-    if (index < 0) return;
-    const above = rows[index - 1]?.getBoundingClientRect();
-    const below = rows[index + 1]?.getBoundingClientRect();
-    const to = above && y < above.top + above.height / 2 ? index - 1 : below && y > below.top + below.height / 2 ? index + 1 : index;
-    if (to === index) return;
-    drag.pending = true;
-    setEntries((list) => moveEntry(list, index, to));
-  };
+  useEffect(() => {
+    if (!draggingId) return;
+    const onMove = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId || !listRef.current) return;
+      const y = event.clientY;
+      // Near the viewport's edges the page scrolls, so a long set can be dragged end to end.
+      // "instant" because the site sets smooth scrolling, which would queue up animations here.
+      if (y < 70) window.scrollBy({ top: -12, behavior: "instant" });
+      else if (y > window.innerHeight - 90) window.scrollBy({ top: 12, behavior: "instant" });
+      if (drag.pending) return;
+      const rows = Array.from(listRef.current.querySelectorAll<HTMLElement>("[data-entry-id]"));
+      const index = rows.findIndex((row) => row.dataset.entryId === drag.id);
+      if (index < 0) return;
+      const above = rows[index - 1]?.getBoundingClientRect();
+      const below = rows[index + 1]?.getBoundingClientRect();
+      const to = above && y < above.top + above.height / 2 ? index - 1 : below && y > below.top + below.height / 2 ? index + 1 : index;
+      if (to === index) return;
+      drag.pending = true;
+      setEntries((list) => moveEntry(list, index, to));
+    };
+    const onUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setDraggingId(null);
+      const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-entry-id]") ?? []);
+      const index = rows.findIndex((row) => row.dataset.entryId === drag.id);
+      if (index >= 0) setAnnouncement(`הועבר למקום ${index + 1} מתוך ${rows.length}`);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [draggingId, setEntries]);
 
   useEffect(() => {
     if (dragRef.current) dragRef.current.pending = false;
   }, [entries]);
-
-  const onHandleUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    setDraggingId(null);
-    const index = entries.findIndex((entry) => entry.id === drag.id);
-    if (index >= 0) setAnnouncement(`הועבר למקום ${index + 1} מתוך ${entries.length}`);
-  };
 
   // ---- songbook ----
 
@@ -517,8 +536,6 @@ export function SetlistTool({ onOpenWork }: Props) {
                 onRemove={() => removeEntry(entry.id)}
                 onMove={(delta, focus) => move(entry.id, delta, focus)}
                 onHandleDown={(event) => onHandleDown(event, entry.id)}
-                onHandleMove={onHandleMove}
-                onHandleUp={onHandleUp}
                 onOpenSong={entry.workId || entry.songBody ? () => openInSongbook(entry) : undefined}
                 onStage={() => openStage(index)}
               />
@@ -657,13 +674,11 @@ type RowProps = {
   onRemove: () => void;
   onMove: (delta: number, focus: "up" | "down") => void;
   onHandleDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onHandleMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onHandleUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onOpenSong?: () => void;
   onStage: () => void;
 };
 
-function EntryRow({ entry, number, time, first, last, dragging, onChange, onRemove, onMove, onHandleDown, onHandleMove, onHandleUp, onOpenSong, onStage }: RowProps) {
+function EntryRow({ entry, number, time, first, last, dragging, onChange, onRemove, onMove, onHandleDown, onOpenSong, onStage }: RowProps) {
   const isBreak = entry.type === "break";
   const label = isBreak ? entry.title || "הפסקה" : entry.title || "שיר";
   return (
@@ -676,9 +691,6 @@ function EntryRow({ entry, number, time, first, last, dragging, onChange, onRemo
           title="גררו לשינוי הסדר"
           tabIndex={-1}
           onPointerDown={onHandleDown}
-          onPointerMove={onHandleMove}
-          onPointerUp={onHandleUp}
-          onPointerCancel={onHandleUp}
         >
           <GripVertical size={18} />
         </button>
@@ -880,6 +892,17 @@ function StageMode({ entries, numbers, starts, index, onIndex, onClose }: StageP
     }
   }, []);
 
+  // Focus moves into the stage so its keys start at once and a screen reader
+  // lands in the dialog, and goes back to where it was when the stage closes.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    // Opened by the assistant while the visitor types to it: the text box keeps the focus.
+    if (!isTyping(previous)) rootRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, []);
+
   useEffect(() => {
     void enterFullscreen();
     const onChange = () => setIsFullscreen(Boolean(fullscreenElement()));
@@ -930,6 +953,29 @@ function StageMode({ entries, numbers, starts, index, onIndex, onClose }: StageP
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isTyping(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
+      const root = rootRef.current;
+      // Tab stays inside the stage: it is a modal layer, and focus wandering
+      // onto the page behind it would send the pedal's keys there.
+      if (event.key === "Tab" && root) {
+        const focusable = Array.from(root.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])"));
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const inside = root.contains(document.activeElement);
+        if (event.shiftKey && (!inside || document.activeElement === first || document.activeElement === root)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (!inside || document.activeElement === last)) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+      // Enter and Space on a focused control press that control (a keyboard
+      // user toggling the click, or the assistant's send button); swallowing
+      // them here made every button unreachable from the keyboard.
+      const target = event.target as HTMLElement | null;
+      if ((event.key === "Enter" || event.key === " ") && target && target !== root && target.closest("button, a, summary, [role=button]")) return;
       const forward = ["ArrowRight", "ArrowDown", "PageDown", "Enter"].includes(event.key) || (event.key === " " && !event.shiftKey);
       const back = ["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(event.key) || (event.key === " " && event.shiftKey);
       if (forward) go(1);
@@ -1005,6 +1051,7 @@ function StageMode({ entries, numbers, starts, index, onIndex, onClose }: StageP
       role="dialog"
       aria-modal="true"
       aria-label="מצב במה"
+      tabIndex={-1}
     >
       <header className="setlist-stage-top">
         <span className="setlist-stage-position" dir="ltr">

@@ -139,7 +139,9 @@ export function parseSeedCode(text: string): { rhythmSeed: number; noteSeed: num
   if (!match) return null;
   const rhythmSeed = parseInt(match[1], 36);
   const noteSeed = parseInt(match[2], 36);
-  if (!(rhythmSeed > 0) || !(noteSeed > 0)) return null;
+  // Six base-36 characters reach past 2^31, which the saved state rejects
+  // as a seed, so such a code played once and was gone after a reload.
+  if (!(rhythmSeed > 0) || !(noteSeed > 0) || rhythmSeed >= 2 ** 31 || noteSeed >= 2 ** 31) return null;
   return { rhythmSeed, noteSeed };
 }
 

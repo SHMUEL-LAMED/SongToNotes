@@ -149,6 +149,8 @@
   overflow: hidden;
 }
 .setlist-stage:fullscreen { background: var(--bg); }
+/* The stage itself takes focus on open so its keys work at once; it needs no ring. */
+.setlist-stage:focus { outline: none; }
 .setlist-stage-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .setlist-stage-position { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; color: var(--text-soft); padding-inline-end: 6px; }
 .setlist-stage-timer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
