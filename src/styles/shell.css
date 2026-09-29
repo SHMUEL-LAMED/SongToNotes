@@ -255,29 +255,6 @@
 }
 .sidebar-note svg { flex: none; margin-top: 2px; color: var(--success); }
 
-/* The way to tell the site something: a clear card, not a line in the footer. */
-.sidebar-feedback {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in oklab, var(--success) 45%, transparent);
-  background: color-mix(in oklab, var(--success) 12%, var(--surface));
-  color: var(--text);
-  text-align: start;
-  font: inherit;
-  cursor: pointer;
-  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease);
-}
-.sidebar-feedback:hover { border-color: var(--success); }
-.sidebar-feedback:active { transform: scale(0.98); }
-.sidebar-feedback svg { flex: none; color: var(--success); }
-.sidebar-feedback span { display: grid; gap: 1px; }
-.sidebar-feedback strong { font-size: 13px; }
-.sidebar-feedback small { font-size: 11.5px; color: var(--text-muted); }
 
 .sidebar-scrim { display: none; }
 
