@@ -350,7 +350,7 @@ export function MetronomeTool({ initial = null }: Props) {
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
         nudge(event.shiftKey ? -10 : -1);
-      } else if (event.code === "KeyT" && !event.repeat) {
+      } else if ((event.code === "KeyT" || event.key?.toLowerCase() === "t") && !event.repeat) {
         // By physical key, so the shortcut also works with the Hebrew layout on.
         tap();
       }

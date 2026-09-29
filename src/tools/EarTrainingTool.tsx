@@ -257,7 +257,9 @@ export function EarTrainingTool({ initial = null }: Props) {
         return;
       }
       // By physical key: with the Hebrew layout on, R types "ר".
-      if (event.code === "KeyR" && question) {
+      // The physical key, so a Hebrew layout works; the letter too, for
+      // on-screen keyboards that send no key code.
+      if ((event.code === "KeyR" || event.key?.toLowerCase() === "r") && question) {
         event.preventDefault();
         if (!event.repeat) play(question);
         return;
