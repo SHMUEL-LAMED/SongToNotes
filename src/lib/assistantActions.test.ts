@@ -189,3 +189,10 @@ describe("formatActionResults", () => {
     ]);
   });
 });
+
+describe("voice.effect", () => {
+  it("lets the assistant set the effect's intensity too", () => {
+    const spec = findAction("voice.effect")!;
+    expect(coerceParams(spec, { effect: "robot", intensity: "70" })).toEqual({ params: { effect: "robot", intensity: 70 }, problems: [] });
+  });
+});

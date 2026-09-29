@@ -186,7 +186,7 @@ export const ACTIONS: ActionSpec[] = [
   define("visualizer", "write", "visualizer.render", "יצירת הסרטון", "מקליט את הסרטון מהקטע שנבחר (לוקח כאורך הקטע)."),
 
   // ---- voice changer ----
-  define("voice", "write", "voice.effect", "אפקט קול", "בוחר אפקט ומחיל אותו על ההקלטה.", ["effect:none|robot|chipmunk|deep|radio|alien|echo|hall|telephone|whisper"]),
+  define("voice", "write", "voice.effect", "אפקט קול", "בוחר אפקט ומחיל אותו על ההקלטה; intensity היא עוצמת האפקט (0..100).", ["effect:none|robot|chipmunk|deep|radio|alien|echo|hall|telephone|whisper", "intensity?:number"]),
   define("voice", "write", "voice.record", "הקלטת קול", "מתחיל או עוצר הקלטה מהמיקרופון.", ["command:start|stop"]),
   define("voice", "write", "voice.play", "השמעת התוצאה", "משמיע או עוצר את הקול עם האפקט.", ["command:play|stop"]),
   define("voice", "write", "voice.download", "הורדת הקול", "מוריד את הקול עם האפקט כקובץ WAV."),
