@@ -328,6 +328,8 @@ export class BeatPlayer {
   private nextTime = 0;
   private queue: { step: number; time: number }[] = [];
   private settings: Settings;
+  /** Bumped by every start and stop, so a start still waiting on resume() knows it was cancelled. */
+  private generation = 0;
 
   constructor(settings: Settings) {
     this.settings = settings;
@@ -365,10 +367,14 @@ export class BeatPlayer {
     playVoice(context, this.master!, voice, context.currentTime + 0.01, this.settings.mix[voice].volume);
   }
 
+  /** Resolves with whether the beat is running (false when a stop overtook it). */
   async start() {
+    const generation = ++this.generation;
     const context = this.ensureContext();
     if (context.state === "suspended") await context.resume();
-    if (this.timer !== null) return;
+    // Stopped (or disposed) while the context woke up: stay stopped.
+    if (generation !== this.generation || this.context !== context) return false;
+    if (this.timer !== null) return true;
     this.bus = context.createGain();
     this.bus.connect(this.master!);
     this.nextStep = 0;
@@ -376,9 +382,11 @@ export class BeatPlayer {
     this.queue = [];
     this.schedule();
     this.timer = window.setInterval(() => this.schedule(), 25);
+    return true;
   }
 
   stop() {
+    this.generation += 1;
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = null;
     this.queue = [];
@@ -423,6 +431,10 @@ export class BeatPlayer {
         if (level > 0) playVoice(context, this.bus, voice.id, at, level);
       }
       this.queue.push({ step: this.nextStep, time: at });
+      // Nothing reads the playhead while the tab is hidden (no animation
+      // frames), so the queue is trimmed here too; otherwise an hour in the
+      // background leaves tens of thousands of entries to shift on return.
+      if (this.queue.length > 64) this.queue.splice(0, this.queue.length - 32);
       this.nextTime += stepSeconds;
       this.nextStep = (this.nextStep + 1) % STEPS;
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isChordToken } from "./songbook";
-import { MOODS, alternativesFor, arrange, chordFor, generateTokens, loopLength, spellProgression, toSongbookBody, voiceLead } from "./progression";
+import { MOODS, alternativesFor, arrange, chordFor, generateTokens, isProgressionToken, loopLength, spellProgression, toSongbookBody, voiceLead } from "./progression";
 
 describe("chordFor", () => {
   it("spells the scale's own chords", () => {
@@ -83,4 +83,20 @@ describe("arrange", () => {
 
 it("writes songbook text", () => {
   expect(toSongbookBody(spellProgression(["1", "4"], 0, false, false), 1)).toBe("[C] [F]");
+});
+
+describe("robustness and bass lines", () => {
+  it("spells an unknown token as the dominant instead of throwing", () => {
+    expect(() => chordFor("9", 0, false, false)).not.toThrow();
+    expect(chordFor("9", 0, false, false)).toMatchObject({ name: "G", token: "5M" });
+    expect(isProgressionToken("b7")).toBe(true);
+    expect(isProgressionToken("9")).toBe(false);
+    expect(isProgressionToken(4)).toBe(false);
+  });
+
+  it("puts a diminished chord's own flat fifth in the bass, not a perfect one", () => {
+    const chords = spellProgression(["7"], 0, false, false);
+    const bass = arrange(chords, { bpm: 120, beatsPerChord: 4, pattern: "block", bass: "rootFifth" }).filter((item) => item.midi < 48);
+    expect(bass.map((item) => item.midi % 12)).toEqual([11, 5]);
+  });
 });

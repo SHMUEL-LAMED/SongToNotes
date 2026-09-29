@@ -9,6 +9,7 @@ import {
   arrange,
   chordFor,
   generateTokens,
+  isProgressionToken,
   loopLength,
   spellProgression,
   toSongbookBody,
@@ -17,7 +18,7 @@ import {
 } from "../lib/progression";
 import { setSongbookDraft } from "../lib/songbook";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
-import { ROOTS } from "../lib/theory";
+import { ROOTS, findScale, rootFor } from "../lib/theory";
 import { useAssistantTool } from "../lib/useAssistantTool";
 
 const STATE_KEY = "musictools.progression.v1";
@@ -53,7 +54,7 @@ function readStored(): Stored {
     return {
       key: Number.isInteger(parsed.key) && parsed.key! >= 0 && parsed.key! < 12 ? parsed.key! : DEFAULTS.key,
       mood: MOODS.some((mood) => mood.id === parsed.mood) ? parsed.mood! : DEFAULTS.mood,
-      tokens: Array.isArray(parsed.tokens) && parsed.tokens.length && parsed.tokens.length <= 8 ? parsed.tokens.map(String) : DEFAULTS.tokens,
+      tokens: Array.isArray(parsed.tokens) && parsed.tokens.length && parsed.tokens.length <= 8 && parsed.tokens.every(isProgressionToken) ? parsed.tokens : DEFAULTS.tokens,
       sevenths: Boolean(parsed.sevenths),
       bpm: Math.max(50, Math.min(200, Number(parsed.bpm) || DEFAULTS.bpm)),
       beats: [2, 4, 8].includes(Number(parsed.beats)) ? Number(parsed.beats) : DEFAULTS.beats,
@@ -152,16 +153,18 @@ export function ProgressionTool() {
   const generate = useCallback(
     (nextMood = mood) => {
       setTokens(generateTokens(nextMood));
-      setSevenths(Boolean(nextMood.sevenths));
       setSwapping(null);
     },
     [mood],
   );
 
+  // A new mood brings the chord colour that suits it; a new progression in
+  // the same mood keeps the sevenths the visitor chose.
   const pickMood = (id: string) => {
     const next = MOODS.find((item) => item.id === id);
     if (!next) return;
     setMoodId(id);
+    setSevenths(Boolean(next.sevenths));
     generate(next);
   };
 
@@ -197,6 +200,7 @@ export function ProgressionTool() {
         }
         const target = nextMood ? MOODS.find((item) => item.id === nextMood) : mood;
         if (!target) return { ok: false, message: `אין אווירה בשם ${String(nextMood)}` };
+        if (target.id !== moodId) setSevenths(Boolean(target.sevenths));
         setMoodId(target.id);
         generate(target);
         return { ok: true, message: `נוצר מהלך ${target.label}` };
@@ -254,7 +258,7 @@ export function ProgressionTool() {
           <div className="root-picker" dir="ltr">
             {ROOTS.map((item) => (
               <button key={item.pc} type="button" className={key === item.pc ? "active" : ""} onClick={() => setKey(item.pc)} aria-pressed={key === item.pc}>
-                {item.name}
+                {rootFor(item.pc, findScale(mood.minor ? "minor" : "major")).name}
               </button>
             ))}
           </div>

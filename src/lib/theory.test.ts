@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CIRCLE, circleIndex, diatonicChords, findScale, scaleNotes, stepPattern } from "./theory";
+import { CIRCLE, circleIndex, diatonicChords, findScale, keySignature, scaleNotes, stepPattern } from "./theory";
 
 const names = (root: number, scale: string) => scaleNotes(root, findScale(scale)).map((note) => note.name);
 
@@ -56,5 +56,30 @@ describe("the circle of fifths", () => {
     expect(CIRCLE[circleIndex(2, findScale("dorian"))].major).toBe("C");
     expect(CIRCLE[circleIndex(7, findScale("mixolydian"))].major).toBe("C");
     expect(CIRCLE[circleIndex(4, findScale("minor"))].major).toBe("G");
+  });
+});
+
+describe("degrees and key signatures", () => {
+  const degrees = (root: number, scale: string) => scaleNotes(root, findScale(scale)).map((note) => note.degree);
+
+  it("numbers a degree by its letter, so a flat fifth is not a sharp fourth", () => {
+    expect(degrees(11, "locrian")).toEqual(["1", "♭2", "♭3", "4", "♭5", "♭6", "♭7"]);
+    expect(degrees(5, "lydian")).toEqual(["1", "2", "3", "♯4", "5", "6", "7"]);
+    expect(degrees(9, "blues")).toEqual(["1", "♭3", "4", "♭5", "5", "♭7"]);
+    expect(degrees(9, "minorPentatonic")).toEqual(["1", "♭3", "4", "5", "♭7"]);
+    expect(degrees(0, "harmonicMinor")).toEqual(["1", "2", "♭3", "4", "5", "♭6", "7"]);
+  });
+
+  it("counts the signature from the spelled notes, even where the circle's key is the enharmonic one", () => {
+    expect(keySignature(0, findScale("major")).label).toBe("ללא סימנים");
+    expect(keySignature(7, findScale("major")).label).toBe("דיאז אחד");
+    expect(keySignature(5, findScale("major")).label).toBe("במול אחד");
+    expect(keySignature(6, findScale("lydian"))).toMatchObject({ sharps: 7, flats: 0, relativeMajor: "C♯", relativeMinor: "A♯m" });
+    expect(keySignature(10, findScale("phrygian"))).toMatchObject({ sharps: 0, flats: 6, relativeMajor: "G♭" });
+    expect(keySignature(9, findScale("minor"))).toMatchObject({ label: "ללא סימנים", relativeMajor: "C", relativeMinor: "Am" });
+    expect(keySignature(2, findScale("dorian")).relativeMajor).toBe("C");
+    // Harmonic minor's raised seventh is written in the music, not in the signature.
+    expect(keySignature(9, findScale("harmonicMinor")).label).toBe("ללא סימנים");
+    expect(keySignature(3, findScale("minor")).label).toBe("6 דיאזים");
   });
 });
