@@ -418,7 +418,7 @@ log(
 // reach; what is checked here is everything up to that point and the honest
 // message when it is not reachable — or the text, where it is.
 await page.goto(`${BASE}#/transcript`, { waitUntil: "load" });
-await page.waitForTimeout(300);
+await page.waitForSelector("select[aria-label='שפת הדיבור']", { timeout: 30_000 }).catch(() => {});
 log(
   (await page.locator("select[aria-label='שפת הדיבור'] option").count()) >= 5,
   "transcript: offers a choice of languages",
@@ -470,8 +470,8 @@ await page.evaluate(() => {
   }]));
 });
 await page.locator(".account-button").click();
-await page.waitForSelector(".me-item");
-await page.locator(".me-item-title", { hasText: "שיעור" }).click();
+await page.waitForSelector(".quick-item");
+await page.locator(".quick-item", { hasText: "שיעור" }).click();
 await page.waitForSelector(".transcript-result textarea", { timeout: 10_000 });
 const reopened = await page.locator(".transcript-result textarea").inputValue();
 log(/שלום לכולם\nברוכים הבאים לשיעור/.test(reopened), "transcript: a saved transcript reopens with its text");
@@ -553,14 +553,14 @@ log(/\.mp3/.test((await page.locator(".transcript-tool .selected-file strong").t
 // --- video: the tool has its own drop zone that only takes video ---
 await page.goto(`${BASE}#/video`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
-await page.waitForTimeout(300);
+await page.waitForSelector(".video-tool .drop-zone", { timeout: 30_000 }).catch(() => {});
 log(await page.locator(".video-tool .drop-zone").isVisible(), "video: a drop zone for a video file");
 log(/video/.test((await page.locator(".video-tool input[type=file]").getAttribute("accept")) ?? ""), "video: accepts video files");
 
 // --- rhythm: a round runs from the audio clock; taps are judged and scored ---
 await page.goto(`${BASE}#/rhythm`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
-await page.waitForTimeout(300);
+await page.waitForSelector(".rhythm-step", { timeout: 30_000 }).catch(() => {});
 log((await page.locator(".rhythm-step.is-hit").count()) === 4, "rhythm: the default pattern shows four hits");
 await page.locator("input[aria-label='קצב']").fill("200");
 await page.locator(".rhythm-tool .primary-button").click();
@@ -613,8 +613,8 @@ await page.evaluate(() => {
   }]));
 });
 await page.locator(".account-button").click();
-await page.waitForSelector(".me-item");
-await page.locator(".me-item-title", { hasText: "שיר" }).first().click();
+await page.waitForSelector(".quick-item");
+await page.locator(".quick-item", { hasText: "שיר" }).first().click();
 await page.waitForSelector(".lyrics-karaoke", { timeout: 10_000 });
 log((await page.locator(".lyrics-word").count()) === 4, "lyrics: a saved work reopens with its words");
 const [lrc] = await Promise.all([
@@ -667,8 +667,8 @@ await page.evaluate(() => {
 });
 await page.goto(`${BASE}#/transcript`, { waitUntil: "load" });
 await page.locator(".account-button").click();
-await page.waitForSelector(".me-item");
-await page.locator(".me-item-title", { hasText: "פגישה" }).first().click();
+await page.waitForSelector(".quick-item");
+await page.locator(".quick-item", { hasText: "פגישה" }).first().click();
 await page.waitForSelector(".transcript-result", { timeout: 10_000 });
 log(/2 דוברים/.test((await page.locator(".transcript-stats").textContent()) ?? ""), "transcript: counts the speakers from the labels");
 await page.locator(".transcript-search input").fill("פגישה");
@@ -687,8 +687,11 @@ log(await page.locator(".assistant-launcher").isVisible(), "assistant: the launc
 await page.locator(".assistant-launcher").click();
 await page.waitForSelector(".assistant-panel", { timeout: 5_000 });
 log(true, "assistant: the panel opens");
-log((await page.locator(".assistant-suggestions .chip-toggle").count()) >= 3, "assistant: offers suggested questions");
+log((await page.locator(".assistant-suggestions .assistant-suggestion").count()) >= 3, "assistant: offers suggested questions");
 log(await page.locator(".assistant-signin").isVisible(), "assistant: signed out, it asks to sign in instead of sending");
+await page.waitForFunction(() => document.querySelector(".assistant-panel")?.contains(document.activeElement), null, { timeout: 5_000 }).catch(() => {});
+log(await page.evaluate(() => document.querySelector(".assistant-panel")?.contains(document.activeElement)),
+  "assistant: signed out too, the focus lands inside the panel");
 await page.keyboard.press("Escape");
 await page.waitForSelector(".assistant-panel", { state: "detached", timeout: 5_000 });
 log(true, "assistant: Escape closes it");
@@ -757,68 +760,25 @@ await page.waitForFunction(
 );
 log(true, "save: the karaoke track saves with its file");
 
-// The drawer: opens from the account button, lists everything, filters, and
-// hands a work back to its tool.
+// The drawer: opens from the account button, lists the newest works, filters,
+// and hands a work back to its tool.
 await page.locator(".account-button").click();
 await page.waitForSelector(".account-drawer", { timeout: 5_000 });
 log(await page.locator(".account-drawer").isVisible(), "area: the drawer slides in from the account button");
 await page.waitForFunction(
-  () => document.querySelectorAll(".me-item").length >= 4,
+  () => document.querySelectorAll(".quick-item").length >= 4,
   null,
   { timeout: 10_000 },
-);
-const listed = await page.locator(".me-item").count();
+).catch(() => {});
+const listed = await page.locator(".quick-item").count();
 log(listed === 4, "area: all four saved works are listed", `found ${listed}`);
-const kinds = (await page.locator(".me-kinds").textContent()) ?? "";
-log(
-  /קצב שמור/.test(kinds) && /כיוון כלי/.test(kinds) && /אימון שמיעה/.test(kinds) && /הסרת שירה/.test(kinds),
-  "area: one filter chip per kind of work",
-  kinds.replace(/\s+/g, " ").trim(),
-);
-const fileBadges = await page.locator(".me-badge.is-file").count();
-log(fileBadges === 1, "area: the karaoke track shows its file is on this device", `found ${fileBadges}`);
-log(
-  (await page.locator(".me-item .icon-button[aria-label='נגן']").count()) === 1,
-  "area: only the work with a file offers to play",
-);
-log(
-  /137 BPM/.test((await page.locator(".me-item", { hasText: "קצב שמור" }).textContent()) ?? ""),
-  "area: the metronome card says which tempo it holds",
-);
-log(
-  /דיוק/.test((await page.locator(".me-side").textContent()) ?? ""),
-  "area: the side shows the ear-training progress",
-);
-
-// The stored file is real audio and comes back as a download.
-const [savedTrack] = await Promise.all([
-  page.waitForEvent("download"),
-  page.locator(".me-item .icon-button[aria-label='הורד את הקובץ']").click(),
-]);
-const savedStats = rmsOf(await savedTrack.path());
-log(savedStats.frames > 1000 && savedStats.rms > 0.001, "area: the stored karaoke track downloads as real audio",
-  `rms ${savedStats.rms.toFixed(3)}`);
-
-await page.locator(".me-search input").fill("גיטרה");
+await page.locator(".quick-search input").fill("גיטרה");
 await page.waitForTimeout(200);
-log((await page.locator(".me-item").count()) === 1, "area: search narrows the list");
-await page.locator(".me-search input").fill("");
-await page.locator(".me-kinds .chip-toggle", { hasText: "קצב שמור" }).click();
-await page.waitForTimeout(200);
-log((await page.locator(".me-item").count()) === 1, "area: a kind chip narrows the list");
-
-// Rename in place.
-await page.locator(".me-item .icon-button[aria-label='שנה שם']").click();
-await page.locator(".me-rename input").fill("הקצב של השיר שלי");
-await page.keyboard.press("Enter");
-await page.waitForTimeout(300);
-log(
-  /הקצב של השיר שלי/.test((await page.locator(".me-item-title").first().textContent()) ?? ""),
-  "area: a work can be renamed in place",
-);
+log((await page.locator(".quick-item").count()) === 1, "area: the drawer search narrows the list");
+await page.locator(".quick-search input").fill("");
 
 // Opening a preset lands in the metronome with that tempo.
-await page.locator(".me-item-title").first().click();
+await page.locator(".quick-item", { hasText: "קצב שמור" }).first().click();
 await page.waitForTimeout(500);
 log(!(await page.locator(".account-drawer").count()), "area: opening a work closes the drawer");
 const reopenedBpm = await page.locator(".bpm-value strong").textContent();
@@ -839,26 +799,81 @@ log(
   "area: focus returns to the account button",
 );
 
-// Delete removes the entry and its file.
+// The full page: the gallery with a chip per kind, files, rename and delete.
 await page.locator(".account-button").click();
-await page.waitForSelector(".me-item");
-page.once("dialog", (dialog) => dialog.accept());
-await page.locator(".me-item", { hasText: "הסרת שירה" }).locator(".icon-button.is-danger").click();
+await page.waitForSelector(".quick-open");
+await page.locator(".quick-open").click();
+await page.waitForSelector(".me-tile", { timeout: 10_000 });
+log(page.url().endsWith("#/me"), "area: the drawer opens the full personal area", page.url().split("#")[1]);
+const tiles = await page.locator(".me-tile").count();
+log(tiles === 4, "area: the gallery lists all four works", `found ${tiles}`);
+const kinds = (await page.locator(".me-kinds").textContent()) ?? "";
+log(
+  /קצב שמור/.test(kinds) && /כיוון כלי/.test(kinds) && /אימון שמיעה/.test(kinds) && /הסרת שירה/.test(kinds),
+  "area: one filter chip per kind of work",
+  kinds.replace(/\s+/g, " ").trim(),
+);
+const fileBadges = await page.locator(".me-badge.is-file").count();
+log(fileBadges === 1, "area: the karaoke track shows its file is on this device", `found ${fileBadges}`);
+log(
+  (await page.locator(".me-tile .icon-button[aria-label='נגן']").count()) === 1,
+  "area: only the work with a file offers to play",
+);
+log(
+  /137 BPM/.test((await page.locator(".me-tile", { hasText: "קצב שמור" }).textContent()) ?? ""),
+  "area: the metronome card says which tempo it holds",
+);
+
+// The stored file is real audio and comes back as a download.
+const [savedTrack] = await Promise.all([
+  page.waitForEvent("download"),
+  page.locator(".me-tile .icon-button[aria-label='הורד את הקובץ']").click(),
+]);
+const savedStats = rmsOf(await savedTrack.path());
+log(savedStats.frames > 1000 && savedStats.rms > 0.001, "area: the stored karaoke track downloads as real audio",
+  `rms ${savedStats.rms.toFixed(3)}`);
+
+await page.locator(".me-search input").fill("גיטרה");
+await page.waitForTimeout(200);
+log((await page.locator(".me-tile").count()) === 1, "area: search narrows the gallery");
+await page.locator(".me-search input").fill("");
+await page.locator(".me-kinds .chip-toggle", { hasText: "קצב שמור" }).click();
+await page.waitForTimeout(200);
+log((await page.locator(".me-tile").count()) === 1, "area: a kind chip narrows the gallery");
+
+// Rename in place.
+await page.locator(".me-tile .icon-button[aria-label='שנה שם']").click();
+await page.locator(".me-rename input").fill("הקצב של השיר שלי");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
+log(
+  /הקצב של השיר שלי/.test((await page.locator(".me-tile-title").first().textContent()) ?? ""),
+  "area: a work can be renamed in place",
+);
+await page.locator(".me-kinds .chip-toggle", { hasText: "קצב שמור" }).click();
+await page.waitForTimeout(200);
+
+// Delete moves the entry and its file to the recycle bin.
+await page.locator(".me-tile", { hasText: "הסרת שירה" }).locator(".icon-button.is-danger").click();
 await page.waitForTimeout(400);
 log((await page.locator(".me-badge.is-file").count()) === 0, "area: deleting a work removes it and its file");
-await page.keyboard.press("Escape");
-await page.waitForTimeout(200);
+log((await page.locator(".me-tile").count()) === 3, "area: three works are left");
 
 // --- dark/light toggle ---
 await page.goto(BASE, { waitUntil: "load" });
 await page.waitForTimeout(300);
+// The theme button opens the appearance dialog; the theme is picked inside it.
 const themeBefore = await page.evaluate(() => document.documentElement.dataset.theme);
 await page.locator("button.theme-toggle").click();
-await page.waitForTimeout(200);
-await page.locator("button.theme-toggle").click();
+await page.waitForSelector(".appearance-dialog", { timeout: 5_000 });
+const otherTheme = themeBefore === "dark" ? "בהיר" : "כהה";
+await page.locator(".appearance-dialog .segmented-control button", { hasText: otherTheme }).click();
 await page.waitForTimeout(300);
 const themeAfter = await page.evaluate(() => document.documentElement.dataset.theme);
-log(themeBefore !== themeAfter, "theme toggle switches theme", `${themeBefore} -> ${themeAfter}`);
+log(themeBefore !== themeAfter, "theme: the appearance dialog switches theme", `${themeBefore} -> ${themeAfter}`);
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+log(!(await page.locator(".appearance-dialog").count()), "theme: Escape closes the appearance dialog");
 
 // --- mobile viewport: no horizontal overflow ---
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });

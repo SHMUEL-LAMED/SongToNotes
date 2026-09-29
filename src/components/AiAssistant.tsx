@@ -429,7 +429,15 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
 
   useEffect(() => {
     if (!open) return;
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
+    // Signed out there is no question box, only the sign-in prompt; the focus
+    // still has to land inside the panel, or Escape (below) never reaches it.
+    const timer = window.setTimeout(() => {
+      const target =
+        inputRef.current ??
+        panelRef.current?.querySelector<HTMLElement>(".assistant-signin button") ??
+        panelRef.current;
+      target?.focus();
+    }, 60);
     const onKey = (event: KeyboardEvent) => {
       // Escape closes the panel only from inside it: on the page it belongs
       // to whatever dialog or menu is open there.
@@ -852,7 +860,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
         </button>
       )}
       {open && (
-        <aside ref={panelRef} className={`assistant-panel ${busy ? "is-busy" : ""}`} aria-label="העוזר של כלי מוזיקה">
+        <aside ref={panelRef} tabIndex={-1} className={`assistant-panel ${busy ? "is-busy" : ""}`} aria-label="העוזר של כלי מוזיקה">
           <div className="assistant-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="שינוי רוחב העוזר" title="גרור כדי לשנות רוחב" />
           <header className="assistant-head">
             <span className="assistant-orb" aria-hidden="true">

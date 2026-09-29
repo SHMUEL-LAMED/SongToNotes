@@ -86,6 +86,7 @@
   opacity: 0.7;
 }
 .assistant-panel.is-busy::before { opacity: 1; animation: assistant-flow 1.6s linear infinite; }
+.assistant-panel:focus { outline: none; }
 
 .assistant-resize {
   position: absolute;
