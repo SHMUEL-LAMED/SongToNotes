@@ -18,16 +18,36 @@ export function setSongbookDraft(draft: { title: string; body: string }) {
   }
 }
 
-export function takeSongbookDraft(): { title: string; body: string } | null {
+/**
+ * The waiting draft, left in place. The songbook reads it while it renders
+ * and clears it once it is on screen: a render React throws away (one that
+ * waited on a lazily loaded part) would otherwise have taken the draft with
+ * it, and the page opened empty.
+ */
+export function peekSongbookDraft(): { title: string; body: string } | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
-    sessionStorage.removeItem(DRAFT_KEY);
     const parsed = JSON.parse(raw) as { title?: unknown; body?: unknown };
     return typeof parsed.body === "string" ? { title: typeof parsed.title === "string" ? parsed.title : "", body: parsed.body } : null;
   } catch {
     return null;
   }
+}
+
+export function clearSongbookDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Nothing was stored, then.
+  }
+}
+
+/** The waiting draft, and it stops waiting. */
+export function takeSongbookDraft(): { title: string; body: string } | null {
+  const draft = peekSongbookDraft();
+  clearSongbookDraft();
+  return draft;
 }
 
 /**

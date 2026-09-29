@@ -11,7 +11,7 @@ import { useAuth } from "../lib/auth";
 import { textCost } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
-import { foldChordLines, parseChordSymbol, parseSong, songChords, songToText, takeSongbookDraft, transposeSong } from "../lib/songbook";
+import { clearSongbookDraft, foldChordLines, parseChordSymbol, parseSong, songChords, songToText, peekSongbookDraft, transposeSong } from "../lib/songbook";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { listWorks, type SavedWork } from "../lib/works";
@@ -43,9 +43,11 @@ export function SongbookTool({ initial = null }: Props) {
   const [restored] = useState<{ title: string; body: string; transpose: number } | null>(() => {
     const opened = readInitial(initial);
     if (opened) return opened;
-    const draft = takeSongbookDraft();
+    const draft = peekSongbookDraft();
     return draft ? { ...draft, transpose: 0 } : null;
   });
+  // Cleared only once the page is really on screen (see peekSongbookDraft).
+  useEffect(() => clearSongbookDraft(), []);
   const [title, setTitle] = useState(restored?.title ?? "");
   const [body, setBody] = useState(restored?.body ?? "");
   const [transpose, setTranspose] = useState(restored?.transpose ?? 0);

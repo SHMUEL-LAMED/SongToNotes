@@ -517,7 +517,9 @@ log(/0:00\s+[A-G]/.test(chordText), "chords: the sheet lists chords with times",
 await page.locator(".chords-tool .download-buttons button", { hasText: "לשירון" }).click();
 await page.waitForSelector(".songbook-tool", { timeout: 10_000 });
 // The handed-over chords are read as the songbook opens, a moment after its frame.
-await page.waitForSelector(".songbook-chord", { timeout: 10_000 }).catch(() => {});
+await page
+  .waitForFunction(() => [...document.querySelectorAll(".songbook-chord")].some((item) => /[A-G]/.test(item.textContent ?? "")), null, { timeout: 10_000 })
+  .catch(() => {});
 log((await page.locator(".songbook-chord").allTextContents()).some((item) => /[A-G]/.test(item)), "chords: 'to songbook' opens the songbook showing the chords");
 await page.locator(".songbook-toolbar .segmented-control button", { hasText: "עריכה" }).click();
 

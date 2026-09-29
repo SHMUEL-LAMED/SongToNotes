@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { foldChordLines, isChordLine, isChordToken, parseChordSymbol, parseSong, songChords, songToText, transposeChord, transposeSong } from "./songbook";
+import { describe, expect, it, vi } from "vitest";
+import { clearSongbookDraft, foldChordLines, peekSongbookDraft, setSongbookDraft, takeSongbookDraft, isChordLine, isChordToken, parseChordSymbol, parseSong, songChords, songToText, transposeChord, transposeSong } from "./songbook";
 
 describe("songbook text", () => {
   it("recognises chord lines and folds them into brackets", () => {
@@ -55,5 +55,26 @@ describe("songbook text", () => {
 
   it("writes chords back over the words", () => {
     expect(songToText("[Am]היה [G]היה\nשורה")).toBe("Am  G\nהיה היה\nשורה");
+  });
+});
+
+describe("songbook draft", () => {
+  it("survives being read by a render that is thrown away, and goes once cleared", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    });
+    setSongbookDraft({ title: "שיר", body: "[Am] [G]" });
+    expect(peekSongbookDraft()?.body).toBe("[Am] [G]");
+    // A second render reads the same draft.
+    expect(peekSongbookDraft()?.body).toBe("[Am] [G]");
+    clearSongbookDraft();
+    expect(peekSongbookDraft()).toBeNull();
+    setSongbookDraft({ title: "", body: "[C]" });
+    expect(takeSongbookDraft()?.body).toBe("[C]");
+    expect(takeSongbookDraft()).toBeNull();
+    vi.unstubAllGlobals();
   });
 });
