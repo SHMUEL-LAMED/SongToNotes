@@ -39,6 +39,12 @@ export class NotePlayer {
   private startedAt = 0;
   private offset = 0;
   private timer: number | null = null;
+  /**
+   * Bumped by every play, pause and stop. A play that waited for a suspended
+   * context (iOS, or a play the assistant started) checks it afterwards, so a
+   * pause or stop pressed during the wait is not undone by the timer starting.
+   */
+  private generation = 0;
   private handlers: PlayerHandlers = {};
   private endsAt = 0;
   private active: { osc: OscillatorNode[]; gain: GainNode }[] = [];
@@ -127,10 +133,11 @@ export class NotePlayer {
       compressor.connect(this.context.destination);
     }
     const context = this.context;
+    const ticket = ++this.generation;
     if (context.state === "suspended") await context.resume().catch(() => undefined);
-    // Disposed (the tool closed) or stopped for good while the context was
-    // resuming: starting now would read a context that is gone.
-    if (this.context !== context || context.state === "closed") return;
+    // Disposed (the tool closed), stopped, paused or played again while the
+    // context was resuming: this play is no longer the one wanted.
+    if (ticket !== this.generation || this.context !== context || context.state === "closed") return;
 
     this.stopTimer();
     this.silence();
@@ -155,6 +162,7 @@ export class NotePlayer {
   }
 
   pause() {
+    this.generation += 1;
     if (!this.context) return;
     this.offset = this.currentTime;
     this.stopTimer();
@@ -162,6 +170,7 @@ export class NotePlayer {
   }
 
   stop(keepContext = false) {
+    this.generation += 1;
     this.stopTimer();
     this.silence();
     this.offset = this.loop ? this.loop.start : 0;
