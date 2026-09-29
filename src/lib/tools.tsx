@@ -53,7 +53,7 @@ export type ToolDefinition = {
   quick?: string;
   /** Tools that naturally come next, offered at the foot of the page. */
   related: string[];
-  /** True when a short how-to video sits in public/videos/<id>.mp4, shown under the tool. */
+  /** True when a short how-to video sits in public/videos/<id>.mp4, with its still in <id>.webp, shown under the tool. */
   video?: boolean;
   /** True when the tool sends audio or text to the site's server to do its work. */
   server?: boolean;
