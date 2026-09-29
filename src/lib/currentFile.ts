@@ -1,5 +1,6 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { handOffTo } from "./handoff";
+import { currentRoute } from "./router";
 import { TOOLS, type ToolDefinition } from "./tools";
 
 /**
@@ -78,6 +79,22 @@ export function receivingTools(except: string | null, disabled: readonly string[
 export async function sendOffer(offer: FileOffer, tool: string) {
   const file = await offer.get();
   await handOffTo(tool, file, file.name);
+}
+
+/**
+ * Offers what a tool has made while it has it. `made` is the result itself
+ * (a buffer, a file); a new one replaces the offer, and null withdraws it.
+ * The file is only built by `get` when someone sends it on.
+ */
+export function useOfferResult(made: unknown, name: string, get: () => File | Promise<File>) {
+  const getRef = useRef(get);
+  useEffect(() => {
+    getRef.current = get;
+  });
+  useEffect(() => {
+    if (!made) return;
+    return offerFile({ kind: "result", name, tool: currentRoute(), get: () => getRef.current() });
+  }, [made, name]);
 }
 
 /** For tests: forget every offer. */

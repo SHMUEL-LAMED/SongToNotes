@@ -20,6 +20,7 @@ import {
 } from "../lib/denoise";
 import type { ActionOutcome } from "../lib/assistantActions";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
@@ -307,6 +308,9 @@ export function DenoiseTool() {
     const blob = encodeWav({ channels, sampleRate: cleaned.sampleRate });
     return new File([blob], `${safeFilename(audio.file.name)}-clean.wav`, { type: "audio/wav" });
   }, [audio, result]);
+
+  // The cleaned recording, not the noisy one, is what goes on to the next tool.
+  useOfferResult(stale ? null : result, `${safeFilename(audio?.file.name ?? "clean")}-clean.wav`, () => buildFile()!);
 
   const download = useCallback((): ActionOutcome => {
     const file = buildFile();

@@ -5,6 +5,7 @@ import { decodeAudioFile } from "../lib/audio";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
+import { useOfferResult } from "../lib/currentFile";
 import {
   MAX_LATENCY_OFFSET_MS,
   MAX_TAKE_SECONDS,
@@ -672,6 +673,14 @@ export function RecorderTool() {
     if (files.length > room) setNotice(`נוספו ${room} קבצים בלבד — אפשר עד ${MAX_TRACKS} ערוצים.`);
     setBusy(null);
   };
+
+  // The mix of every take can go on to another tool — the vocal remover, a
+  // ringtone, the converter — built only if someone sends it.
+  useOfferResult(audibleTracks(tracks).length ? tracks : null, "multitrack-mix.wav", async () => {
+    const rendered = await renderMix(tracksRef.current, 44_100);
+    const blob = encodeWav({ channels: [rendered.getChannelData(0), rendered.getChannelData(1)], sampleRate: rendered.sampleRate });
+    return new File([blob], "multitrack-mix.wav", { type: "audio/wav" });
+  });
 
   const exportMix = async (): Promise<File | null> => {
     if (!tracksRef.current.length) return null;

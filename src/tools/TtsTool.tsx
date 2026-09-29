@@ -10,6 +10,7 @@ import { encodeMp3 } from "../lib/convert";
 import { ttsCost } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -71,6 +72,8 @@ export function TtsTool({ initial = null }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ file: File; url: string; text: string } | null>(null);
+  // The spoken file can go on to another tool — a ringtone, the mixer.
+  useOfferResult(result?.file ?? null, result?.file.name ?? "speech.mp3", () => result!.file);
   const abortRef = useRef<AbortController | null>(null);
   // Chrome drops an utterance it no longer sees referenced, and its `onend`
   // with it; holding it here keeps the buttons in step with the voice.

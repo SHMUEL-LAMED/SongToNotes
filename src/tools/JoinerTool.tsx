@@ -5,6 +5,7 @@ import { Transport } from "../components/Transport";
 import { buildPeaks, decodeAudioFile, formatTime, getOfflineAudioContextClass } from "../lib/audio";
 import { BITRATES, encodeMp3 } from "../lib/convert";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo, hasHandoff, takeHandoffFiles } from "../lib/handoff";
 import { MAX_TRANSITION_SECONDS, clampTransitionSeconds, clampTrim, joinPcmSteps, layoutTimeline, moveItem, mp3SampleRate, outputFormat, type PcmClip, type Transition, type TransitionKind } from "../lib/joiner";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -633,6 +634,13 @@ export function JoinerTool() {
   };
 
   const baseName = () => `${safeFilename(clips.map((clip) => clip.name).join("+").slice(0, 60)) || "joined"}-joined`;
+
+  // The joined file, not the first clip, is what goes on to the next tool.
+  useOfferResult(clips.length > 1 ? preview : null, `${baseName()}.wav`, () => {
+    const joined = preview!;
+    const channels = Array.from({ length: joined.numberOfChannels }, (_, index) => joined.getChannelData(index));
+    return new File([encodeWav({ channels, sampleRate: joined.sampleRate })], `${baseName()}.wav`, { type: "audio/wav" });
+  });
 
   /** Renders the join as a file; downloads it unless told otherwise. */
   const exportJoin = async (as: Format, download = true): Promise<File | null> => {

@@ -5,6 +5,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { formatTime } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { MicRecorder, recordingExtension } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -131,6 +132,9 @@ export function VoiceTool() {
     const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, "")) || "voice";
     return new File([blob], `${base}-${effect}.wav`, { type: "audio/wav" });
   }, [audio, effect, result]);
+
+  // The changed voice is what goes on to the next tool (a ringtone, say).
+  useOfferResult(effect === "none" ? null : result, `${safeFilename(audio?.file.name.replace(/\.[^/.]+$/, "") ?? "") || "voice"}-${effect}.wav`, () => buildFile()!);
 
   const exportWav = () => {
     const file = buildFile();
