@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALL_TOOLS, TOOLS, findAnyTool, findTool } from "./tools";
 import { WORKFLOWS } from "./workflows";
@@ -28,5 +29,14 @@ describe("workflows", () => {
 
   it("keep at least one step once hidden tools drop out", () => {
     for (const flow of WORKFLOWS) expect(flow.steps.some((step) => findTool(step.tool)), flow.id).toBe(true);
+  });
+});
+
+describe("how-to videos", () => {
+  it("exist for every tool that shows one, and every video belongs to a tool", () => {
+    const dir = new URL("../../public/videos/", import.meta.url);
+    const files = readdirSync(dir).filter((name) => name.endsWith(".mp4"));
+    const withVideo = ALL_TOOLS.filter((tool) => tool.video).map((tool) => `${tool.id}.mp4`);
+    expect([...files].sort()).toEqual([...withVideo].sort());
   });
 });

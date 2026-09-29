@@ -16,6 +16,7 @@ import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { SiteFooter } from "./components/SiteFooter";
 import { ToolPromo } from "./components/ToolPromo";
+import { ToolVideo } from "./components/ToolVideo";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
@@ -640,6 +641,7 @@ function WorkspaceApp() {
 
         {tool && (
           <>
+            {shown && <ToolVideo tool={tool} />}
             {shown && <NextSteps tool={tool} onOpen={go} />}
             <SiteFooter onOpen={go} onFeedback={openFeedback} />
           </>

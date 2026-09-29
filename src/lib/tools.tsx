@@ -45,6 +45,8 @@ export type ToolDefinition = {
   quick?: string;
   /** Tools that naturally come next, offered at the foot of the page. */
   related: string[];
+  /** True when a short how-to video sits in public/videos/<id>.mp4, shown under the tool. */
+  video?: boolean;
   /** True when the tool sends audio or text to the site's server to do its work. */
   server?: boolean;
   /**
@@ -108,6 +110,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["צלצול", "חיתוך", "טלפון", "fade"],
     quick: "צלצול לטלפון",
     related: ["convert", "vocals", "video"],
+    video: true,
   },
   {
     id: "beats",
@@ -121,6 +124,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["תופים", "ביט", "מקצב", "סיקוונסר", "drum machine", "לופ"],
     badge: "חדש",
     related: ["mixer", "metronome", "rhythm"],
+    video: true,
   },
   {
     id: "convert",
@@ -134,6 +138,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["המרה", "mp3", "wav", "פורמט", "קצב דגימה"],
     quick: "המרה ל־MP3 / WAV",
     related: ["ringtone", "mixer", "video"],
+    video: true,
   },
   {
     id: "video",
@@ -146,6 +151,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "create",
     tags: ["וידאו", "mp4", "חילוץ שמע", "סרטון"],
     related: ["transcript", "ringtone", "convert"],
+    video: true,
   },
   {
     id: "vocals",
@@ -159,6 +165,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["קריוקי", "ווקאל", "אינסטרומנטלי", "פלייבק"],
     quick: "קריוקי בלי שירה",
     related: ["lyrics", "mixer", "speed"],
+    video: true,
   },
   {
     id: "mixer",
@@ -172,6 +179,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["מיקס", "לופ", "ערוצים", "פאן", "עוצמה"],
     quick: "ערוץ במיקסר",
     related: ["beats", "vocals", "convert"],
+    video: true,
   },
   {
     id: "lyrics",
@@ -198,6 +206,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "create",
     tags: ["הקראה", "דיבור", "tts", "קול", "mp3"],
     related: ["transcript", "convert", "mixer"],
+    video: true,
     server: true,
   },
   {
@@ -212,6 +221,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["תרגול", "מהירות", "טרנספוזיציה", "לולאה"],
     quick: "האטה לתרגול",
     related: ["notes", "chords", "metronome"],
+    video: true,
   },
   {
     id: "metronome",
@@ -224,6 +234,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "practice",
     tags: ["קצב", "bpm", "תרגול", "מקצב"],
     related: ["rhythm", "beats", "tuner"],
+    video: true,
   },
   {
     id: "tuner",
@@ -236,6 +247,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "practice",
     tags: ["טיונר", "כיוון", "גיטרה", "כינור", "סנטים"],
     related: ["metronome", "chords", "ear"],
+    video: true,
   },
   {
     id: "piano",
@@ -261,6 +273,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["אקורדים", "מהלך", "הרמוניה", "כתיבת שירים", "ארפג׳יו", "בס", "midi"],
     badge: "חדש",
     related: ["songbook", "theory", "beats"],
+    video: true,
   },
   {
     id: "theory",
@@ -287,6 +300,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["גיטרה", "אקורדים", "מעברים", "תרגול", "מתחילים", "one minute changes"],
     badge: "חדש",
     related: ["chords", "songbook", "tuner"],
+    video: true,
   },
   {
     id: "rhythm",
@@ -299,6 +313,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "practice",
     tags: ["קצב", "ריתמוס", "תרגול", "טיימינג", "תופים"],
     related: ["metronome", "beats", "ear"],
+    video: true,
   },
   {
     id: "ear",
@@ -311,6 +326,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     category: "practice",
     tags: ["שמיעה", "מרווחים", "אקורדים", "סולפז׳", "תרגול"],
     related: ["theory", "piano", "rhythm"],
+    video: true,
   },
   {
     id: "songbook",
@@ -350,6 +366,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["אקורדים", "גיטרה", "אחיזות", "קאפו", "טרנספוזיציה"],
     quick: "אקורדים לגיטרה",
     related: ["songbook", "speed", "tuner"],
+    video: true,
   },
   {
     id: "identify",
@@ -376,6 +393,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
     tags: ["bpm", "סולם", "ניתוח", "די ג'יי"],
     quick: "קצב וסולם",
     related: ["chords", "notes", "theory"],
+    video: true,
   },
 ];
 

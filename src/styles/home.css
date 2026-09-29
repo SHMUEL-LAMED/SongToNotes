@@ -565,6 +565,24 @@
 
 /* ---- what comes next, at the foot of a tool ---- */
 
+.tool-video {
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  margin: 48px auto 0;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.tool-video h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 18px; }
+.tool-video video {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: #000;
+}
+
 .next-steps {
   width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
   margin: 48px auto 0;

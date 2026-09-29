@@ -1263,7 +1263,7 @@ input[type="radio"] { accent-color: var(--accent); }
 
 @media print {
   .sidebar, .topbar, .tabbar, .downloads-card, .settings-panel, .refine-panel,
-  .playback-card, .result-toolbar, .site-footer, .next-steps,
+  .playback-card, .result-toolbar, .site-footer, .next-steps, .tool-video,
   .assistant-launcher, .assistant-panel, .skip-link { display: none !important; }
   .app { display: block; }
   .app::before, .app::after { display: none; }
