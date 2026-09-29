@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
-import { defineConfig } from "vite";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { defineConfig, runnerImport } from "vite";
 import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -118,6 +119,73 @@ function binaryAsTextParts(): Plugin {
   };
 }
 
+const SITE_URL = "https://shmuel-lamed.github.io/SongToNotes/";
+const SITE_NAME = "כלי מוזיקה";
+
+function escapeAttr(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+/** Sets the content of the first tag matching `pattern`'s attribute. */
+function setAttr(html: string, pattern: RegExp, value: string) {
+  return html.replace(pattern, (tag) =>
+    tag.replace(/(content|href)="[^"]*"/, (_, name: string) => `${name}="${escapeAttr(value)}"`),
+  );
+}
+
+type ToolPage = { id: string; title: string; tagline: string; description: string };
+
+/**
+ * The tools live behind hash routes, which search engines fold into the one
+ * home page. This writes a real page for every visible tool —
+ * `<tool>/index.html`, the same app with its own title, description and
+ * canonical address — and lists them all in sitemap.xml, so each tool can be
+ * found on its own. The router reads the tool from the path on these pages.
+ */
+function toolPages(): Plugin {
+  let outDir = "dist";
+  return {
+    name: "tool-pages",
+    apply: "build",
+    enforce: "post",
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    async writeBundle() {
+      const { module } = await runnerImport<{ TOOLS: ToolPage[] }>("./src/lib/tools.tsx");
+      const shell = readFileSync(join(outDir, "index.html"), "utf8")
+        // Relative links would point inside the tool's folder.
+        .replace(/(href|src)="\.\//g, '$1="/SongToNotes/');
+
+      for (const tool of module.TOOLS) {
+        const url = `${SITE_URL}${tool.id}/`;
+        const title = `${tool.title} — ${tool.tagline} | ${SITE_NAME}`;
+        let html = shell.replace(/<title>[^<]*<\/title>/, `<title>${escapeAttr(title)}</title>`);
+        html = setAttr(html, /<meta\s+name="description"[^>]*>/, tool.description);
+        html = setAttr(html, /<link rel="canonical"[^>]*>/, url);
+        html = setAttr(html, /<meta property="og:title"[^>]*>/, title);
+        html = setAttr(html, /<meta\s+property="og:description"[^>]*>/, tool.description);
+        html = setAttr(html, /<meta property="og:url"[^>]*>/, url);
+        mkdirSync(join(outDir, tool.id), { recursive: true });
+        writeFileSync(join(outDir, tool.id, "index.html"), html);
+      }
+
+      const urls = [SITE_URL, ...module.TOOLS.map((tool) => `${SITE_URL}${tool.id}/`)];
+      const sitemap = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ...urls.map(
+          (loc, index) =>
+            `  <url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>${index === 0 ? "1.0" : "0.8"}</priority></url>`,
+        ),
+        "</urlset>",
+        "",
+      ].join("\n");
+      writeFileSync(join(outDir, "sitemap.xml"), sitemap);
+    },
+  };
+}
+
 export default defineConfig({
   base: "/SongToNotes/",
   define: {
@@ -127,6 +195,7 @@ export default defineConfig({
     react(),
     inlineBasicPitchModel(),
     binaryAsTextParts(),
+    toolPages(),
     viteStaticCopy({
       targets: [
         {
