@@ -333,9 +333,10 @@ export async function separateOnServer(
       throw new AiError("provider_error", state.message ? `ההפרדה נכשלה: ${state.message}` : MESSAGES.provider_error);
     }
     // Without a percentage from the model, the wait itself is the progress:
-    // a song takes about a minute, so the bar creeps toward the end.
+    // the accurate settings take two or three minutes a song, so the bar
+    // creeps toward the end over about that long.
     const elapsed = (Date.now() - startedAt) / 1000;
-    const guessed = Math.min(85, 10 + Math.round(elapsed * 1.2));
+    const guessed = Math.min(85, 10 + Math.round(elapsed * 0.45));
     report(
       state.status === "starting" || state.status === "queued" ? "ממתין לתור בשרת…" : "השרת מפריד את השירה מהליווי…",
       state.percent !== null ? 10 + Math.round(state.percent * 0.75) : guessed,

@@ -251,8 +251,8 @@ export const ACTIONS: ActionSpec[] = [
   // ---- vocals ----
   define("vocals", "read", "vocals.read", "מצב ההפרדה", "הקובץ, המצב, ההגדרות והאם יש תוצאה."),
   define("vocals", "write", "vocals.set", "הגדרות ההפרדה", "מצב פשוט או מקצועי; מה להשאיר; עוצמת הפרדה (0..100); שמירת בס; השוואה למקור.", ["mode?:simple|pro", "target?:instrumental|vocals", "strength?:number", "keepBass?:boolean", "compare?:boolean"]),
-  define("vocals", "write", "vocals.ai", "הפרדה מלאה עם AI", "מריץ הפרדה מלאה בשרת למה שנבחר להשאיר. לוקח כדקה, ברקע."),
-  define("vocals", "write", "vocals.stems", "הפרדה לערוצים", "במצב מקצועי: מפריד לשירה, תופים, בס ושאר הכלים. לוקח כדקה, ברקע."),
+  define("vocals", "write", "vocals.ai", "הפרדה מלאה עם AI", "מריץ הפרדה מלאה בשרת, במודל המדויק ביותר, למה שנבחר להשאיר. לוקח שתיים־שלוש דקות, ברקע."),
+  define("vocals", "write", "vocals.stems", "הפרדה לערוצים", "במצב מקצועי: מפריד לשירה, תופים, בס ושאר הכלים. לוקח שתיים־שלוש דקות, ברקע."),
   define("vocals", "write", "vocals.stem", "ערוץ", "עוצמה (0..150), פאן (-100..100), השתקה וסולו לערוץ במצב מקצועי.", ["name:vocals|drums|bass|other|guitar|piano", "gain?:number", "pan?:number", "muted?:boolean", "solo?:boolean"]),
   define("vocals", "write", "vocals.download", "הורדת התוצאה", "מוריד את התוצאה כ־WAV."),
   define("vocals", "write", "vocals.save", "שמירת התוצאה", "שומר את התוצאה באזור האישי."),
