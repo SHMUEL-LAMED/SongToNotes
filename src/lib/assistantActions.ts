@@ -91,6 +91,7 @@ export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
   "beats", "theory", "progressions", "changes",
+  "recorder", "denoise", "joiner", "melody", "visualizer", "voice", "songcard", "drumkit", "setlist",
 ].filter((id) => findTool(id) !== null);
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -153,6 +154,61 @@ export const ACTIONS: ActionSpec[] = [
   define("changes", "write", "changes.set", "זוג אקורדים לתרגול", "בוחר שני אקורדים (Em, Am, D, A, E, G, C, Dm, E7, A7, D7, G7, C7, Fmaj7, F) ומשך סבב בשניות (30, 60 או 120).", ["first?", "second?", "seconds?:number"]),
   define("changes", "write", "changes.start", "התחלת סבב", "מתחיל סבב מעברים עם ספירה לאחור; הגולש לוחץ בכל מעבר."),
   define("changes", "read", "changes.stats", "התוצאות בזוג", "השיא, מספר הסבבים והתוצאות האחרונות (מעברים לדקה) בזוג שנבחר."),
+
+  // ---- multitrack recorder ----
+  define("recorder", "write", "recorder.record", "הקלטת ערוץ", "מתחיל להקליט ערוץ חדש מהמיקרופון מעל מה שכבר הוקלט (עם ספירה לאחור), או עוצר הקלטה.", ["command:start|stop"]),
+  define("recorder", "write", "recorder.play", "ניגון ההקלטה", "מנגן את כל הערוצים יחד מההתחלה, או עוצר.", ["command:play|stop"]),
+  define("recorder", "write", "recorder.set", "הגדרות המקליט", "קצב המטרונום (40..240), האם לשמוע אותו, ספירה לאחור בתיבות (0..2).", ["bpm?:number", "click?:boolean", "countIn?:number"]),
+  define("recorder", "read", "recorder.tracks", "הערוצים שהוקלטו", "רשימת הערוצים: שם, אורך, עוצמה, השתקה וסולו."),
+  define("recorder", "write", "recorder.export", "הורדת המיקס", "מוריד את כל הערוצים כמיקס אחד בקובץ WAV."),
+
+  // ---- noise reduction ----
+  define("denoise", "write", "denoise.set", "הגדרות ניקוי", "עוצמת ניקוי הרחש באחוזים (0..100), סינון זמזום (off|50|60), הסרת קליקים, וחיתוך תדרים נמוכים.", ["strength?:number", "hum?:off|50|60", "declick?:boolean", "highpass?:boolean"]),
+  define("denoise", "write", "denoise.run", "ניקוי ההקלטה", "מנקה את הקובץ שנבחר לפי ההגדרות."),
+  define("denoise", "write", "denoise.download", "הורדת הקובץ הנקי", "מוריד את התוצאה כקובץ WAV."),
+
+  // ---- join and cut ----
+  define("joiner", "read", "joiner.list", "הקבצים בחיבור", "רשימת הקבצים לפי הסדר, עם החיתוך של כל אחד והאורך הכולל."),
+  define("joiner", "write", "joiner.set", "הגדרות החיבור", "מעבר בין הקבצים: crossfade (מעבר רך) או gap (שקט), ומשכו בשניות (0..10).", ["transition?:crossfade|gap|none", "seconds?:number"]),
+  define("joiner", "write", "joiner.export", "הורדת הקובץ המחובר", "מחבר ומוריד כקובץ WAV או MP3.", ["format?:wav|mp3"]),
+
+  // ---- melody generator ----
+  define("melody", "write", "melody.generate", "מנגינה חדשה", "יוצר מנגינה חדשה בסולם ובאווירה שנבחרו.", [["key?", "טוניקה, למשל C או F♯"], "scale?:major|minor|pentatonic|minorPentatonic|dorian|harmonicMinor|blues", "mood?:calm|happy|sad|energetic"]),
+  define("melody", "write", "melody.set", "הגדרות המנגינה", "קצב (50..200), מספר תיבות (2, 4 או 8), צפיפות תווים (1..5), טווח באוקטבות (1 או 2) וליווי אקורדים.", ["bpm?:number", "bars?:number", "density?:number", "range?:number", "chords?:boolean"]),
+  define("melody", "write", "melody.play", "ניגון המנגינה", "מנגן או עוצר את המנגינה.", ["command:play|stop"]),
+  define("melody", "write", "melody.export", "הורדת MIDI", "מוריד את המנגינה (והליווי) כקובץ MIDI."),
+  define("melody", "write", "melody.piano", "המנגינה לפסנתר", "שולח את המנגינה לפסנתר הווירטואלי ללימוד."),
+
+  // ---- song visualizer ----
+  define("visualizer", "write", "visualizer.set", "עיצוב הסרטון", "סגנון (bars|wave|circle|particles), צבע (0..360), כותרת, אמן ויחס מסך (square|portrait|landscape).", ["style?:bars|wave|circle|particles", "hue?:number", "title?", "artist?", "aspect?:square|portrait|landscape"]),
+  define("visualizer", "write", "visualizer.preview", "תצוגה מקדימה", "מנגן או עוצר את התצוגה המקדימה.", ["command:play|stop"]),
+  define("visualizer", "write", "visualizer.render", "יצירת הסרטון", "מקליט את הסרטון מהקטע שנבחר (לוקח כאורך הקטע)."),
+
+  // ---- voice changer ----
+  define("voice", "write", "voice.effect", "אפקט קול", "בוחר אפקט ומחיל אותו על ההקלטה.", ["effect:none|robot|chipmunk|deep|radio|alien|echo|hall|telephone|whisper"]),
+  define("voice", "write", "voice.record", "הקלטת קול", "מתחיל או עוצר הקלטה מהמיקרופון.", ["command:start|stop"]),
+  define("voice", "write", "voice.play", "השמעת התוצאה", "משמיע או עוצר את הקול עם האפקט.", ["command:play|stop"]),
+  define("voice", "write", "voice.download", "הורדת הקול", "מוריד את הקול עם האפקט כקובץ WAV."),
+
+  // ---- song card ----
+  define("songcard", "write", "songcard.set", "פרטי הכרטיס", "שם השיר, אמן, סולם, קצב, אקורדים (מופרדים ברווח), עיצוב, גודל (post|story) וצבע (0..360).", ["title?", "artist?", "key?", "bpm?:number", "chords?", "theme?:gradient|dark|light|vinyl", "size?:post|story", "hue?:number"]),
+  define("songcard", "write", "songcard.download", "הורדת הכרטיס", "מוריד את הכרטיס כתמונת PNG."),
+  define("songcard", "write", "songcard.share", "שיתוף הכרטיס", "פותח את השיתוף של המכשיר עם התמונה והקישור לאתר."),
+
+  // ---- electronic drum kit ----
+  define("drumkit", "write", "drumkit.hit", "מכה בתוף", "מכה בתוף אחד.", ["drum:kick|snare|hat|open|crash|ride|tom1|tom2|floor|clap"]),
+  define("drumkit", "write", "drumkit.record", "הקלטת לולאה", "מתחיל או עוצר הקלטה של מה שמנגנים.", ["command:start|stop"]),
+  define("drumkit", "write", "drumkit.loop", "ניגון הלולאה", "מנגן את מה שהוקלט בלולאה, או עוצר.", ["command:play|stop"]),
+  define("drumkit", "write", "drumkit.set", "הגדרות התופים", "ערכת צליל (acoustic|electronic|808) ועוצמה (0..100), ומטרונום בקצב (40..240).", ["kit?:acoustic|electronic|808", "volume?:number", "bpm?:number", "click?:boolean"]),
+  define("drumkit", "write", "drumkit.export", "הורדת הלולאה", "מוריד את מה שהוקלט כקובץ WAV."),
+
+  // ---- setlist ----
+  define("setlist", "read", "setlist.read", "הסט־ליסט", "שם הסט, השירים לפי הסדר (שם, סולם, קצב, משך) והמשך הכולל."),
+  define("setlist", "write", "setlist.add", "הוספת שיר לסט", "מוסיף שיר לסוף הרשימה.", ["title", "key?", "bpm?:number", ["minutes?:number", "משך בדקות"], "notes?"]),
+  define("setlist", "write", "setlist.remove", "הסרת שיר מהסט", "מסיר שיר לפי מספרו ברשימה (מ־1).", ["index:number"]),
+  define("setlist", "write", "setlist.rename", "שם הסט", "משנה את שם הסט.", ["name"]),
+  define("setlist", "write", "setlist.stage", "מצב במה", "פותח או סוגר את מצב הבמה במסך מלא.", ["on:boolean"]),
+  define("setlist", "write", "setlist.print", "הדפסת הסט", "פותח את חלון ההדפסה עם הרשימה."),
 
   // ---- theory explorer ----
   define("theory", "write", "theory.set", "סולם בסייר התאוריה", "בוחר טוניקה (C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B), סולם או מודוס, משולשים או ספטאקורדים ותצוגה.", [["root?", "שם התו, למשל C או F♯"], "scale?:major|minor|dorian|phrygian|lydian|mixolydian|locrian|harmonicMinor|melodicMinor|majorPentatonic|minorPentatonic|blues", "sevenths?:boolean", "view?:piano|guitar"]),

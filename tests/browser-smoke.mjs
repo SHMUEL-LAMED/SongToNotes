@@ -74,7 +74,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 
 // --- hub ---
 const cards = await page.locator(".tool-card").count();
-log(cards === 24, "hub renders all 24 tool cards", `found ${cards}`);
+log(cards === 33, "hub renders all 33 tool cards", `found ${cards}`);
 
 await page.locator(".hub-search input").fill("קריוקי");
 await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ log(filtered >= 1 && filtered < 10, "hub search filters", `found ${filtered}`);
 await page.locator(".hub-search input").fill("");
 
 // --- every tool opens ---
-const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "beats", "theory", "pads", "progressions", "changes", "identify"];
+const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "piano", "ear", "analyze", "transcript", "chords", "songbook", "convert", "video", "rhythm", "mixer", "lyrics", "tts", "beats", "theory", "pads", "progressions", "changes", "identify", "recorder", "denoise", "joiner", "melody", "visualizer", "voice", "songcard", "drumkit", "setlist"];
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
