@@ -653,7 +653,7 @@ function WorkspaceApp() {
           {shown === "voice" && <VoiceTool />}
           {shown === "songcard" && <SongCardTool />}
           {shown === "drumkit" && <DrumKitTool />}
-          {shown === "setlist" && <SetlistTool />}
+          {shown === "setlist" && <SetlistTool onOpenWork={openWork} />}
         </Suspense>
 
         {tool && (
