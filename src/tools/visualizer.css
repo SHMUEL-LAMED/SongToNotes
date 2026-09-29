@@ -1,0 +1,162 @@
+/* Song visualizer. Every colour comes from the tokens; the canvas itself is
+   always dark because it is what ends up in the video, whatever the theme. */
+
+.visualizer-tool .workspace-card { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+.visualizer-region { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.visualizer-region.is-locked { opacity: 0.6; pointer-events: none; }
+.visualizer-region-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.visualizer-region-head span { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Preview beside the settings on a wide screen, stacked on a phone. */
+.visualizer-studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.visualizer-stage {
+  position: sticky;
+  top: calc(var(--topbar-h) + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.visualizer-frame {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 22px 22px;
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+/* The canvas keeps its full 1080p resolution for the recording; CSS only
+   scales what is shown. The height cap keeps a 9:16 story from filling two
+   screens on a laptop. */
+.visualizer-canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(66vh, 620px);
+  border-radius: var(--radius-sm);
+  background: #07070b;
+  box-shadow: var(--shadow-md);
+}
+
+.visualizer-stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.visualizer-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.visualizer-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0;
+  min-width: 0;
+}
+
+.visualizer-aspects button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding-inline: 6px;
+}
+.visualizer-aspects button small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.visualizer-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line-strong);
+}
+
+/* The hue slider's track shows the hues it chooses between. The page is
+   right to left, so the slider's minimum sits on the right, and so does red. */
+.visualizer-hue {
+  --visualizer-hues: linear-gradient(
+    to left,
+    hsl(0, 85%, 58%),
+    hsl(60, 85%, 55%),
+    hsl(120, 70%, 48%),
+    hsl(180, 75%, 48%),
+    hsl(240, 80%, 62%),
+    hsl(300, 80%, 60%),
+    hsl(359, 85%, 58%)
+  );
+}
+input.visualizer-hue[type="range"]::-webkit-slider-runnable-track { background: var(--visualizer-hues); height: 8px; }
+input.visualizer-hue[type="range"]::-moz-range-track { background: var(--visualizer-hues); height: 8px; }
+input.visualizer-hue[type="range"]::-moz-range-progress { background: transparent; }
+input.visualizer-hue[type="range"]::-webkit-slider-thumb { margin-top: -7px; }
+
+.visualizer-image-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.visualizer-image-row label { position: relative; overflow: hidden; }
+.visualizer-image-row small { flex-basis: 100%; }
+
+.visualizer-note,
+.visualizer-hidden-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+}
+.visualizer-note svg,
+.visualizer-hidden-note svg { flex: none; margin-top: 4px; }
+
+.visualizer-result-video {
+  display: block;
+  justify-self: center;
+  width: auto;
+  max-width: 100%;
+  max-height: min(60vh, 520px);
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+@media (max-width: 860px) {
+  .visualizer-studio { grid-template-columns: minmax(0, 1fr); }
+  .visualizer-stage { position: static; }
+}
+
+@media (max-width: 480px) {
+  .visualizer-frame { padding: 8px; }
+  .visualizer-canvas { max-height: 60vh; }
+  .visualizer-aspects button small { font-size: 10px; }
+}

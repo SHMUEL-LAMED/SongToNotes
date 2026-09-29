@@ -1,0 +1,192 @@
+/* ==========================================================================
+   Melody generator
+   The shared controls (settings panels, segmented controls, chips, buttons)
+   come from controls.css; this file only lays them out and draws the roll.
+   Every colour resolves through the tokens, so both themes and the tool's
+   hue carry through.
+   ========================================================================== */
+
+.melody-tool { min-width: 0; }
+
+/* ---- settings ---- */
+
+.melody-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px 22px;
+}
+.melody-setup .melody-field-wide { grid-column: 1 / -1; }
+.melody-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.melody-shape {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px 20px;
+  align-items: end;
+}
+.melody-check { align-self: end; }
+
+/* ---- the deck: play, new melody, locks ---- */
+
+.melody-deck {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+}
+.melody-deck .beat-play { flex: none; }
+.melody-deck-main,
+.melody-deck-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.melody-deck-main { flex: 1 1 320px; }
+.melody-deck-toggles { flex: 1 1 100%; }
+
+/* ---- the stage: summary, seed, roll ---- */
+
+.melody-stage {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.melody-stage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.melody-stage-head > strong {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.melody-stage-head > strong svg { color: var(--accent); }
+
+.melody-seed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.melody-seed label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.melody-seed input {
+  width: 124px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.melody-seed input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.melody-seed input[aria-invalid="true"] { border-color: var(--danger); }
+.melody-seed-error { flex-basis: 100%; color: var(--danger); font-size: 12px; }
+
+.melody-roll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--roll-gutter);
+}
+.melody-roll svg { display: block; }
+
+.melody-row { fill: var(--roll-row-black); }
+.melody-row.is-scale { fill: var(--roll-row-even); }
+.melody-row.is-tonic { fill: var(--accent-tint); }
+.melody-row-label {
+  fill: var(--roll-label);
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: end;
+  dominant-baseline: central;
+}
+.melody-row-label.is-tonic { fill: var(--accent-text); font-weight: 700; }
+.melody-bar-line { stroke: var(--roll-bar-line); stroke-width: 1; }
+.melody-beat-line { stroke: var(--roll-grid-line); stroke-width: 1; }
+
+.melody-chord rect { fill: var(--surface-3); stroke: var(--line); transition: fill 0.15s var(--ease); }
+.melody-chord text {
+  fill: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.melody-chord.is-now rect { fill: var(--accent); stroke: var(--accent); }
+.melody-chord.is-now text { fill: var(--on-accent); }
+
+.melody-note {
+  fill: var(--roll-note-bottom);
+  fill-opacity: 0.62;
+  stroke: var(--roll-note-edge);
+  stroke-width: 1;
+  transition: fill 0.1s var(--ease), fill-opacity 0.1s var(--ease);
+}
+.melody-note.is-strong { fill: var(--roll-note-top); fill-opacity: 1; }
+.melody-note.is-now { fill: var(--warning); fill-opacity: 1; stroke: var(--text); }
+.melody-playhead { stroke: var(--roll-playhead); stroke-width: 2; }
+
+.melody-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.melody-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--roll-note-bottom);
+  opacity: 0.62;
+  border: 1px solid var(--roll-note-edge);
+}
+.melody-swatch.is-strong { background: var(--roll-note-top); opacity: 1; }
+.melody-legend .melody-swatch:not(:first-child) { margin-inline-start: 8px; }
+
+/* ---- small screens ---- */
+
+@media (max-width: 640px) {
+  .melody-setup { grid-template-columns: minmax(0, 1fr); }
+  .melody-setup .segmented-control button { min-width: 0; padding: 9px 6px; }
+  .melody-shape { grid-template-columns: minmax(0, 1fr); }
+  .melody-shape .segmented-control button { min-width: 0; }
+  .melody-deck { gap: 12px; }
+  .melody-deck .beat-play { width: 80px; height: 80px; }
+  .melody-deck-main { flex-basis: calc(100% - 96px); }
+  .melody-deck-main .primary-button { flex: 1 1 100%; }
+  .melody-deck-main .secondary-button { flex: 1 1 auto; }
+  .melody-stage { padding: 12px; }
+  .melody-seed input { width: 112px; }
+}
+
+/* "שתי אוקטבות" is the longest label; it stays on one line in a narrow column. */
+.melody-shape .segmented-control button { min-width: 0; white-space: nowrap; padding-inline: 8px; }

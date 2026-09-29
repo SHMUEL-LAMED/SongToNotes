@@ -1,0 +1,58 @@
+/* Noise reduction. Everything else comes from the shared controls; these are
+   the few pieces only this tool has. */
+
+.denoise-tool .denoise-find {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.denoise-tool .denoise-checks {
+  gap: 10px;
+  justify-content: center;
+}
+
+.denoise-tool .denoise-checks .checkbox-field {
+  margin: 0;
+}
+
+.denoise-tool .denoise-listen {
+  margin-top: 4px;
+}
+
+.denoise-tool .denoise-listen .segmented-control {
+  max-width: 420px;
+}
+
+.denoise-tool .denoise-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.denoise-tool .denoise-stats li {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-tint);
+  color: var(--accent-text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.denoise-tool .denoise-stats b {
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .denoise-tool .denoise-stats li {
+    font-size: 12.5px;
+    padding: 5px 10px;
+  }
+}

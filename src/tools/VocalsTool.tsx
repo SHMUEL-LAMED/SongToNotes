@@ -533,7 +533,7 @@ export function VocalsTool({ initial = null }: Props) {
         if (busy) return { ok: false, message: "כבר עובד" };
         if (mode !== "simple") setMode("simple");
         void runAi();
-        return { ok: true, message: "הפרדת ה־AI התחילה ורצה ברקע (כדקה); ההתקדמות מוצגת על המסך" };
+        return { ok: true, message: "הפרדת ה־AI התחילה ורצה ברקע (שתיים־שלוש דקות, בדיוק מרבי); ההתקדמות מוצגת על המסך" };
       },
       "vocals.stems": () => {
         if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
@@ -541,7 +541,7 @@ export function VocalsTool({ initial = null }: Props) {
         if (!user) return { ok: false, message: "הפרדה לערוצים דורשת חשבון מחובר" };
         if (mode !== "pro") setMode("pro");
         void runStems();
-        return { ok: true, message: "ההפרדה לערוצים התחילה ורצה ברקע (כדקה)" };
+        return { ok: true, message: "ההפרדה לערוצים התחילה ורצה ברקע (שתיים־שלוש דקות)" };
       },
       "vocals.stem": ({ name, gain, pan, muted, solo }) => {
         if (!stemsReady || !stems) return { ok: false, message: "אין ערוצים; vocals.stems מפריד" };
@@ -729,7 +729,7 @@ export function VocalsTool({ initial = null }: Props) {
                         <h3>
                           <Sparkles size={16} /> הפרדה לערוצים נפרדים
                         </h3>
-                        <p>שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו, בשרת. לוקח כדקה.{!user ? " צריך להתחבר לחשבון." : ""}</p>
+                        <p>שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו, בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות.{!user ? " צריך להתחבר לחשבון." : ""}</p>
                       </div>
                     </div>
                     <button className="primary-button compact" type="button" onClick={() => void runStems()} disabled={busy}>
@@ -916,7 +916,7 @@ export function VocalsTool({ initial = null }: Props) {
                     {serverMissing === true
                       ? "מודל Demucs אמיתי מפריד את הקול, התופים, הבס ושאר המוזיקה בדפדפן. בפעם הראשונה יורדים כ־180MB; כדאי להשאיר את הכרטיסייה פתוחה. אין צורך להתחבר."
                       : serverMissing === false
-                        ? `נעשית בשרת של האתר ועובדת גם בטלפון. לוקח בדרך כלל כדקה.${rules.enabled && rules.prices.separate > 0 ? ` עולה ${creditsLabel(rules.prices.separate)} לשיר.` : ""}${!user ? " צריך להתחבר לחשבון." : ""}`
+                        ? `נעשית בשרת של האתר במודל ההפרדה המדויק ביותר, ועובדת גם בטלפון. לוקח בדרך כלל שתיים־שלוש דקות.${rules.enabled && rules.prices.separate > 0 ? ` עולה ${creditsLabel(rules.prices.separate)} לשיר.` : ""}${!user ? " צריך להתחבר לחשבון." : ""}`
                         : "בודק את מנוע ההפרדה הזמין…"}
                   </p>
                 </div>

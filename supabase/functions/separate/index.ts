@@ -11,7 +11,9 @@
  * Settings (secrets or private.stt_settings):
  *   SEPARATION_API_KEY   a Replicate token — required
  *   SEPARATION_MODEL     default ryan5453/demucs
- *   SEPARATION_INPUT     extra input fields as JSON, default {"stem":"vocals","output_format":"wav"}
+ *   SEPARATION_INPUT     extra input fields as JSON. Default {"stem":"vocals","output_format":"wav"},
+ *                        and for the default model also the most accurate
+ *                        settings it has (see ACCURATE below)
  *   SEPARATION_STEMS_INPUT
  *                        the input for a "stems" (every part) job, as JSON;
  *                        default is SEPARATION_INPUT with {"stem":"none"},
@@ -30,6 +32,17 @@ const BUCKET = "works";
 const MAX_BYTES = 60 * 1024 * 1024;
 const DEFAULT_DAILY = 12;
 const REPLICATE = "https://api.replicate.com/v1";
+const DEFAULT_MODEL = "ryan5453/demucs";
+
+/**
+ * The most accurate settings the default model offers: the fine-tuned Hybrid
+ * Transformer Demucs (one network per part, the best of the family on vocals)
+ * and two shifted passes averaged, which leaves less voice in the backing
+ * track. Several times slower than the plain model, still a couple of minutes
+ * a song on the provider's GPU. Another model gets none of this: its inputs
+ * are spelled differently.
+ */
+const ACCURATE = { model: "htdemucs_ft", shifts: 2, overlap: 0.25 };
 
 const MIME: Record<string, string> = {
   wav: "audio/wav",
@@ -85,8 +98,12 @@ Deno.serve(async (req) => {
     return json(200, { configured: Boolean(apiKey) });
   }
   if (!apiKey) return json(503, { error: "not_configured" });
-  const model = setting("SEPARATION_MODEL") ?? "ryan5453/demucs";
-  let extra: Record<string, unknown> = { stem: "vocals", output_format: "wav" };
+  const model = setting("SEPARATION_MODEL") ?? DEFAULT_MODEL;
+  let extra: Record<string, unknown> = {
+    ...(model === DEFAULT_MODEL ? ACCURATE : {}),
+    stem: "vocals",
+    output_format: "wav",
+  };
   try {
     const raw = setting("SEPARATION_INPUT");
     if (raw) extra = JSON.parse(raw);

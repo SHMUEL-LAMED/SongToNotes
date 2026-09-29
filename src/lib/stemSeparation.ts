@@ -432,21 +432,71 @@ async function getProcessor(onProgress: (update: SeparationProgress) => void) {
   return processorPromise;
 }
 
+/**
+ * One pass of the network, reporting its share of the whole run.
+ */
+async function runPass(
+  processor: import("demucs-web").DemucsProcessor,
+  left: Float32Array,
+  right: Float32Array,
+  pass: number,
+  passes: number,
+  onProgress: (update: SeparationProgress) => void,
+): Promise<DemucsResult> {
+  processor.onProgress = ({ progress }) => {
+    const overall = (pass + progress) / passes;
+    onProgress({
+      phase: "separation",
+      progress: overall,
+      message:
+        passes > 1
+          ? `מפריד את השיר בדיוק מרבי (מעבר ${pass + 1} מתוך ${passes})… ${Math.round(overall * 100)}%`
+          : `מפריד את השיר… ${Math.round(overall * 100)}%`,
+    });
+  };
+  return processor.separate(left, right);
+}
+
+/** `a` becomes the average of `a` and `b` (with `b` optionally negated). */
+function averageInto(a: Float32Array, b: Float32Array, sign: 1 | -1) {
+  for (let index = 0; index < a.length; index += 1) {
+    a[index] = (a[index] + sign * (b[index] ?? 0)) / 2;
+  }
+}
+
+/**
+ * How many passes of the network go into one result. The network was trained
+ * on songs with swapped channels and flipped polarity, so a second pass over
+ * the song mirrored that way makes different small mistakes; averaging the
+ * two (the test-time augmentation separation benchmarks use) leaves less
+ * voice in the backing track and less backing in the voice.
+ */
+export const ACCURATE_PASSES = 2;
+
 export async function separateStems(
   buffer: AudioBuffer,
   onProgress: (update: SeparationProgress) => void,
+  passes: number = ACCURATE_PASSES,
 ): Promise<SeparatedStems> {
   onProgress({ phase: "model", progress: 0, message: PREPARING });
   const processor = await getProcessor(onProgress);
   const { left, right } = await resampleStereo(buffer);
-  processor.onProgress = ({ progress }) => {
-    onProgress({
-      phase: "separation",
-      progress,
-      message: `מפריד את השיר… ${Math.round(progress * 100)}%`,
-    });
-  };
-  const result = await processor.separate(left, right);
+  const result = await runPass(processor, left, right, 0, passes, onProgress);
+  if (passes > 1) {
+    // Mirrored: right in the left channel and upside down. The stems come
+    // back mirrored too, so each is flipped and swapped back before the average.
+    const flippedLeft = new Float32Array(right.length);
+    const flippedRight = new Float32Array(left.length);
+    for (let index = 0; index < left.length; index += 1) {
+      flippedLeft[index] = -right[index];
+      flippedRight[index] = -left[index];
+    }
+    const mirrored = await runPass(processor, flippedLeft, flippedRight, 1, passes, onProgress);
+    for (const name of ["vocals", "drums", "bass", "other"] as const) {
+      averageInto(result[name].left, mirrored[name].right, -1);
+      averageInto(result[name].right, mirrored[name].left, -1);
+    }
+  }
   return {
     vocals: [result.vocals.left, result.vocals.right],
     instrumental: sumInstrumental(result),

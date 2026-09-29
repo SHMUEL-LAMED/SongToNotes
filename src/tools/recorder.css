@@ -1,0 +1,273 @@
+/* ==========================================================================
+   Multitrack recorder
+   The stage (record button, clock, meter) sits above the track list; the
+   lanes run left to right like every audio editor, even inside the RTL page,
+   so a take's start lines up under the one before it.
+   ========================================================================== */
+
+.recorder-deck { gap: 16px; }
+
+/* ---- the stage ---- */
+
+.recorder-stage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 18px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.recorder-stage.is-countin,
+.recorder-stage.is-recording {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: var(--danger-soft);
+}
+
+.recorder-record {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--danger);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--danger) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: transform 0.18s var(--ease), filter 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.recorder-record:hover:not(:disabled) { transform: scale(1.05); filter: brightness(1.06); }
+.recorder-record:active:not(:disabled) { transform: scale(0.97); }
+.recorder-record:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.recorder-record:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 3px; }
+.recorder-record.is-live { animation: recorder-pulse 1.3s ease-in-out infinite; }
+:root[data-theme="dark"] .recorder-record { color: #1a0d0f; }
+
+@keyframes recorder-pulse {
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 18%, transparent); }
+}
+
+.recorder-status {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.recorder-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+.recorder-stage.is-countin .recorder-status-label,
+.recorder-stage.is-recording .recorder-status-label { color: var(--danger); }
+.recorder-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: recorder-blink 1s steps(2, start) infinite;
+}
+@keyframes recorder-blink { to { visibility: hidden; } }
+
+.recorder-clock,
+.recorder-countin {
+  font-size: clamp(26px, 6vw, 34px);
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: start;
+}
+.recorder-clock small { font-size: 0.5em; font-weight: 600; color: var(--text-muted); }
+.recorder-countin { color: var(--danger); }
+.recorder-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+.recorder-meter {
+  flex: 1 1 100%;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  direction: ltr;
+}
+.recorder-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--success), var(--warning) 75%, var(--danger));
+  transition: inline-size 0.06s linear;
+}
+
+/* ---- transport ---- */
+
+.recorder-transport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.recorder-transport .transport-button { color: var(--text); }
+.recorder-transport .transport-button.primary { color: var(--on-accent); }
+.recorder-import { position: relative; overflow: hidden; }
+.recorder-import:has(input:disabled) { opacity: 0.45; }
+.recorder-import:has(input:disabled) input { cursor: not-allowed; }
+.recorder-count {
+  margin-inline-start: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- tracks ---- */
+
+.recorder-tracks { display: flex; flex-direction: column; gap: 10px; }
+
+.recorder-track {
+  --track-color: oklch(0.66 0.16 var(--track-hue));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  min-width: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--track-color);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  transition: opacity 0.18s var(--ease);
+}
+:root[data-theme="dark"] .recorder-track { --track-color: oklch(0.76 0.13 var(--track-hue)); }
+.recorder-track.is-silent { opacity: 0.55; }
+
+.recorder-track-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.recorder-track-kind {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--track-color);
+  background: color-mix(in srgb, var(--track-color) 14%, transparent);
+}
+.recorder-track-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.recorder-track-name:hover { border-color: var(--line); }
+.recorder-track-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-solid);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.recorder-track-time {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.recorder-track-buttons { flex: none; display: flex; gap: 6px; }
+.recorder-track-buttons .icon-button { width: 34px; height: 34px; border-radius: 10px; }
+
+.recorder-lane {
+  position: relative;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  background: var(--wave-bg);
+  overflow: hidden;
+}
+.recorder-wave {
+  display: block;
+  height: 100%;
+  max-inline-size: 100%;
+}
+.recorder-wave path { fill: var(--track-color); }
+.recorder-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-inline-start: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.recorder-track-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+}
+.recorder-track-controls label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.recorder-track-controls span {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.recorder-track-controls b { color: var(--accent-text); font-variant-numeric: tabular-nums; }
+
+.recorder-footnote { margin: 0; font-size: 12.5px; color: var(--text-muted); }
+
+.recorder-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--radius);
+  border: 1.5px dashed var(--line-strong);
+  color: var(--text-muted);
+}
+.recorder-empty svg { flex: none; color: var(--accent); margin-top: 2px; }
+.recorder-empty p { margin: 0; font-size: 14px; line-height: 1.65; }
+
+/* ---- settings ---- */
+
+.recorder-latency small bdi { font-variant-numeric: tabular-nums; }
+.recorder-reset { align-self: flex-start; }
+
+/* ---- narrow screens ---- */
+
+@media (max-width: 520px) {
+  .recorder-stage { padding: 14px; gap: 12px 14px; }
+  .recorder-record { width: 62px; height: 62px; }
+  .recorder-track { padding: 10px 11px; }
+  .recorder-track-head { flex-wrap: wrap; }
+  .recorder-track-name { flex-basis: calc(100% - 34px); }
+  .recorder-track-time { margin-inline-start: 34px; }
+  .recorder-track-buttons { margin-inline-start: auto; }
+  .recorder-transport .transport-button.primary { flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-record.is-live,
+  .recorder-dot { animation: none; }
+}

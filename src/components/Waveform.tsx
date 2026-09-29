@@ -252,7 +252,10 @@ export function Waveform({
         {trim ? (
           <>
             <span>
-              {selectLabel}: {formatTime(trim.start)}–{formatTime(trim.end)}
+              {/* On a right-to-left page two times either side of a dash
+                  swap places; the range reads start to end only as its own
+                  left-to-right run. */}
+              {selectLabel}: <span dir="ltr">{formatTime(trim.start)}–{formatTime(trim.end)}</span>
             </span>
             {/* A fixed-length cut has no "whole file" state to go back to. */}
             {!clickMoves && (

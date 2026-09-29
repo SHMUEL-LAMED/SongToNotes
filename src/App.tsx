@@ -62,6 +62,15 @@ const TheoryTool = lazy(() => import("./tools/TheoryTool").then((module) => ({ d
 const TranscriptTool = lazy(() => import("./tools/TranscriptTool").then((module) => ({ default: module.TranscriptTool })));
 const TunerTool = lazy(() => import("./tools/TunerTool").then((module) => ({ default: module.TunerTool })));
 const VocalsTool = lazy(() => import("./tools/VocalsTool").then((module) => ({ default: module.VocalsTool })));
+const RecorderTool = lazy(() => import("./tools/RecorderTool").then((module) => ({ default: module.RecorderTool })));
+const DenoiseTool = lazy(() => import("./tools/DenoiseTool").then((module) => ({ default: module.DenoiseTool })));
+const JoinerTool = lazy(() => import("./tools/JoinerTool").then((module) => ({ default: module.JoinerTool })));
+const MelodyTool = lazy(() => import("./tools/MelodyTool").then((module) => ({ default: module.MelodyTool })));
+const VisualizerTool = lazy(() => import("./tools/VisualizerTool").then((module) => ({ default: module.VisualizerTool })));
+const VoiceTool = lazy(() => import("./tools/VoiceTool").then((module) => ({ default: module.VoiceTool })));
+const SongCardTool = lazy(() => import("./tools/SongCardTool").then((module) => ({ default: module.SongCardTool })));
+const DrumKitTool = lazy(() => import("./tools/DrumKitTool").then((module) => ({ default: module.DrumKitTool })));
+const SetlistTool = lazy(() => import("./tools/SetlistTool").then((module) => ({ default: module.SetlistTool })));
 
 // The transcriber pulls in the engraver and, through it, the biggest slice of
 // the bundle. Splitting it out keeps the hub and the lighter tools quick to
@@ -636,6 +645,15 @@ function WorkspaceApp() {
           {shown === "theory" && <TheoryTool />}
           {shown === "progressions" && <ProgressionTool />}
           {shown === "changes" && <ChangesTool />}
+          {shown === "recorder" && <RecorderTool />}
+          {shown === "denoise" && <DenoiseTool />}
+          {shown === "joiner" && <JoinerTool />}
+          {shown === "melody" && <MelodyTool />}
+          {shown === "visualizer" && <VisualizerTool />}
+          {shown === "voice" && <VoiceTool />}
+          {shown === "songcard" && <SongCardTool />}
+          {shown === "drumkit" && <DrumKitTool />}
+          {shown === "setlist" && <SetlistTool onOpenWork={openWork} />}
         </Suspense>
 
         {tool && (
