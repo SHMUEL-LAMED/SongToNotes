@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   centsOff,
+  changeChannelsSpeedAndPitch,
+  changeSpeedAndPitch,
   detectPitch,
   frequencyToMidi,
   lowPass,
@@ -134,5 +136,30 @@ describe("lowPass", () => {
     const energy = (channel: Float32Array) =>
       channel.reduce((sum, value) => sum + value * value, 0) / channel.length;
     expect(energy(high)).toBeLessThan(energy(low) * 0.2);
+  });
+});
+
+describe("changeChannelsSpeedAndPitch", () => {
+  const left = tone(220, 0.5);
+  const right = tone(330, 0.5);
+  const buffer = {
+    numberOfChannels: 2,
+    sampleRate: SAMPLE_RATE,
+    length: left.length,
+    getChannelData: (index: number) => (index === 0 ? left : right),
+  } as unknown as AudioBuffer;
+
+  it("gives the worker the same result the AudioBuffer version gives the page", () => {
+    const fromBuffer = changeSpeedAndPitch(buffer, 0.75, 2);
+    const fromChannels = changeChannelsSpeedAndPitch([left, right], SAMPLE_RATE, 0.75, 2);
+    expect(fromChannels.length).toBe(2);
+    expect(Array.from(fromChannels[0])).toEqual(Array.from(fromBuffer[0]));
+    expect(Array.from(fromChannels[1])).toEqual(Array.from(fromBuffer[1]));
+  });
+
+  it("lengthens a slowed song by the speed factor", () => {
+    const [slowed] = changeChannelsSpeedAndPitch([left], SAMPLE_RATE, 0.5, 0);
+    expect(slowed.length / left.length).toBeGreaterThan(1.8);
+    expect(slowed.length / left.length).toBeLessThan(2.2);
   });
 });

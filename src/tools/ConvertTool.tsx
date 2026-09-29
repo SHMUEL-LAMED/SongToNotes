@@ -6,7 +6,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
-import { BITRATES, SAMPLE_RATES, convertAudio, estimateBytes, type ConvertOptions, type OutputFormat } from "../lib/convert";
+import { BITRATES, SAMPLE_RATES, convertAudio, effectiveKbps, estimateBytes, type ConvertOptions, type OutputFormat } from "../lib/convert";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
@@ -70,6 +70,9 @@ export function ConvertTool({ initial = null }: Props) {
   useEffect(() => () => {
     if (result) URL.revokeObjectURL(result.url);
   }, [result]);
+  // Leaving the tool mid-conversion stops the encoder instead of letting a
+  // worker grind through the rest of the song for a page that is gone.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const options: ConvertOptions = { format, sampleRate, channels, kbps, trim, gain: gain / 100, normalise };
   const settingsKey = audio ? `${audio.url}|${JSON.stringify(options)}` : "";
@@ -203,6 +206,9 @@ export function ConvertTool({ initial = null }: Props) {
           audio={audio}
           isLoading={isLoading}
           onPick={(file) => {
+            // A conversion of the previous file is of no use any more, and
+            // left running it kept the new file's convert button hidden.
+            abortRef.current?.abort();
             setError(null);
             setNotice(null);
             setTrim(null);
@@ -274,6 +280,12 @@ export function ConvertTool({ initial = null }: Props) {
                         </option>
                       ))}
                     </select>
+                    {effectiveKbps(sampleRate, kbps) < kbps && (
+                      <small>
+                        בקצב דגימה מתחת ל־32 kHz קובץ MP3 מוגבל ל־
+                        <bdi dir="ltr">160 kbps</bdi>.
+                      </small>
+                    )}
                   </label>
                 )}
                 <label className="setting-field range-field">

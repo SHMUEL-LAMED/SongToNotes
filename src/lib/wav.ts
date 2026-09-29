@@ -19,6 +19,9 @@ export function fromAudioBuffer(buffer: AudioBuffer): PcmSource {
   };
 }
 
+/** A WAV is little-endian; a typed array is in the machine's own order. */
+const LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+
 /** 16-bit PCM keeps the file half the size of float32 and opens everywhere. */
 export function encodeWav({ channels, sampleRate }: PcmSource): Blob {
   const channelCount = Math.max(1, channels.length);
@@ -47,13 +50,33 @@ export function encodeWav({ channels, sampleRate }: PcmSource): Blob {
   writeText(36, "data");
   view.setUint32(40, dataBytes, true);
 
-  let offset = 44;
-  for (let frame = 0; frame < frames; frame += 1) {
+  if (LITTLE_ENDIAN) {
+    // A typed view writes straight into the file, one channel at a time. The
+    // DataView call per sample it replaces took the better part of a second
+    // on a three-minute stereo song, all of it on the click that asked for
+    // the download.
+    const samples = new Int16Array(buffer, 44, frames * channelCount);
     for (let channel = 0; channel < channelCount; channel += 1) {
-      const sample = channels[channel]?.[frame] ?? 0;
-      const clamped = sample < -1 ? -1 : sample > 1 ? 1 : sample;
-      view.setInt16(offset, Math.round(clamped * 32767), true);
-      offset += 2;
+      const source = channels[channel];
+      if (!source) continue;
+      const length = Math.min(frames, source.length);
+      for (let frame = 0, at = channel; frame < length; frame += 1, at += channelCount) {
+        const sample = source[frame];
+        const scaled = (sample < -1 ? -1 : sample > 1 ? 1 : sample) * 32767;
+        // The store truncates towards zero, so half a step either way rounds
+        // to nearest without a Math.round call per sample.
+        samples[at] = scaled < 0 ? scaled - 0.5 : scaled + 0.5;
+      }
+    }
+  } else {
+    let offset = 44;
+    for (let frame = 0; frame < frames; frame += 1) {
+      for (let channel = 0; channel < channelCount; channel += 1) {
+        const sample = channels[channel]?.[frame] ?? 0;
+        const clamped = sample < -1 ? -1 : sample > 1 ? 1 : sample;
+        view.setInt16(offset, Math.round(clamped * 32767), true);
+        offset += 2;
+      }
     }
   }
 

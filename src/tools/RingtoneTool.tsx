@@ -299,15 +299,30 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
   );
 
   // ---- AI backing track ----
+  // A new song remounts this editor; the separation for the old one is
+  // stopped rather than left to run for minutes, holding the model the next
+  // click needs.
+  const aiAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => aiAbortRef.current?.abort(), []);
   const makeInstrumental = useCallback(async () => {
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
     setAiBusy(true);
     setAiProgress(0);
     setAiStatus("מכין את ההפרדה…");
     try {
-      const stems = await separateStems(audio.buffer, (progress: SeparationProgress) => {
-        setAiProgress(Math.round(progress.progress * 100));
-        setAiStatus(progress.message);
-      });
+      const stems = await separateStems(
+        audio.buffer,
+        (progress: SeparationProgress) => {
+          if (controller.signal.aborted) return;
+          setAiProgress(Math.round(progress.progress * 100));
+          setAiStatus(progress.message);
+        },
+        undefined,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       setInstrumental(
         channelsToBuffer(context, stems.instrumental, stems.sampleRate),
       );
@@ -315,9 +330,13 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
       setAiProgress(100);
       setAiStatus("הגרסה האינסטרומנטלית מוכנה — הצלצול נחתך ממנה עכשיו.");
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setAiStatus(describeSeparationError(caught));
     } finally {
-      setAiBusy(false);
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+        setAiBusy(false);
+      }
     }
   }, [audio.buffer, context]);
 

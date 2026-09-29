@@ -12,6 +12,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 
 const MAX_BYTES = 800 * 1024 * 1024;
+const NO_AUDIO = "לא נמצא שמע בסרטון.";
 
 type Extracted = { file: File; buffer: AudioBuffer; videoUrl: string };
 
@@ -30,6 +31,10 @@ export function VideoTool() {
   const [result, setResult] = useState<{ file: File; url: string; format: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Which pick is current, so a slow decode that finishes after a newer
+  // video was chosen (a second drop, a handoff) cannot replace it.
+  const pickTokenRef = useRef(0);
+  const runAbortRef = useRef<AbortController | null>(null);
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
@@ -40,6 +45,18 @@ export function VideoTool() {
     if (result) URL.revokeObjectURL(result.url);
   }, [result]);
   useEffect(() => resetSave(), [resetSave, result]);
+  useEffect(() => () => runAbortRef.current?.abort(), []);
+
+  /**
+   * Drops the extraction in flight. Its result belongs to the video that was
+   * on screen when it started; landing after another was chosen, it showed
+   * the old soundtrack as the new video's file.
+   */
+  const cancelRun = () => {
+    runAbortRef.current?.abort();
+    runAbortRef.current = null;
+    setBusy(null);
+  };
 
   const pick = async (file?: File | null) => {
     if (!file) return;
@@ -52,27 +69,37 @@ export function VideoTool() {
       setError(problem);
       return;
     }
+    const token = ++pickTokenRef.current;
+    cancelRun();
     setLoading(true);
     setError(null);
     setResult(null);
     try {
       const buffer = await decodeAudioFile(await file.arrayBuffer());
-      if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) throw new Error("לא נמצא שמע בסרטון.");
+      if (pickTokenRef.current !== token) return;
+      if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) throw new Error(NO_AUDIO);
       setExtracted((previous) => {
         if (previous) URL.revokeObjectURL(previous.videoUrl);
         return { file, buffer, videoUrl: URL.createObjectURL(file) };
       });
     } catch (caught) {
-      const reason = caught instanceof Error ? caught.message : "";
-      setError(`לא הצלחנו לקרוא את השמע מ„${file.name}”. ${reason || "ייתכן שהדפדפן אינו מנגן את הפורמט הזה (למשל MKV או AVI); MP4, MOV ו־WebM נתמכים."}`);
+      if (pickTokenRef.current !== token) return;
+      // The decoder's own sentence is written for audio files — it suggests
+      // converting to MP3 or WAV, which is what this tool was opened to do.
+      // For a video the likely causes are a clip with no soundtrack or a
+      // container the browser cannot play, so those are what is said.
+      const reason = caught instanceof Error && caught.message === NO_AUDIO ? `${NO_AUDIO} ` : "";
+      setError(`לא הצלחנו לקרוא את השמע מ„${file.name}”. ${reason}ייתכן שבסרטון אין פס קול, או שהדפדפן אינו מנגן את הפורמט הזה (למשל MKV או AVI); MP4, MOV ו־WebM נתמכים.`);
     } finally {
-      setLoading(false);
+      if (pickTokenRef.current === token) setLoading(false);
     }
   };
 
   /** Resolves with the audio file, or null when it failed. */
   const run = async (): Promise<File | null> => {
     if (!extracted || busy) return null;
+    const controller = new AbortController();
+    runAbortRef.current = controller;
     setBusy({ message: "מתחיל…", fraction: 0 });
     setError(null);
     try {
@@ -80,18 +107,26 @@ export function VideoTool() {
         extracted.buffer,
         extracted.file.name,
         { format, sampleRate: Math.min(48_000, Math.max(22_050, extracted.buffer.sampleRate)), channels: "keep", kbps: 192, trim: null, gain: 1, normalise: false },
-        (message, fraction) => setBusy({ message, fraction }),
+        (message, fraction) => {
+          if (!controller.signal.aborted) setBusy({ message, fraction });
+        },
+        controller.signal,
       );
+      if (controller.signal.aborted) return null;
       setResult((previous) => {
         if (previous) URL.revokeObjectURL(previous.url);
         return { file, url: URL.createObjectURL(file), format };
       });
       return file;
     } catch (caught) {
+      if (controller.signal.aborted) return null;
       setError(caught instanceof Error ? caught.message : "החילוץ נכשל.");
       return null;
     } finally {
-      setBusy(null);
+      if (runAbortRef.current === controller) {
+        runAbortRef.current = null;
+        setBusy(null);
+      }
     }
   };
 
@@ -235,6 +270,7 @@ export function VideoTool() {
               type="button"
               className="link-button"
               onClick={() => {
+                cancelRun();
                 setExtracted(null);
                 setResult(null);
                 setError(null);

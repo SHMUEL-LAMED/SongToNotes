@@ -447,12 +447,26 @@ export function changeSpeedAndPitch(
   speed: number,
   semitones: number,
 ): Float32Array[] {
+  return changeChannelsSpeedAndPitch(
+    Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index)),
+    buffer.sampleRate,
+    speed,
+    semitones,
+  );
+}
+
+/** {@link changeSpeedAndPitch} on bare channels, for a worker that has no AudioBuffer. */
+export function changeChannelsSpeedAndPitch(
+  channels: Float32Array[],
+  sampleRate: number,
+  speed: number,
+  semitones: number,
+): Float32Array[] {
   const pitchRatio = Math.pow(2, semitones / 12);
-  return Array.from({ length: buffer.numberOfChannels }, (_, index) => {
-    const channel = buffer.getChannelData(index);
+  return channels.map((channel) => {
     // Stretch by the combined factor first, then resample back: the resample
     // shortens by `pitchRatio`, so the stretch has to account for it.
-    const stretched = timeStretch(channel, buffer.sampleRate, speed / pitchRatio);
+    const stretched = timeStretch(channel, sampleRate, speed / pitchRatio);
     return resample(stretched, pitchRatio);
   });
 }

@@ -163,7 +163,7 @@ function modelProgress(loaded: number, total: number): SeparationProgress {
 
 /**
  * Streams a response to its end, reporting how far along it is, and returns
- * its bytes. `expectedBytes` is the size known from the build,
+ * its bytes as a Blob. `expectedBytes` is the size known from the build,
  * used when the server does not say; a server that compresses on the fly
  * reports the compressed size, which the decoded count then overtakes, so the
  * fraction is clamped rather than trusted.
@@ -172,12 +172,12 @@ async function drain(
   response: Response,
   expectedBytes: number,
   onProgress: ProgressListener,
-): Promise<ArrayBuffer> {
+): Promise<Blob> {
   const total = Number(response.headers.get("content-length")) || expectedBytes;
-  if (!response.body) return response.arrayBuffer();
+  if (!response.body) return response.blob();
 
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   let loaded = 0;
   while (true) {
     const { done, value } = await reader.read();
@@ -191,13 +191,10 @@ async function drain(
   if (total && loaded < total) {
     throw new SeparationError(INCOMPLETE_MESSAGE);
   }
-  const combined = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return combined.buffer;
+  // The chunks go into the Blob as they are. Joining them into one array
+  // first, and then copying that into a Blob, held three copies of 180MB at
+  // once and stalled the page while it copied.
+  return new Blob(chunks);
 }
 
 /**
@@ -241,11 +238,11 @@ async function downloadModel(onProgress: ProgressListener): Promise<Blob> {
     );
   }
   const { response, expectedBytes } = await openModelResponse();
-  const buffer = await drain(response, expectedBytes, onProgress);
-  if (!buffer.byteLength) {
+  const blob = await drain(response, expectedBytes, onProgress);
+  if (!blob.size) {
     throw new SeparationError(UNAVAILABLE_MESSAGE);
   }
-  return new Blob([buffer]);
+  return blob;
 }
 
 /**
@@ -473,33 +470,65 @@ function averageInto(a: Float32Array, b: Float32Array, sign: 1 | -1) {
  */
 export const ACCURATE_PASSES = 2;
 
+/**
+ * The separation in progress, which the next one waits for. The model is one
+ * session, and a second run started while the first is still going — a
+ * cancelled run keeps computing until its pass ends, and the ringtone and
+ * vocal tools share the model — failed inside the engine with a message
+ * nobody could act on. Queued instead, the second simply starts later.
+ */
+let running: Promise<void> = Promise.resolve();
+
+const CANCELLED_MESSAGE = "ההפרדה בוטלה.";
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw new SeparationError(CANCELLED_MESSAGE);
+}
+
 export async function separateStems(
   buffer: AudioBuffer,
   onProgress: (update: SeparationProgress) => void,
   passes: number = ACCURATE_PASSES,
+  signal?: AbortSignal,
 ): Promise<SeparatedStems> {
   onProgress({ phase: "model", progress: 0, message: PREPARING });
-  const processor = await getProcessor(onProgress);
-  const { left, right } = await resampleStereo(buffer);
-  const result = await runPass(processor, left, right, 0, passes, onProgress);
-  if (passes > 1) {
-    // Mirrored: right in the left channel and upside down. The stems come
-    // back mirrored too, so each is flipped and swapped back before the average.
-    const flippedLeft = new Float32Array(right.length);
-    const flippedRight = new Float32Array(left.length);
-    for (let index = 0; index < left.length; index += 1) {
-      flippedLeft[index] = -right[index];
-      flippedRight[index] = -left[index];
+  const previous = running;
+  let release = () => {};
+  running = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await previous;
+    // A run cancelled while it waited never touches the model; one cancelled
+    // mid-way stops at the next pass rather than computing the whole song.
+    throwIfAborted(signal);
+    const processor = await getProcessor(onProgress);
+    throwIfAborted(signal);
+    const { left, right } = await resampleStereo(buffer);
+    const result = await runPass(processor, left, right, 0, passes, onProgress);
+    if (passes > 1) {
+      throwIfAborted(signal);
+      // Mirrored: right in the left channel and upside down. The stems come
+      // back mirrored too, so each is flipped and swapped back before the average.
+      const flippedLeft = new Float32Array(right.length);
+      const flippedRight = new Float32Array(left.length);
+      for (let index = 0; index < left.length; index += 1) {
+        flippedLeft[index] = -right[index];
+        flippedRight[index] = -left[index];
+      }
+      const mirrored = await runPass(processor, flippedLeft, flippedRight, 1, passes, onProgress);
+      for (const name of ["vocals", "drums", "bass", "other"] as const) {
+        averageInto(result[name].left, mirrored[name].right, -1);
+        averageInto(result[name].right, mirrored[name].left, -1);
+      }
     }
-    const mirrored = await runPass(processor, flippedLeft, flippedRight, 1, passes, onProgress);
-    for (const name of ["vocals", "drums", "bass", "other"] as const) {
-      averageInto(result[name].left, mirrored[name].right, -1);
-      averageInto(result[name].right, mirrored[name].left, -1);
-    }
+    throwIfAborted(signal);
+    return {
+      vocals: [result.vocals.left, result.vocals.right],
+      instrumental: sumInstrumental(result),
+      sampleRate: MODEL_SAMPLE_RATE,
+    };
+  } finally {
+    release();
   }
-  return {
-    vocals: [result.vocals.left, result.vocals.right],
-    instrumental: sumInstrumental(result),
-    sampleRate: MODEL_SAMPLE_RATE,
-  };
 }

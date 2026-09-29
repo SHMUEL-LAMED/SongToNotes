@@ -139,7 +139,11 @@ export function VocalsTool({ initial = null }: Props) {
   const [aiProgress, setAiProgress] = useState(0);
   const [aiBusy, setAiBusy] = useState(false);
 
-  useEffect(() => () => void context?.close(), [context]);
+  // A closed context throws when closed again, which React's development
+  // double mount does on the way out — an unhandled rejection every visit.
+  useEffect(() => () => {
+    if (context && context.state !== "closed") void context.close();
+  }, [context]);
   useEffect(() => {
     const player = new MixPlayer();
     player.onEnd = () => setStemsPlaying(false);
@@ -189,8 +193,10 @@ export function VocalsTool({ initial = null }: Props) {
 
   useEffect(() => {
     // An AI result on screen stays there: the quick separation only runs
-    // for what the AI has not produced, or when it is asked for.
-    if (!audio || !settingsKey || usedAi) return;
+    // for what the AI has not produced, or when it is asked for. Pro mode
+    // shows none of it, so it waits until simple mode is back on screen
+    // instead of keeping a core busy for most of a minute on a long song.
+    if (!audio || !settingsKey || usedAi || mode !== "simple") return;
     // The gap debounces a dragged slider, so passing through five values
     // still costs one separation rather than five.
     const timer = window.setTimeout(() => {
@@ -216,7 +222,7 @@ export function VocalsTool({ initial = null }: Props) {
         });
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [audio, keepBass, runFast, settingsKey, strength, target, usedAi]);
+  }, [audio, keepBass, mode, runFast, settingsKey, strength, target, usedAi]);
 
   // A change of settings is a different result, so the save button offers
   // to save again rather than still saying "נשמר" over a new rendering.
@@ -242,11 +248,16 @@ export function VocalsTool({ initial = null }: Props) {
       if (!availability.configured) {
         setServerMissing(true);
         setAiStatus("ההפרדה מתבצעת בדפדפן. בפעם הראשונה נטען מודל ההפרדה…");
-        const localStems = await separateStems(audio.buffer, (progress: SeparationProgress) => {
-          if (controller.signal.aborted) return;
-          setAiProgress(Math.round(progress.progress * 100));
-          setAiStatus(progress.message);
-        });
+        const localStems = await separateStems(
+          audio.buffer,
+          (progress: SeparationProgress) => {
+            if (controller.signal.aborted) return;
+            setAiProgress(Math.round(progress.progress * 100));
+            setAiStatus(progress.message);
+          },
+          undefined,
+          controller.signal,
+        );
         if (controller.signal.aborted) return;
         keepAi(audio.url, {
           vocals: channelsToBuffer(context, localStems.vocals, localStems.sampleRate),
@@ -402,15 +413,23 @@ export function VocalsTool({ initial = null }: Props) {
   /** The browser path, offered while the server has no key — or no credits are left for it. */
   const runAiInBrowser = useCallback(async () => {
     if (!audio || !context) return;
+    // Cancellable like the server path. Without a controller of its own the
+    // "בטל" button only hid the bar: the run went on, and minutes later wrote
+    // "ההפרדה הושלמה" over "ההפרדה בוטלה" — or over the next song's status.
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
     setAiBusy(true);
     setAiProgress(0);
     setAiStatus("מכין את ההפרדה…");
     try {
       const report = (progress: SeparationProgress) => {
+        if (controller.signal.aborted) return;
         setAiProgress(Math.round(progress.progress * 100));
         setAiStatus(progress.message);
       };
-      const stems = await separateStems(audio.buffer, report);
+      const stems = await separateStems(audio.buffer, report, undefined, controller.signal);
+      if (controller.signal.aborted) return;
       keepAi(audio.url, {
         vocals: channelsToBuffer(context, stems.vocals, stems.sampleRate),
         instrumental: channelsToBuffer(context, stems.instrumental, stems.sampleRate),
@@ -418,11 +437,28 @@ export function VocalsTool({ initial = null }: Props) {
       setAiProgress(100);
       setAiStatus("ההפרדה הושלמה.");
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setAiStatus(describeSeparationError(caught));
     } finally {
-      setAiBusy(false);
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+        setAiBusy(false);
+      }
     }
   }, [audio, context, keepAi]);
+
+  /**
+   * Stops whatever AI run is in flight. A new song or leaving the tool must
+   * not leave the old song's upload going, its status overwriting the new
+   * one's, or every AI button disabled until it finishes.
+   */
+  const stopAi = () => {
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = null;
+    setAiBusy(false);
+    setAiProgress(0);
+  };
+  useEffect(() => () => aiAbortRef.current?.abort(), []);
 
   const buildFile = () => {
     if (!result || !audio) return null;
@@ -472,6 +508,9 @@ export function VocalsTool({ initial = null }: Props) {
   // The separator falls back to WebAssembly where WebGPU is missing and
   // resamples the song itself, so there is nothing left to gate on.
   const busy = separation.isRunning || aiBusy;
+  // The mode switch and the AI buttons wait only for the AI. The quick
+  // preview is disposable and runs on its own worker; gating on it locked
+  // pro mode and the AI out for most of a minute after a long song loaded.
 
   const stemsReady = Boolean(stems && audio && stems.key === audio.url);
   useAssistantTool("vocals", {
@@ -504,7 +543,7 @@ export function VocalsTool({ initial = null }: Props) {
         if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
         const done: string[] = [];
         if (nextMode === "simple" || nextMode === "pro") {
-          if (busy) return { ok: false, message: "עובד כרגע; אפשר לשנות מצב כשההפרדה תסתיים" };
+          if (aiBusy) return { ok: false, message: "עובד כרגע; אפשר לשנות מצב כשההפרדה תסתיים" };
           if (nextMode === "simple") stopStems();
           setMode(nextMode);
           done.push(nextMode === "simple" ? "מצב פשוט" : "מצב מקצועי");
@@ -530,14 +569,14 @@ export function VocalsTool({ initial = null }: Props) {
       },
       "vocals.ai": () => {
         if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
-        if (busy) return { ok: false, message: "כבר עובד" };
+        if (aiBusy) return { ok: false, message: "כבר עובד" };
         if (mode !== "simple") setMode("simple");
         void runAi();
         return { ok: true, message: "הפרדת ה־AI התחילה ורצה ברקע (שתיים־שלוש דקות, בדיוק מרבי); ההתקדמות מוצגת על המסך" };
       },
       "vocals.stems": () => {
         if (!audio) return { ok: false, message: "אין שיר; הגולש צריך לבחור קובץ" };
-        if (busy) return { ok: false, message: "כבר עובד" };
+        if (aiBusy) return { ok: false, message: "כבר עובד" };
         if (!user) return { ok: false, message: "הפרדה לערוצים דורשת חשבון מחובר" };
         if (mode !== "pro") setMode("pro");
         void runStems();
@@ -599,6 +638,7 @@ export function VocalsTool({ initial = null }: Props) {
             setError(null);
             setRendered(null);
             setAiTracks(null);
+            stopAi();
             setAiStatus(null);
             stopStems(true);
             void load(file);
@@ -606,6 +646,7 @@ export function VocalsTool({ initial = null }: Props) {
           onClear={() => {
             setRendered(null);
             setAiTracks(null);
+            stopAi();
             setAiStatus(null);
             stopStems(true);
             clear();
@@ -641,10 +682,10 @@ export function VocalsTool({ initial = null }: Props) {
                 <div className="setting-field">
                   <span id="vocals-mode">מצב</span>
                   <div className="segmented-control" role="group" aria-labelledby="vocals-mode">
-                    <button className={mode === "simple" ? "active" : ""} onClick={() => { stopStems(); setMode("simple"); }} type="button" aria-pressed={mode === "simple"} disabled={busy}>
+                    <button className={mode === "simple" ? "active" : ""} onClick={() => { stopStems(); setMode("simple"); }} type="button" aria-pressed={mode === "simple"} disabled={aiBusy}>
                       פשוט
                     </button>
-                    <button className={mode === "pro" ? "active" : ""} onClick={() => setMode("pro")} type="button" aria-pressed={mode === "pro"} disabled={busy}>
+                    <button className={mode === "pro" ? "active" : ""} onClick={() => setMode("pro")} type="button" aria-pressed={mode === "pro"} disabled={aiBusy}>
                       <Layers size={14} /> מקצועי
                     </button>
                   </div>
@@ -732,7 +773,7 @@ export function VocalsTool({ initial = null }: Props) {
                         <p>שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו, בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות.{!user ? " צריך להתחבר לחשבון." : ""}</p>
                       </div>
                     </div>
-                    <button className="primary-button compact" type="button" onClick={() => void runStems()} disabled={busy}>
+                    <button className="primary-button compact" type="button" onClick={() => void runStems()} disabled={aiBusy}>
                       <Sparkles size={17} /> הפרד לערוצים
                     </button>
                     {aiBusy && (
@@ -929,7 +970,7 @@ export function VocalsTool({ initial = null }: Props) {
                   // goes straight to it: asking the server again would stop a
                   // signed-out visitor at a sign-in the text says is not needed.
                   onClick={serverMissing === true ? runAiInBrowser : runAi}
-                  disabled={busy}
+                  disabled={aiBusy}
                 >
                   <Sparkles size={17} />
                   {target === "instrumental"
@@ -937,7 +978,7 @@ export function VocalsTool({ initial = null }: Props) {
                     : "הפק שירה בלבד עם AI"}
                 </button>
                 {serverMissing === true && !aiBusy && aiStatus?.includes("נכשלה") && (
-                  <button className="link-button" type="button" onClick={runAiInBrowser} disabled={busy}>
+                  <button className="link-button" type="button" onClick={runAiInBrowser} disabled={aiBusy}>
                     <Cpu size={14} /> נסה שוב את מודל ה־AI בדפדפן
                   </button>
                 )}
@@ -949,7 +990,7 @@ export function VocalsTool({ initial = null }: Props) {
                       setOutOfCredits(false);
                       void runAiInBrowser();
                     }}
-                    disabled={busy}
+                    disabled={aiBusy}
                   >
                     <Cpu size={14} /> הפרדה בדפדפן, בלי קרדיטים
                   </button>

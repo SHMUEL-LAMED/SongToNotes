@@ -41,10 +41,22 @@ export const BITRATES = [
   { value: 64, label: "64 kbps (דיבור)" },
 ];
 
+/**
+ * The bitrate the MP3 will really have. Below 32 kHz an MP3 is MPEG-2, whose
+ * frames stop at 160 kbps; the encoder quietly caps anything higher, so the
+ * size estimate (and the label) must too, or "22 kHz · 320 kbps" promised a
+ * file twice the size of the one that came out.
+ */
+export function effectiveKbps(sampleRate: number, kbps: number) {
+  return sampleRate < 32_000 ? Math.min(160, kbps) : kbps;
+}
+
 /** Roughly how big the output will be, before doing the work. */
 export function estimateBytes(seconds: number, options: ConvertOptions, sourceChannels: number) {
   const channels = options.channels === "keep" ? sourceChannels : options.channels;
-  if (options.format === "mp3") return Math.round((seconds * options.kbps * 1000) / 8);
+  if (options.format === "mp3") {
+    return Math.round((seconds * effectiveKbps(options.sampleRate, options.kbps) * 1000) / 8);
+  }
   return Math.round(seconds * options.sampleRate * channels * 2) + 44;
 }
 
@@ -86,13 +98,24 @@ export function encodeMp3(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
+    // Cancelled while the audio was still being rendered: an abort event
+    // that has already fired never fires again, so without this check the
+    // worker would encode the whole song for nobody.
+    if (signal?.aborted) {
+      reject(new Error("ההמרה בוטלה."));
+      return;
+    }
     const worker = new Worker(new URL("../workers/encode.worker.ts", import.meta.url), { type: "module" });
     const jobId = Date.now();
-    const finish = () => worker.terminate();
-    signal?.addEventListener("abort", () => {
-      finish();
+    const onAbort = () => {
+      worker.terminate();
       reject(new Error("ההמרה בוטלה."));
-    });
+    };
+    const finish = () => {
+      worker.terminate();
+      signal?.removeEventListener("abort", onAbort);
+    };
+    signal?.addEventListener("abort", onAbort);
     worker.onmessage = (event: MessageEvent<EncodeResponse>) => {
       const message = event.data;
       if (message.jobId !== jobId) return;
@@ -124,6 +147,7 @@ export async function convertAudio(
 ): Promise<File> {
   onProgress?.("מעבד את הצליל…", 0.05);
   const { channels, sampleRate } = await renderChannels(buffer, options);
+  if (signal?.aborted) throw new Error("ההמרה בוטלה.");
   const base = name.replace(/\.[^/.]+$/, "") || "audio";
   if (options.format === "wav") {
     onProgress?.("כותב WAV…", 0.7);

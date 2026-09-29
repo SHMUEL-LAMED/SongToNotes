@@ -1,5 +1,5 @@
 import { Download, Repeat, Snail, Wand2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -9,7 +9,7 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { changeSpeedAndPitch, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { useAssistantTool } from "../lib/useAssistantTool";
-import { useRenderedAudio } from "../lib/useRenderedAudio";
+import type { StretchRequest, StretchResponse } from "../workers/separate.worker";
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
@@ -23,6 +23,103 @@ function sharedContext() {
 }
 
 const SPEED_PRESETS = [50, 65, 75, 85, 100, 115, 125];
+
+/**
+ * The song at a new tempo and pitch, made on a worker. On the page, a
+ * three-minute song froze everything — the slider, the cursor, the buttons —
+ * for a couple of seconds after every move. The result is keyed to the
+ * settings that produced it, like {@link ../lib/useRenderedAudio}, and a
+ * worker still busy with settings that have since moved is terminated rather
+ * than left to finish first.
+ */
+function useStretchedAudio(
+  key: string,
+  source: AudioBuffer | null,
+  speed: number,
+  semitones: number,
+  context: AudioContext | null,
+) {
+  const [result, setResult] = useState<{ key: string; buffer: AudioBuffer | null }>({
+    key: "",
+    buffer: null,
+  });
+  const workerRef = useRef<{ worker: Worker; busy: boolean } | null>(null);
+  useEffect(() => () => workerRef.current?.worker.terminate(), []);
+
+  useEffect(() => {
+    if (!key || !source || !context) return;
+    let cancelled = false;
+    const finish = (buffer: AudioBuffer | null) => {
+      if (!cancelled) setResult({ key, buffer });
+    };
+    // The gap debounces a dragged slider, as before.
+    const timer = window.setTimeout(() => {
+      if (typeof Worker === "undefined") {
+        finish(
+          channelsToBuffer(context, changeSpeedAndPitch(source, speed, semitones), source.sampleRate),
+        );
+        return;
+      }
+      let slot = workerRef.current;
+      if (slot?.busy) {
+        slot.worker.terminate();
+        slot = null;
+      }
+      if (!slot) {
+        slot = {
+          worker: new Worker(new URL("../workers/separate.worker.ts", import.meta.url), {
+            type: "module",
+          }),
+          busy: false,
+        };
+        workerRef.current = slot;
+      }
+      const current = slot;
+      current.busy = true;
+      current.worker.onmessage = (event: MessageEvent<StretchResponse>) => {
+        current.busy = false;
+        const message = event.data;
+        finish(
+          message.type === "stretched"
+            ? channelsToBuffer(context, message.channels, source.sampleRate)
+            : null,
+        );
+      };
+      current.worker.onerror = () => {
+        // Nothing to play is better than a spinner that never stops.
+        current.busy = false;
+        current.worker.terminate();
+        if (workerRef.current === current) workerRef.current = null;
+        finish(null);
+      };
+      // Copies: the originals belong to the decoded file.
+      const channels = Array.from({ length: source.numberOfChannels }, (_, index) =>
+        source.getChannelData(index).slice(),
+      );
+      const request: StretchRequest = {
+        type: "stretch",
+        jobId: 0,
+        channels,
+        sampleRate: source.sampleRate,
+        speed,
+        semitones,
+      };
+      current.worker.postMessage(
+        request,
+        channels.map((channel) => channel.buffer),
+      );
+    }, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // `key` names the song and both dials; the rest follow from it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const matches = result.key === key;
+  return { buffer: matches ? result.buffer : null, busy: Boolean(key) && !matches };
+}
 
 type Props = {
   /** A saved practice version to restore the dials from; the song is asked for again. */
@@ -61,21 +158,23 @@ export function SpeedTool({ initial = null }: Props) {
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
-  useEffect(() => () => void context?.close(), [context]);
+  // A closed context throws when closed again, which React's development
+  // double mount does on the way out — an unhandled rejection every visit.
+  useEffect(() => () => {
+    if (context && context.state !== "closed") void context.close();
+  }, [context]);
 
   const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
 
   const renderKey = audio && context ? `${audio.url}-${speed}-${semitones}` : "";
   useEffect(() => resetSave(), [renderKey, resetSave]);
 
-  const { buffer: rendered, busy } = useRenderedAudio(
+  const { buffer: rendered, busy } = useStretchedAudio(
     renderKey,
-    () => {
-      if (!audio || !context) return null;
-      const channels = changeSpeedAndPitch(audio.buffer, speed / 100, semitones);
-      return channelsToBuffer(context, channels, audio.buffer.sampleRate);
-    },
-    120,
+    audio?.buffer ?? null,
+    speed / 100,
+    semitones,
+    context,
   );
 
   // The loop is drawn in source time; the rendered file is stretched, so the
@@ -247,7 +346,9 @@ export function SpeedTool({ initial = null }: Props) {
                 </label>
                 <label className="setting-field range-field">
                   <span>
-                    טון <b>{semitones > 0 ? "+" : ""}{semitones} חצאי טונים</b>
+                    {/* A signed number is its own left-to-right run: on this
+                        right-to-left page "-3" otherwise shows as "3-". */}
+                    טון <b><bdi dir="ltr">{semitones > 0 ? "+" : ""}{semitones}</bdi> חצאי טונים</b>
                   </span>
                   <input
                     type="range"
@@ -261,7 +362,10 @@ export function SpeedTool({ initial = null }: Props) {
               </div>
             </div>
 
-            {busy ? (
+            {/* The player stays mounted while a new version renders, so a
+                dragged slider does not tear down its audio context and the
+                playback carries on in the new version from the same bar. */}
+            {busy && (
               <div className="processing-box">
                 <div className="processing-top">
                   <span>
@@ -272,21 +376,22 @@ export function SpeedTool({ initial = null }: Props) {
                   <div />
                 </div>
               </div>
-            ) : (
-              <>
-                <Transport
-                  buffer={rendered}
-                  loop={playerLoop}
-                  label={loop ? "נגן את הלולאה" : "נגן"}
-                  onTime={setCursor}
-                />
-                {loop && (
-                  <p className="table-footnote">
-                    <Repeat size={14} /> הלולאה {formatTime(loop.start)}–{formatTime(loop.end)} תנוגן שוב
-                    ושוב ב־{speed}% מהמהירות המקורית.
-                  </p>
-                )}
-              </>
+            )}
+            <Transport
+              buffer={rendered}
+              loop={playerLoop}
+              label={loop ? "נגן את הלולאה" : "נגן"}
+              onTime={setCursor}
+              keepRelativePosition
+            />
+            {loop && (
+              <p className="table-footnote">
+                <Repeat size={14} /> הלולאה{" "}
+                <bdi dir="ltr">
+                  {formatTime(loop.start)}–{formatTime(loop.end)}
+                </bdi>{" "}
+                תנוגן שוב ושוב ב־{speed}% מהמהירות המקורית.
+              </p>
             )}
 
             <div className="downloads-card">
@@ -303,7 +408,7 @@ export function SpeedTool({ initial = null }: Props) {
                 <button onClick={exportWav} type="button" disabled={!rendered || busy}>
                   <Snail size={17} />
                   <span>
-                    WAV<small>{speed}% · {semitones > 0 ? "+" : ""}{semitones} חצאי טונים</small>
+                    WAV<small>{speed}% · <bdi dir="ltr">{semitones > 0 ? "+" : ""}{semitones}</bdi> חצאי טונים</small>
                   </span>
                 </button>
                 <ShareButton build={buildFile} title="גרסה לתרגול" />
