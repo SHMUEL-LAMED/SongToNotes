@@ -134,10 +134,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "visualizer",
-    title: "ויזואלייזר לשיר",
-    tagline: "סרטון שזז עם המוזיקה",
+    title: "סרטון ותמונה לשיתוף",
+    tagline: "ויזואלייזר וכרטיס שיר לרשתות",
     description:
-      "הופכים שיר לסרטון: גלים, עמודות או עיגול שזזים עם המוזיקה, עם שם השיר ותמונה — ומורידים וידאו לרשתות.",
+      "הופכים שיר לסרטון שזז עם המוזיקה, או לכרטיס תמונה מעוצב עם שם, סולם ואקורדים — בגודל פוסט או סטורי, תמיד עם הקישור לאתר.",
     icon: AudioWaveform,
     hue: 268,
     category: "create",
@@ -214,7 +214,7 @@ export const ALL_TOOLS: ToolDefinition[] = [
   {
     id: "notes",
     title: "שיר לתווים",
-    tagline: "מנגינה נכנסת, תווים יוצאים",
+    tagline: "תווים, קצב וסולם מכל שיר",
     description:
       "מעלים שיר או מזמזמים למיקרופון, והאתר מזהה תווים, קצב וסולם ומכין תווים, MIDI ו־MusicXML.",
     icon: FileMusic,
@@ -240,10 +240,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "beats",
-    title: "מכונת תופים",
-    tagline: "ביט משלכם, צעד אחרי צעד",
+    title: "תופים וביטים",
+    tagline: "רשת צעדים, נגינה חיה ופדים",
     description:
-      "רשת של שישה עשר צעדים ושמונה כלי הקשה מסונתזים: בונים מקצב, מוסיפים סווינג, ומורידים לולאה כקובץ או שולחים למיקסר.",
+      "מכונת תופים עם רשת של 16 צעדים, מערכת תופים לנגינה חיה במגע או במקלדת, ופדים לביטים ואפקטים — בכלי אחד, עם הקלטה ולולאה.",
     icon: Grid3x3,
     hue: 28,
     category: "create",
@@ -253,10 +253,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "convert",
-    title: "המרת פורמטים",
-    tagline: "MP3 או WAV, באיכות שתבחרו",
+    title: "המרה, חיתוך וחיבור",
+    tagline: "קובץ אחד או כמה, לכל פורמט",
     description:
-      "ממירים כל קובץ שמע ל־MP3 או WAV עם שליטה בקצב הדגימה, בערוצים ובאיכות, חיתוך ועוצמה — בדפדפן, בלי להעלות.",
+      "ממירים כל קובץ שמע ל־MP3 או WAV, חותכים, משנים עוצמה — או מחברים כמה קבצים לאחד עם מעבר רך ביניהם.",
     icon: ArrowLeftRight,
     hue: 238,
     category: "create",
@@ -291,10 +291,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "mixer",
-    title: "מיקסר ולופר",
-    tagline: "כמה ערוצים, מיקס אחד",
+    title: "אולפן: מיקסר ומקליט",
+    tagline: "ערוצים מקבצים ומהמיקרופון",
     description:
-      "מעלים כמה קבצים — למשל השירה והליווי שהופרדו — מאזנים עוצמה ופאן, מנגנים בלולאה על קטע, ומורידים מיקס אחד.",
+      "מערבבים ערוצים מקבצים ומקליטים עליהם מהמיקרופון, ערוץ אחרי ערוץ, עם מטרונום — עוצמה, פאן, השתקה וסולו, לולאה ומיקס אחד ל־WAV.",
     icon: Layers,
     hue: 262,
     category: "create",
@@ -380,10 +380,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "progressions",
-    title: "מחולל מהלכים",
-    tagline: "מהלך אקורדים לפי אווירה",
+    title: "מהלכים ומנגינות",
+    tagline: "אקורדים ולחן בלחיצה",
     description:
-      "בוחרים סולם ואווירה — פופ, עצוב, מזרחי, ג׳אז — ומקבלים מהלך אקורדים שמתנגן בלולאה עם ארפג׳יו ובס. מחליפים אקורד בלחיצה ושולחים לשירון או כ־MIDI.",
+      "מהלכי אקורדים לפי אווירה וסולם עם ליווי, ומנגינה מקורית מעליהם — משמיעים, משנים עד שמתאים, ומורידים MIDI.",
     icon: Music4,
     hue: 250,
     category: "create",
@@ -419,10 +419,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "rhythm",
-    title: "מאמן קצב",
-    tagline: "לתופף בזמן",
+    title: "מאמן קצב ומעברים",
+    tagline: "תבניות קצב ומעברים בין אקורדים",
     description:
-      "תבניות קצב מקל לקשה: ספירה, נגינה, ואתם מתופפים על המקלדת או על המסך — האתר מודד כל הקשה ומראה אם אתם מקדימים או מאחרים.",
+      "מתרגלים תבניות קצב מול שעון האודיו, ומעברים בין שני אקורדים בגיטרה על זמן — עם ניקוד ושיאים.",
     icon: Drum,
     hue: 122,
     category: "practice",
@@ -455,10 +455,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
   {
     id: "transcript",
-    title: "תמלול לטקסט",
-    tagline: "דיבור נכנס, טקסט יוצא",
+    title: "תמלול ומילים מסונכרנות",
+    tagline: "דיבור לטקסט, מילים לקריוקי",
     description:
-      "מעלים הקלטה או שיר והדפדפן מתמלל את הדיבור לטקסט עם חותמות זמן — עברית, אנגלית ועוד — להורדה כטקסט או ככתוביות.",
+      "תמלול הקלטות לטקסט עם חותמות זמן (TXT, SRT, VTT), ומילים לשיר עם זמן לכל מילה לקריוקי ו־LRC.",
     icon: Captions,
     hue: 250,
     category: "analyze",
@@ -508,8 +508,90 @@ export const ALL_TOOLS: ToolDefinition[] = [
   },
 ];
 
-/** The tools visitors see. */
-export const TOOLS = ALL_TOOLS.filter((tool) => !tool.hidden);
+/**
+ * Tools that did nearly the same job, each with a small extra, now live
+ * together as one tool with tabs. Each tab is still the tool it was, at the
+ * address it always had (`#/drumkit` opens the drums on the live-kit tab), so
+ * links, saved work and the assistant's actions keep working; the menu and
+ * the home page show only the first tab's tool, which names the family.
+ */
+export const TOOL_FAMILIES: { parent: string; tabs: { id: string; label: string }[] }[] = [
+  { parent: "notes", tabs: [{ id: "notes", label: "תווים מלאים" }, { id: "analyze", label: "קצב וסולם מהיר" }] },
+  { parent: "convert", tabs: [{ id: "convert", label: "קובץ אחד" }, { id: "joiner", label: "כמה קבצים" }] },
+  { parent: "mixer", tabs: [{ id: "mixer", label: "מיקסר" }, { id: "recorder", label: "הקלטה בשכבות" }] },
+  { parent: "beats", tabs: [{ id: "beats", label: "רשת צעדים" }, { id: "drumkit", label: "נגינה חיה" }, { id: "pads", label: "פדים" }] },
+  { parent: "progressions", tabs: [{ id: "progressions", label: "מהלך אקורדים" }, { id: "melody", label: "מנגינה" }] },
+  { parent: "visualizer", tabs: [{ id: "visualizer", label: "סרטון" }, { id: "songcard", label: "תמונה" }] },
+  { parent: "transcript", tabs: [{ id: "transcript", label: "תמלול" }, { id: "lyrics", label: "מילים לשיר" }] },
+  { parent: "rhythm", tabs: [{ id: "rhythm", label: "תבניות קצב" }, { id: "changes", label: "מעברים בין אקורדים" }] },
+];
+
+/** The family a tool belongs to, when it shares a page with others. */
+export function familyOf(id: string) {
+  return TOOL_FAMILIES.find((family) => family.tabs.some((tab) => tab.id === id)) ?? null;
+}
+
+/** A tab that is not the first of its family: it has no place of its own in the menu. */
+export function isTabOnly(id: string) {
+  const family = familyOf(id);
+  return Boolean(family && family.parent !== id);
+}
+
+// The family's tool is found by what any of its tabs does: searching the
+// home page for "karaoke" or "drum kit" lands on the tool that has the tab.
+for (const family of TOOL_FAMILIES) {
+  const parent = ALL_TOOLS.find((tool) => tool.id === family.parent);
+  if (!parent) continue;
+  const words = new Set(parent.tags);
+  for (const tab of family.tabs) {
+    const member = ALL_TOOLS.find((tool) => tool.id === tab.id);
+    if (!member || member === parent) continue;
+    words.add(member.title);
+    for (const tag of member.tags) words.add(tag);
+  }
+  parent.tags = [...words];
+}
+
+/**
+ * How the side menu is laid out: small groups by what the visitor is trying
+ * to do, and inside each the tools in the order people usually reach for
+ * them. Every tool with a place of its own appears here exactly once
+ * (tools.test.ts checks); the tabs of a family follow their first tab.
+ */
+export const MENU_GROUPS: { id: string; label: string; tools: string[] }[] = [
+  { id: "notation", label: "מהשיר לתווים", tools: ["notes", "chords", "identify"] },
+  { id: "edit", label: "עריכת שמע", tools: ["vocals", "ringtone", "speed", "convert", "denoise", "voice", "video"] },
+  { id: "create", label: "יצירה והפקה", tools: ["mixer", "beats", "progressions", "songbook", "visualizer"] },
+  { id: "words", label: "דיבור ומילים", tools: ["transcript", "tts"] },
+  { id: "practice", label: "תרגול ונגינה", tools: ["tuner", "metronome", "piano", "ear", "rhythm", "theory", "setlist"] },
+];
+
+/** The menu group a tool sits in (a tab: its family's), for the location shown above the page. */
+export function menuGroupLabel(id: string) {
+  const own = familyOf(id)?.parent ?? id;
+  return MENU_GROUPS.find((group) => group.tools.includes(own))?.label ?? null;
+}
+
+const MENU_ORDER = new Map(
+  MENU_GROUPS.flatMap((group) => group.tools)
+    .flatMap((id) => familyOf(id)?.tabs.map((tab) => tab.id) ?? [id])
+    .map((id, index) => [id, index]),
+);
+
+/** The tools visitors see, in the menu's order, tabs included. */
+export const TOOLS = ALL_TOOLS.filter((tool) => !tool.hidden).sort(
+  (a, b) => (MENU_ORDER.get(a.id) ?? Infinity) - (MENU_ORDER.get(b.id) ?? Infinity),
+);
+
+/** The tools with a place of their own in the menu and on the home page. */
+export const MENU_TOOLS = TOOLS.filter((tool) => !isTabOnly(tool.id));
+
+/** The tool whose page a tool is shown on: its family's, or its own. */
+export function pageToolOf(tool: ToolDefinition): ToolDefinition {
+  const family = familyOf(tool.id);
+  if (!family || family.parent === tool.id) return tool;
+  return ALL_TOOLS.find((item) => item.id === family.parent) ?? tool;
+}
 
 /** A tool visitors can see; a hidden one is not found. */
 export function findTool(id: string) {

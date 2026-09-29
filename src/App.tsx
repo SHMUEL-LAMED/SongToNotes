@@ -11,6 +11,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
 import { NextSteps } from "./components/NextSteps";
+import { ToolTabs } from "./components/ToolTabs";
 import { SharePage } from "./components/SharePage";
 import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
@@ -32,7 +33,7 @@ import { ASSISTANT_TARGET, useToolPromo } from "./lib/toolPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
-import { TOOLS, findAnyTool, findTool } from "./lib/tools";
+import { TOOLS, findAnyTool, findTool, pageToolOf } from "./lib/tools";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
@@ -453,6 +454,9 @@ function WorkspaceApp() {
 
   // A tool renders only when the site is open and the tool is switched on.
   const shown = tool && !closed && !toolOff ? tool.id : null;
+  // A tab of a tool that brings several together is shown under that tool's
+  // name, colour and place in the menu; the tab itself is the tool it was.
+  const pageTool = tool ? pageToolOf(tool) : null;
   const loading = (label: string) => (
     <div className="tool-loading" role="status">
       <span className="brand-mark">
@@ -465,7 +469,7 @@ function WorkspaceApp() {
   return (
     <AppShell
       route={route}
-      tool={tool}
+      tool={pageTool}
       pageTitle={admin ? "אזור ניהול" : me ? "האזור האישי" : credits ? "קרדיטים והזמנת חברים" : shareToken ? "עבודה משותפת" : null}
       account={accountOpen}
       owner={owner}
@@ -609,6 +613,7 @@ function WorkspaceApp() {
         {!closed && !tool && !shareToken && !admin && !me && !credits && (
           <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
         )}
+        {shown && <ToolTabs current={shown} />}
         {shown === "notes" && (
           <Suspense fallback={loading("טוען את מנוע התווים…")}>
             <TranscriberTool
@@ -658,7 +663,7 @@ function WorkspaceApp() {
 
         {tool && (
           <>
-            {shown && <NextSteps tool={tool} onOpen={go} />}
+            {shown && pageTool && <NextSteps tool={pageTool} onOpen={go} disabledTools={control.disabledTools} />}
             <SiteFooter onOpen={go} onFeedback={openFeedback} />
           </>
         )}

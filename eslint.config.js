@@ -34,9 +34,10 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": [
         "warn",
-        // TOOLS is computed (the tools that are not hidden), and its capital
-        // letters would otherwise pass it off as a component.
-        { allowConstantExport: true, allowExportNames: ["TOOLS"] },
+        // TOOLS and MENU_TOOLS are computed (the tools that are not hidden,
+        // and those with a place in the menu), and their capital letters
+        // would otherwise pass them off as components.
+        { allowConstantExport: true, allowExportNames: ["TOOLS", "MENU_TOOLS"] },
       ],
     },
   },

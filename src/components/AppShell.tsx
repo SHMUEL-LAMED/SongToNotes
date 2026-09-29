@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren
 import { useAuth } from "../lib/auth";
 import { useFavorites } from "../lib/prefs";
 import type { ThemePreference } from "../lib/theme";
-import { CATEGORY_LABELS, CATEGORY_ORDER, TOOLS, findTool, type ToolDefinition } from "../lib/tools";
+import { CATEGORY_LABELS, MENU_GROUPS, findTool, menuGroupLabel, type ToolDefinition } from "../lib/tools";
 import { CreditsPill } from "./CreditsPill";
 import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
@@ -201,14 +201,16 @@ export function AppShell({
             </section>
           )}
 
-          {CATEGORY_ORDER.map((category) => (
-            <section key={category} className="nav-section" aria-label={CATEGORY_LABELS[category]}>
-              <h2 className="nav-heading">{CATEGORY_LABELS[category]}</h2>
-              <ul className="nav-list">
-                {TOOLS.filter((item) => item.category === category).map((item) => toolItem(item))}
-              </ul>
-            </section>
-          ))}
+          {MENU_GROUPS.map((group) => {
+            const items = group.tools.map(findTool).filter((item): item is ToolDefinition => Boolean(item));
+            if (!items.length) return null;
+            return (
+              <section key={group.id} className="nav-section" aria-label={group.label}>
+                <h2 className="nav-heading">{group.label}</h2>
+                <ul className="nav-list">{items.map((item) => toolItem(item))}</ul>
+              </section>
+            );
+          })}
         </nav>
       </aside>
       <div className="sidebar-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />
@@ -239,7 +241,7 @@ export function AppShell({
                   <ChevronLeft size={14} />
                   {tool && (
                     <>
-                      <span>{CATEGORY_LABELS[tool.category]}</span>
+                      <span>{menuGroupLabel(tool.id) ?? CATEGORY_LABELS[tool.category]}</span>
                       <ChevronLeft size={14} />
                       <span className="crumb-dot" aria-hidden="true" />
                     </>
