@@ -1,0 +1,311 @@
+/* The file joiner. Everything is built on the shared tokens so it follows the
+   tool's hue and the light/dark theme; the only colours of its own are the
+   per-clip hues, which tie a card to its block on the timeline. */
+
+/* Declared where --clip-hue is set, so each card and timeline block
+   derives its colours from its own hue. */
+.joiner-clip,
+.joiner-timeline-block {
+  --joiner-clip: oklch(0.64 0.15 var(--clip-hue));
+  --joiner-clip-soft: oklch(0.64 0.15 var(--clip-hue) / 0.14);
+}
+:root[data-theme="dark"] .joiner-clip,
+:root[data-theme="dark"] .joiner-timeline-block {
+  --joiner-clip: oklch(0.76 0.13 var(--clip-hue));
+  --joiner-clip-soft: oklch(0.76 0.13 var(--clip-hue) / 0.16);
+}
+
+/* ---- adding files ---- */
+
+.joiner-drop.is-compact {
+  min-height: 0;
+  padding: 14px 18px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  text-align: start;
+  justify-content: flex-start;
+}
+.joiner-drop.is-compact .upload-icon { width: 40px; height: 40px; margin: 0; border-radius: 12px; }
+.joiner-drop.is-compact strong { font-size: 15px; }
+.joiner-drop.is-compact span:last-child { flex-basis: 100%; padding-inline-start: 52px; font-size: 12.5px; }
+.joiner-spin { animation: joiner-spin 0.9s linear infinite; }
+@keyframes joiner-spin { to { transform: rotate(360deg); } }
+
+/* ---- clip cards ---- */
+
+.joiner-clips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.joiner-clip {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--joiner-clip);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: box-shadow 0.18s var(--ease), transform 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.joiner-clip.is-dragging {
+  position: relative;
+  z-index: 2;
+  transform: scale(1.01);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-md);
+}
+
+.joiner-clip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.joiner-grip {
+  flex: none;
+  width: 30px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-muted);
+  cursor: grab;
+  /* The finger drags the card, not the page. */
+  touch-action: none;
+}
+.joiner-grip:hover { color: var(--text); background: var(--surface-hover); }
+.joiner-grip:active,
+.joiner-clip.is-dragging .joiner-grip { cursor: grabbing; color: var(--accent-text); }
+.joiner-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.joiner-clip-index {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--joiner-clip-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.joiner-clip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.joiner-clip-title strong {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.joiner-clip-title small { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.joiner-clip-actions { flex: none; display: flex; gap: 6px; }
+.joiner-clip-actions .icon-button { width: 36px; height: 36px; }
+
+/* ---- the trimmer ---- */
+
+.joiner-trim {
+  position: relative;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  background: var(--wave-bg);
+  border: 1px solid var(--line);
+  /* Room for the handles' grab area at the very edges. */
+  margin-inline: 6px;
+  touch-action: pan-y;
+  user-select: none;
+}
+.joiner-trim svg { position: absolute; inset: 4px 0; width: 100%; height: calc(100% - 8px); display: block; }
+.joiner-trim path { fill: var(--joiner-clip); opacity: 0.85; }
+.joiner-trim-shade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--surface);
+  opacity: 0.72;
+  pointer-events: none;
+}
+.joiner-trim-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-block: 2px solid var(--accent);
+  background: var(--accent-tint);
+  pointer-events: none;
+}
+.joiner-trim-cursor {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+/* A 28px-wide grab area around a slim visible bar with a knob. */
+.joiner-handle {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 28px;
+  margin-left: -14px;
+  display: grid;
+  place-items: center;
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+  z-index: 1;
+}
+.joiner-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.joiner-handle span {
+  position: relative;
+  width: 14px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent);
+  border: 2px solid var(--surface-solid);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s var(--ease);
+}
+.joiner-handle:hover span,
+.joiner-handle:active span { transform: scale(1.12); }
+.joiner-handle:focus-visible span { box-shadow: 0 0 0 4px var(--accent-ring); }
+
+.joiner-clip-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.joiner-clip-range {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.joiner-clip-range svg { color: var(--text-muted); }
+.joiner-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-inline-start: 6px;
+}
+.joiner-link:hover { text-decoration: underline; }
+.joiner-gain {
+  flex: 1 1 200px;
+  max-width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.joiner-gain span { flex: none; min-width: 84px; }
+.joiner-gain b { color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.joiner-gain input { flex: 1; min-width: 0; }
+
+.joiner-hint { margin: -6px 0 0; font-size: 13px; color: var(--text-muted); }
+
+/* ---- the joined preview ---- */
+
+.joiner-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+.joiner-preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.joiner-preview-head h2 { margin: 0; font-size: 17px; }
+.joiner-total { font-size: 13.5px; color: var(--text-muted); }
+.joiner-total b { color: var(--text); font-size: 17px; font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
+
+/* Two lanes, so a crossfade shows as the overlap between neighbours and a
+   gap as the empty space between them. */
+.joiner-timeline {
+  position: relative;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  background: var(--wave-bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.joiner-timeline-block {
+  position: absolute;
+  top: 5px;
+  height: 22px;
+  min-width: 2px;
+  display: flex;
+  align-items: center;
+  padding-inline: 6px;
+  border-radius: 6px;
+  background: var(--joiner-clip-soft);
+  border: 1.5px solid var(--joiner-clip);
+  overflow: hidden;
+}
+.joiner-timeline-block.is-low { top: 25px; }
+.joiner-timeline-block span { font-size: 11px; font-weight: 800; color: var(--text); }
+.joiner-timeline-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.joiner-result .download-buttons { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+@media (max-width: 560px) {
+  /* The four actions move under the name, so a long file name still reads. */
+  .joiner-clip-head { flex-wrap: wrap; }
+  .joiner-clip-title { flex-basis: calc(100% - 80px); }
+  .joiner-clip-actions { width: 100%; justify-content: flex-end; }
+  .joiner-clip { padding: 10px 10px 12px; }
+  .joiner-preview { padding: 12px; }
+  .joiner-gain { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .joiner-clip,
+  .joiner-handle span { transition: none; }
+  .joiner-spin { animation-duration: 2.5s; }
+}
