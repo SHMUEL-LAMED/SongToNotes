@@ -74,7 +74,11 @@ export function RingtoneTool() {
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
   const [context] = useState(sharedContext);
 
-  useEffect(() => () => void context?.close(), [context]);
+  // A closed context throws when closed again, which React's development
+  // double mount does on the way out.
+  useEffect(() => () => {
+    if (context && context.state !== "closed") void context.close();
+  }, [context]);
   // Fetched in the background from the moment the tool opens, so the
   // instrumental button later does not begin with a long first-time wait.
   useEffect(() => prefetchSeparationModel(), []);
