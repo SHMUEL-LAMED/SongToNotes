@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALL_TOOLS, MENU_GROUPS, MENU_TOOLS, TOOLS, TOOL_FAMILIES, familyOf, findAnyTool, findTool, isTabOnly, menuGroupLabel, pageToolOf } from "./tools";
 import { WORKFLOWS } from "./workflows";
@@ -73,5 +74,14 @@ describe("tool families", () => {
   it("let a tab's keywords find its family's tool", () => {
     expect(findTool("beats")!.tags).toContain("תופים אלקטרוניים");
     expect(findTool("convert")!.tags).toContain("חיבור קבצים");
+  });
+});
+
+describe("how-to videos", () => {
+  it("exist for every tool that shows one, and every video belongs to a tool", () => {
+    const dir = new URL("../../public/videos/", import.meta.url);
+    const files = readdirSync(dir).filter((name) => name.endsWith(".mp4"));
+    const withVideo = ALL_TOOLS.filter((tool) => tool.video).map((tool) => `${tool.id}.mp4`);
+    expect([...files].sort()).toEqual([...withVideo].sort());
   });
 });
