@@ -1,0 +1,154 @@
+/* Song card: the live canvas preview beside the form. */
+
+.songcard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+/* In RTL the first column is on the right: the preview sits at the reading start
+   and stays in view while the form scrolls beside it. */
+.songcard-preview-column {
+  position: sticky;
+  top: calc(var(--topbar-h) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.songcard-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.songcard-preview {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background:
+    repeating-conic-gradient(var(--surface-sunken) 0 25%, transparent 0 50%) 0 0 / 22px 22px,
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+/* The canvas keeps its 1080px drawing size and is scaled by CSS: both
+   dimensions auto with max limits keeps its aspect ratio at any width. */
+.songcard-canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(70vh, 760px);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.songcard-preview[data-size="post"] .songcard-canvas { max-height: min(62vh, 620px); }
+
+.songcard-actions { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+.songcard-status {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.songcard-send { display: flex; flex-direction: column; gap: 12px; }
+.songcard-send .settings-title { margin-bottom: 0; }
+.songcard-send-note { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+.songcard-send .share-site-targets { justify-content: flex-start; }
+.songcard-send .share-site-target { flex: 1 1 84px; max-width: 120px; }
+.songcard-copy { align-self: flex-start; }
+
+.songcard-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
+.songcard-wide { grid-column: 1 / -1; }
+
+.songcard-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.songcard-chip {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.setting-field small.songcard-warning { color: var(--warning); }
+
+.songcard-imports { margin-bottom: 16px; }
+.songcard-import-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+.songcard-import-list .chip-toggle { max-width: 100%; }
+.songcard-import-list .chip-toggle span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.songcard-import-kind {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.songcard-cover-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.songcard-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.songcard-cover-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line);
+}
+
+.songcard-size-hint { font-weight: 500; font-size: 11.5px; opacity: 0.75; margin-inline-start: 4px; }
+
+.songcard-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-solid);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+/* The hue slider's track shows the hues themselves, so it says what it picks.
+   It runs LTR like the number it sets (0 at the left), in RTL pages too.
+   The element and attribute in the selector outrank the global range rule. */
+.songcard-hue {
+  direction: ltr;
+  --songcard-hues: linear-gradient(to right, hsl(0 80% 55%), hsl(60 80% 50%), hsl(120 70% 45%), hsl(180 70% 45%), hsl(240 75% 60%), hsl(300 75% 55%), hsl(359 80% 55%));
+}
+input.songcard-hue[type="range"]::-webkit-slider-runnable-track { height: 10px; background: var(--songcard-hues); }
+input.songcard-hue[type="range"]::-moz-range-track { height: 10px; background: var(--songcard-hues); }
+input.songcard-hue[type="range"]::-moz-range-progress { background: transparent; }
+input.songcard-hue[type="range"]::-webkit-slider-thumb { margin-top: -6px; }
+
+.songcard-link-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.songcard-link-note svg { flex: none; margin-top: 2px; color: var(--accent); }
+
+@media (max-width: 900px) {
+  .songcard-layout { grid-template-columns: minmax(0, 1fr); }
+  .songcard-preview-column { position: static; }
+}
+
+@media (max-width: 520px) {
+  .songcard-preview { padding: 8px; }
+  .songcard-canvas { max-height: 64vh; }
+  .songcard-preview[data-size="post"] .songcard-canvas { max-height: none; }
+  .songcard-send .share-site-target { flex: 1 1 calc((100% - 20px) / 3); }
+}
