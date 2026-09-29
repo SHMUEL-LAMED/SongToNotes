@@ -8,6 +8,7 @@ import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { BITRATES, SAMPLE_RATES, convertAudio, effectiveKbps, estimateBytes, type ConvertOptions, type OutputFormat } from "../lib/convert";
 import { downloadFile } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -53,6 +54,8 @@ export function ConvertTool({ initial = null }: Props) {
   const [trim, setTrim] = useState<TrimRange>(null);
   const [busy, setBusy] = useState<{ message: string; fraction: number } | null>(null);
   const [result, setResult] = useState<{ file: File; url: string; key: string } | null>(null);
+  // The converted file goes on to the next tool in its new format.
+  useOfferResult(result?.file ?? null, result?.file.name ?? "converted", () => result!.file);
   const [notice, setNotice] = useState<string | null>(initial ? `פתחת „${initial.title}”. בחר את הקובץ שוב כדי להמיר מחדש.` : null);
   const abortRef = useRef<AbortController | null>(null);
   const saving = useSaveWork();

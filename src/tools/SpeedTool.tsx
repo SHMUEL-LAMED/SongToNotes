@@ -8,6 +8,7 @@ import { Waveform } from "../components/Waveform";
 import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { changeSpeedAndPitch, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import type { StretchRequest, StretchResponse } from "../workers/separate.worker";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -195,6 +196,14 @@ export function SpeedTool({ initial = null }: Props) {
     const suffix = `${speed}pct${semitones ? `${semitones > 0 ? "+" : ""}${semitones}st` : ""}`;
     return new File([blob], `${base}-${suffix}.wav`, { type: "audio/wav" });
   };
+
+  // The slowed (or shifted) song goes on to the next tool; at 100% and no
+  // shift it is the same song, so the original is offered instead.
+  useOfferResult(
+    speed !== 100 || semitones !== 0 ? rendered : null,
+    `${safeFilename(audio?.file.name.replace(/\.[^/.]+$/, "") ?? "song")}-${speed}pct${semitones ? `${semitones > 0 ? "+" : ""}${semitones}st` : ""}.wav`,
+    () => buildFile()!,
+  );
 
   const exportWav = () => {
     const file = buildFile();

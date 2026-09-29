@@ -17,6 +17,7 @@ import {
 } from "../lib/stemSeparation";
 import { channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import type { SeparateTarget } from "../lib/separate";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -474,6 +475,14 @@ export function VocalsTool({ initial = null }: Props) {
       { type: "audio/wav" },
     );
   };
+
+  // The karaoke track (or the voice alone), not the full song, goes on to the
+  // next tool — a ringtone, the speed trainer, the chord finder.
+  useOfferResult(
+    result,
+    `${safeFilename(audio?.file.name.replace(/\.[^/.]+$/, "") ?? "song")}-${target === "instrumental" ? "karaoke" : "vocals"}.wav`,
+    () => buildFile()!,
+  );
 
   const exportWav = () => {
     const file = buildFile();
