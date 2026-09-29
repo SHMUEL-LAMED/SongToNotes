@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chordName, chordSheet, detectChordTimeline, transposeRoot, uniqueChords } from "./audioChords";
+import { chordName, chordSheet, detectChordTimeline, segmentIndexAt, transposeRoot, uniqueChords } from "./audioChords";
 import { guitarShape } from "./guitarShapes";
 
 const RATE = 22_050;
@@ -46,6 +46,17 @@ describe("chord timeline", () => {
     expect(Math.abs(segments[0].end - 2)).toBeLessThan(0.5);
   });
 
+  it("places chord changes where they happen and runs to the end of the song", () => {
+    // Frames used to be stamped with the start of their long analysis window,
+    // which put every change a third of a second early at this rate and ended
+    // the last chord well before the audio did.
+    const signal = concat([chord([48, 52, 55, 60, 64], 3), chord([45, 52, 57, 60, 64], 3)]);
+    const segments = detectChordTimeline(signal, RATE);
+    expect(segments).toHaveLength(2);
+    expect(Math.abs(segments[1].start - 3)).toBeLessThan(0.2);
+    expect(segments[1].end).toBeCloseTo(6, 5);
+  });
+
   it("keeps silence out of the timeline", () => {
     const segments = detectChordTimeline(new Float32Array(RATE * 2), RATE);
     expect(segments).toHaveLength(0);
@@ -61,6 +72,23 @@ describe("chord timeline", () => {
       { start: 1, end: 2, root: 0, quality: "", confidence: 1 },
       { start: 2, end: 3, root: 7, quality: "7", confidence: 1 },
     ])).toEqual([{ root: 0, quality: "" }, { root: 7, quality: "7" }]);
+  });
+});
+
+describe("segmentIndexAt", () => {
+  const segments = [
+    { start: 0, end: 2, root: 0, quality: "" as const, confidence: 1 },
+    { start: 2, end: 4, root: 9, quality: "m" as const, confidence: 1 },
+    { start: 5, end: 7, root: 7, quality: "" as const, confidence: 1 },
+  ];
+  it("finds the chord sounding at a moment, and nothing in a gap", () => {
+    expect(segmentIndexAt(segments, 0)).toBe(0);
+    expect(segmentIndexAt(segments, 1.99)).toBe(0);
+    expect(segmentIndexAt(segments, 2)).toBe(1);
+    expect(segmentIndexAt(segments, 4.5)).toBe(-1);
+    expect(segmentIndexAt(segments, 6)).toBe(2);
+    expect(segmentIndexAt(segments, 7)).toBe(-1);
+    expect(segmentIndexAt([], 1)).toBe(-1);
   });
 });
 

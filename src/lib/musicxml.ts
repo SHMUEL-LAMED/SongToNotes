@@ -50,18 +50,33 @@ function renderEvent(
   totalStaves: number,
   accidentals: MeasureAccidentals,
 ) {
-  const { type, dots } = noteValue(
-    event.length,
-    score.stepsPerBeat,
-    score.meter.beatType,
-  );
+  // One step of a triplet grid is a triplet eighth: an eighth played three in
+  // the time of two. It has no plain note value, so it used to go out with no
+  // <type> at all, which notation programs read as an unknown duration.
+  const tripletStep =
+    score.stepsPerBeat === 3 && score.meter.beatType === 4 && event.length === 1;
+  const { type, dots } = tripletStep
+    ? { type: "eighth", dots: 0 }
+    : noteValue(event.length, score.stepsPerBeat, score.meter.beatType);
   const typeTag = type ? `<type>${type}</type>` : "";
+  const timeModification = tripletStep
+    ? "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+    : "";
+  // The bracket opens on the first step of the beat and closes on the last.
+  const tupletMark = !tripletStep
+    ? ""
+    : event.offset % 3 === 0
+      ? '<tuplet type="start" bracket="yes"/>'
+      : event.offset % 3 === 2
+        ? '<tuplet type="stop"/>'
+        : "";
   const dotTags = "<dot/>".repeat(dots);
   const staffTag = totalStaves > 1 ? `<staff>${staffNumber}</staff>` : "";
   const voiceTag = `<voice>${staffNumber}</voice>`;
 
   if (!event.midis.length) {
-    return `<note><rest/><duration>${event.length}</duration>${voiceTag}${typeTag}${dotTags}${staffTag}</note>`;
+    const restNotations = tupletMark ? `<notations>${tupletMark}</notations>` : "";
+    return `<note><rest/><duration>${event.length}</duration>${voiceTag}${typeTag}${dotTags}${timeModification}${staffTag}${restNotations}</note>`;
   }
 
   return event.midis
@@ -90,8 +105,10 @@ function renderEvent(
         ties.push('<tie type="start"/>');
         tied.push('<tied type="start"/>');
       }
-      const notations = tied.length
-        ? `<notations>${tied.join("")}</notations>`
+      // Only the first note of a chord carries the tuplet bracket.
+      const marks = [...tied, ...(index === 0 && tupletMark ? [tupletMark] : [])];
+      const notations = marks.length
+        ? `<notations>${marks.join("")}</notations>`
         : "";
 
       return (
@@ -99,7 +116,7 @@ function renderEvent(
         `<pitch><step>${spelled.letter}</step>${alterTag}<octave>${spelled.octave}</octave></pitch>` +
         `<duration>${event.length}</duration>` +
         `${ties.join("")}` +
-        `${voiceTag}${typeTag}${dotTags}${accidentalTag}${staffTag}${notations}` +
+        `${voiceTag}${typeTag}${dotTags}${accidentalTag}${timeModification}${staffTag}${notations}` +
         `</note>`
       );
     })

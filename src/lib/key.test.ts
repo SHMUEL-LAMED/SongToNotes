@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectKey, keyName, keyToAbc, pitchClassHistogram, scientificName, spellPitch } from "./key";
+import { detectKey, keyName, keyToAbc, pitchClassHistogram, scientificName, spellPitch, transposeKey } from "./key";
 import type { DetectedNote } from "./types";
 
 function note(midi: number, start: number, duration = 0.5, confidence = 0.9): DetectedNote {
@@ -111,5 +111,21 @@ describe("naming", () => {
     expect(scientificName(69, 0)).toBe("A4");
     expect(scientificName(61, 5)).toBe("C#4");
     expect(scientificName(61, -4)).toBe("Db4");
+  });
+});
+
+describe("transposeKey", () => {
+  it("moves the tonic and takes the new tonic's signature", () => {
+    const cMajor = detectKey(scale(60, MAJOR_STEPS));
+    expect(transposeKey(cMajor, 2)).toMatchObject({ tonicPitchClass: 2, fifths: 2, mode: "major" });
+    expect(transposeKey(cMajor, -2)).toMatchObject({ tonicPitchClass: 10, fifths: -2, mode: "major" });
+    expect(keyName(transposeKey(cMajor, 7))).toBe(keyName({ ...cMajor, tonicPitchClass: 7, fifths: 1 }));
+  });
+
+  it("keeps a minor key minor and leaves an untransposed key alone", () => {
+    const aMinor = detectKey(scale(57, MINOR_STEPS));
+    expect(transposeKey(aMinor, 0)).toBe(aMinor);
+    expect(transposeKey(aMinor, 12)).toMatchObject({ tonicPitchClass: 9, fifths: 0, mode: "minor" });
+    expect(transposeKey(aMinor, 1)).toMatchObject({ tonicPitchClass: 10, fifths: -5, mode: "minor" });
   });
 });

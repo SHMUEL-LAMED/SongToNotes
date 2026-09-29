@@ -74,6 +74,14 @@ export function sheetToSvg(svg: SVGSVGElement | null) {
 export function printSheet(svg: SVGSVGElement | null, title: string) {
   const markup = sheetToSvg(svg);
   if (!markup) return false;
+  // The title is the song's file name, which may hold "<" or "&". Written raw
+  // into the same-origin print frame, a file called `<img src=x onerror=…>.mp3`
+  // ran its script on the site.
+  const safeTitle = title
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;inset:0;width:0;height:0;border:0;opacity:0";
@@ -85,10 +93,10 @@ export function printSheet(svg: SVGSVGElement | null, title: string) {
   }
   doc.open();
   doc.write(
-    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>` +
+    `<!doctype html><html><head><meta charset="utf-8"><title>${safeTitle}</title>` +
       `<style>@page{margin:14mm}body{margin:0;font-family:system-ui,sans-serif}` +
       `h1{font-size:16pt;margin:0 0 10mm;text-align:center}svg{width:100%;height:auto}</style>` +
-      `</head><body><h1>${title}</h1>${markup}</body></html>`,
+      `</head><body><h1 dir="auto">${safeTitle}</h1>${markup}</body></html>`,
   );
   doc.close();
   const win = frame.contentWindow;

@@ -167,7 +167,17 @@ export function chromagram(mono: Float32Array, sampleRate: number, hopSeconds = 
       if (note.low >= 0) bass[index * LOW_NOTES + note.low] = value;
     });
   }
-  return { chroma, bass, lowNotes: LOW_NOTES, lowestMidi: lowest, frames, hopSeconds: hop / sampleRate };
+  return {
+    chroma,
+    bass,
+    lowNotes: LOW_NOTES,
+    lowestMidi: lowest,
+    frames,
+    hopSeconds: hop / sampleRate,
+    // Frame `i` is the window starting at `i * hop`; what it hears is centred
+    // half a window later.
+    centreSeconds: size / 2 / sampleRate,
+  };
 }
 
 type FrameChoice = { template: number; score: number };
@@ -221,7 +231,19 @@ export function detectChordTimeline(
   const hopSeconds = options.hopSeconds ?? 0.1;
   const smoothSeconds = options.smoothSeconds ?? 0.6;
   const minSeconds = options.minSeconds ?? 0.45;
-  const { chroma, bass, lowNotes, lowestMidi, frames, hopSeconds: hop } = chromagram(mono, sampleRate, hopSeconds);
+  const { chroma, bass, lowNotes, lowestMidi, frames, hopSeconds: hop, centreSeconds } = chromagram(
+    mono,
+    sampleRate,
+    hopSeconds,
+  );
+  const duration = mono.length / sampleRate;
+  // Frame index to song time. Frames were stamped with the start of their
+  // 16384-sample window, so every chord change landed that half window (0.19 s
+  // at 44.1 kHz, 0.37 s at 22.05 kHz) early and the last chord stopped short
+  // of the song's end. A boundary between frames sits half a hop before the
+  // frame that starts the new chord.
+  const frameTime = (frame: number) =>
+    frame <= 0 ? 0 : frame >= frames ? duration : Math.min(duration, Math.max(0, (frame - 0.5) * hop + centreSeconds));
 
   // Average the chroma over a sliding window before matching: cheaper and
   // steadier than matching every frame and voting afterwards.
@@ -264,8 +286,8 @@ export function detectChordTimeline(
       let score = 0;
       for (let at = runStart; at < index; at += 1) score += choices[at].score;
       segments.push({
-        start: runStart * hop,
-        end: index * hop,
+        start: frameTime(runStart),
+        end: frameTime(index),
         root: TEMPLATES[template].root,
         quality: TEMPLATES[template].quality,
         confidence: Math.max(0, Math.min(1, score / (index - runStart))),
@@ -326,6 +348,24 @@ export function chordSheet(segments: ChordSegment[], semitones = 0, flats = fals
   return segments
     .map((segment) => `${clock(segment.start)}  ${chordName(transposeRoot(segment.root, semitones), segment.quality, flats)}`)
     .join("\n");
+}
+
+/**
+ * The segment sounding at `time`, or -1 between chords. Segments are in time
+ * order, so this is a binary search — cheap enough to run on every
+ * playback frame.
+ */
+export function segmentIndexAt(segments: readonly ChordSegment[], time: number) {
+  let low = 0;
+  let high = segments.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const segment = segments[middle];
+    if (time < segment.start) high = middle - 1;
+    else if (time >= segment.end) low = middle + 1;
+    else return middle;
+  }
+  return -1;
 }
 
 /** Chords in order of first appearance, for the diagrams row. */

@@ -120,6 +120,21 @@ export function detectKey(notes: DetectedNote[]): KeySignature {
 }
 
 /**
+ * The same key moved by `semitones`, with the signature of the new tonic —
+ * what a transposed score is written in.
+ */
+export function transposeKey(key: KeySignature, semitones: number): KeySignature {
+  const shift = Math.round(semitones);
+  if (!shift) return key;
+  const tonicPitchClass = (((key.tonicPitchClass + shift) % 12) + 12) % 12;
+  return {
+    ...key,
+    tonicPitchClass,
+    fifths: (key.mode === "minor" ? MINOR_FIFTHS : MAJOR_FIFTHS)[tonicPitchClass],
+  };
+}
+
+/**
  * Places a pitch class on the line of fifths, picking the spelling that sits
  * closest to the key centre — so F♯ major gets D♯ rather than E♭.
  */
