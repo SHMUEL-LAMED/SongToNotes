@@ -87,7 +87,11 @@ async function trim(cache) {
 async function handleNavigation(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Only the app's own page is kept as the offline copy: opening a WAV, the
+    // sitemap or a model file in a tab is a navigation too, and storing that
+    // as index.html would leave the site unable to start offline.
+    const html = (response.headers.get("content-type") || "").includes("text/html");
+    if (response.ok && response.type === "basic" && html) {
       const cache = await caches.open(SHELL_CACHE);
       await cache.put("./index.html", response.clone());
     }

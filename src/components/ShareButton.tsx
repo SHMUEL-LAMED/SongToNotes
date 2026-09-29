@@ -34,7 +34,15 @@ export function ShareButton({ build, title, label = "שתף", hint }: Props) {
       className="share-button"
       disabled={state === "sharing"}
       onClick={() => {
-        const file = build();
+        let file: File | null;
+        try {
+          file = build();
+        } catch {
+          // A file that could not be put together is a failed share, said on
+          // the button, not an error the click swallows.
+          setState("failed");
+          return;
+        }
         if (!file) return;
         setState("sharing");
         void shareFile(file, title).then((outcome) => {

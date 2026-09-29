@@ -87,6 +87,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
   }, [favorites, filter, query]);
 
   const recent = recentTools.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool)).slice(0, 6);
+  // Favourites whose tool was hidden since drop out; a list of only those
+  // used to leave the "your tools" heading over an empty shelf.
+  const favoriteTools = favorites.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool));
   const firstName = user ? profile?.full_name?.split(" ")[0] : null;
 
   const scrollToCatalog = () => document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -109,7 +112,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
           </h1>
           <p>
             תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {TOOLS.length} כלים, ורובם רצים
-            כולם אצלך במכשיר, בלי להעלות את הקובץ.
+            אצלך במכשיר, בלי להעלות את הקובץ.
           </p>
           <div className="hero-actions">
             <button type="button" className="primary-button compact" onClick={() => onOpen("notes")}>
@@ -142,7 +145,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
       <CreditsPromo onOpen={onOpen} />
 
-      {(recent.length > 0 || favorites.length > 0) && (
+      {(recent.length > 0 || favoriteTools.length > 0) && (
         <section className="home-section" aria-labelledby="mine-title">
           <div className="section-head">
             <div>
@@ -156,12 +159,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
             )}
           </div>
           <div className="shelf">
-            {favorites
-              .map(findTool)
-              .filter((tool): tool is ToolDefinition => Boolean(tool))
-              .map((tool) => (
-                <MiniTool key={`fav-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Star size={12} fill="currentColor" />} />
-              ))}
+            {favoriteTools.map((tool) => (
+              <MiniTool key={`fav-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Star size={12} fill="currentColor" />} />
+            ))}
             {recent
               .filter((tool) => !favorites.includes(tool.id))
               .map((tool) => (

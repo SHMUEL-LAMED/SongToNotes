@@ -370,7 +370,9 @@
 .assistant-action.is-cancelled .assistant-action-mark { background: var(--text-muted); }
 .assistant-action > div { display: flex; flex-direction: column; min-width: 0; }
 .assistant-action b { font-weight: 650; }
-.assistant-action span { color: var(--text-muted); font-size: 12.5px; }
+/* Ordered by its own words, so a tool's reply like "93 BPM" does not read
+   "BPM 93" in a right-to-left panel; it stays aligned with the panel. */
+.assistant-action span { color: var(--text-muted); font-size: 12.5px; unicode-bidi: plaintext; }
 .assistant-acting { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); padding: 2px 38px; }
 .assistant-acting svg { color: var(--brand-2); }
 

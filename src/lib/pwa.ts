@@ -15,23 +15,27 @@ export function useServiceWorker() {
     let cancelled = false;
     let timer = 0;
 
+    const follow = (installing: ServiceWorker) => {
+      installing.addEventListener("statechange", () => {
+        // A worker that reaches "installed" with no controller is the very
+        // first one — that is a fresh visit, not an update to announce.
+        if (installing.state === "installed" && navigator.serviceWorker.controller && !cancelled) {
+          setWaiting(installing);
+          setUpdateReady(true);
+        }
+      });
+    };
+
     const watch = (registration: ServiceWorkerRegistration) => {
       if (registration.waiting && navigator.serviceWorker.controller) {
         setWaiting(registration.waiting);
         setUpdateReady(true);
       }
-
+      // An update that was already downloading when the page got here has
+      // fired its "updatefound" before anyone listened.
+      if (registration.installing) follow(registration.installing);
       registration.addEventListener("updatefound", () => {
-        const installing = registration.installing;
-        if (!installing) return;
-        installing.addEventListener("statechange", () => {
-          // A worker that reaches "installed" with no controller is the very
-          // first one — that is a fresh visit, not an update to announce.
-          if (installing.state === "installed" && navigator.serviceWorker.controller && !cancelled) {
-            setWaiting(installing);
-            setUpdateReady(true);
-          }
-        });
+        if (registration.installing) follow(registration.installing);
       });
     };
 
@@ -55,13 +59,28 @@ export function useServiceWorker() {
   }, []);
 
   const applyUpdate = () => {
-    waiting?.postMessage("skip-waiting");
-    // controllerchange fires once the new worker takes over; reloading then
-    // means the page is served entirely by the new build.
-    navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), {
-      once: true,
-    });
     setUpdateReady(false);
+    // The worker skips waiting by itself (public/sw.js), so by the time the
+    // button is pressed it has usually taken over already and no
+    // "controllerchange" is coming: waiting for one left the button doing
+    // nothing. A worker that is already in charge only needs a reload.
+    if (!waiting || waiting.state === "activating" || waiting.state === "activated" || waiting.state === "redundant") {
+      window.location.reload();
+      return;
+    }
+    // controllerchange fires once the new worker takes over; reloading then
+    // means the page is served entirely by the new build. The listener goes
+    // on before the message, and a timer covers a worker that never answers.
+    const fallback = window.setTimeout(() => window.location.reload(), 3000);
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      () => {
+        window.clearTimeout(fallback);
+        window.location.reload();
+      },
+      { once: true },
+    );
+    waiting.postMessage("skip-waiting");
   };
 
   return { updateReady, applyUpdate };

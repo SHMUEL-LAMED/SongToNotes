@@ -21,7 +21,10 @@ export function pathRoute(pathname: string, base = BASE): string | null {
 
 export function routeFrom(hash: string, pathname: string, base = BASE): string {
   // A hash always wins, "#/" included: that is how a tool page goes home.
-  if (hash) return hash.replace(/^#\/?/, "").trim() || "home";
+  // A trailing slash or a query that a link, a campaign or a chat app tacked
+  // on ("#/tuner/", "#/tuner?utm_source=…") still names the same page,
+  // instead of an unknown one that bounces to the hub.
+  if (hash) return hash.replace(/^#\/?/, "").replace(/[?&].*$/, "").trim().replace(/\/+$/, "") || "home";
   return pathRoute(pathname, base) ?? "home";
 }
 
@@ -42,16 +45,29 @@ export function useRoute() {
     };
   }, []);
 
-  const navigate = useCallback((next: string) => {
+  /**
+   * Opens a page. `replace` swaps the current history entry instead of
+   * adding one — for a redirect, such as an unknown address sent to the hub:
+   * pushing there left the unknown address behind it, and Back landed on it
+   * and was pushed forward again, so Back could never leave.
+   */
+  const navigate = useCallback((next: string, options?: { replace?: boolean }) => {
     const target = next === "home" ? "#/" : `#/${next}`;
+    const replace = Boolean(options?.replace);
     // Leaving a tool page for another page returns to the site's main
     // address, so the path and the hash never name two different tools.
     if (window.location.pathname !== BASE && pathRoute(window.location.pathname)) {
-      window.history.pushState(null, "", `${BASE}${target}`);
+      window.history[replace ? "replaceState" : "pushState"](null, "", `${BASE}${target}`);
       setRoute(currentRoute());
       return;
     }
     if (window.location.hash === target) {
+      setRoute(currentRoute());
+      return;
+    }
+    if (replace) {
+      // replaceState fires no hashchange, so the route is read by hand.
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${target}`);
       setRoute(currentRoute());
       return;
     }

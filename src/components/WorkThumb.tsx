@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { memo, type CSSProperties, type ReactNode } from "react";
 import { findTool } from "../lib/tools";
 import type { DetectedNote } from "../lib/types";
 import { KIND_TOOL, type SavedWork } from "../lib/works";
@@ -167,7 +167,7 @@ function Pattern({ id }: { id: string }) {
   );
 }
 
-export function WorkThumb({ work, className = "" }: { work: SavedWork; className?: string }) {
+function WorkThumbView({ work, className = "" }: { work: SavedWork; className?: string }) {
   const tool = findTool(KIND_TOOL[work.kind]);
   const s = work.summary;
   const num = (key: string) => (typeof s[key] === "number" ? (s[key] as number) : null);
@@ -221,3 +221,10 @@ export function WorkThumb({ work, className = "" }: { work: SavedWork; className
     </svg>
   );
 }
+
+/**
+ * Drawn from the work alone, so it is redrawn only when the work changes: a
+ * piano roll is up to 160 shapes, and a gallery of a few hundred works used
+ * to draw every one of them again on each key typed into its search box.
+ */
+export const WorkThumb = memo(WorkThumbView);

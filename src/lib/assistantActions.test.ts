@@ -130,6 +130,40 @@ describe("running actions", () => {
     expect((await runAssistantAction({ id: "metronome.start", params: {} })).message).toBe("ראשון");
   });
 
+  it("lets the page re-render before the next action of the same tool", async () => {
+    // A page the way useAssistantTool hands it over: fresh handlers, closing
+    // over the state of the last render, after every render.
+    let transition = "none";
+    const page = {
+      tool: "joiner",
+      handlers: {} as Record<string, (params: Record<string, unknown>) => { ok: boolean; message: string }>,
+    };
+    const render = () => {
+      const seen = transition;
+      page.handlers = {
+        "joiner.set": ({ transition: kind }) => {
+          // Like setState: the new value shows up in a later render.
+          setTimeout(() => {
+            transition = String(kind);
+            render();
+          }, 5);
+          return { ok: true, message: "הוגדר" };
+        },
+        "joiner.export": () => ({ ok: true, message: seen }),
+      };
+    };
+    render();
+    registerAssistantBinding({
+      tool: page.tool,
+      get handlers() {
+        return page.handlers;
+      },
+    });
+    await runAssistantAction({ id: "joiner.set", params: { transition: "crossfade" } });
+    const exported = await runAssistantAction({ id: "joiner.export", params: {} });
+    expect(exported.message).toBe("crossfade");
+  });
+
   it("gathers what the pages say about themselves", () => {
     registerAssistantBinding({ tool: "metronome", handlers: {}, state: () => "מטרונום: 100 BPM" });
     registerAssistantBinding({ tool: "site", handlers: {}, state: () => "" });

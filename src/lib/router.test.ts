@@ -30,3 +30,12 @@ describe("routeFrom", () => {
     expect(routeFrom("", "/SongToNotes/", BASE)).toBe("home");
   });
 });
+
+describe("routeFrom and odd addresses", () => {
+  it("reads past a trailing slash or a query on the hash", () => {
+    expect(routeFrom("#/tuner/", "/SongToNotes/", BASE)).toBe("tuner");
+    expect(routeFrom("#/tuner?utm_source=whatsapp", "/SongToNotes/", BASE)).toBe("tuner");
+    expect(routeFrom("#/me/links/", "/SongToNotes/", BASE)).toBe("me/links");
+    expect(routeFrom("#/?fbclid=1", "/SongToNotes/tuner/", BASE)).toBe("home");
+  });
+});

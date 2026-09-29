@@ -64,6 +64,20 @@ export function parsePlan(body: string): PlanStep[] | null {
   return steps.length ? steps : null;
 }
 
+/** Every action id is a word, or a tool and a verb: `navigate`, `metronome.set`. */
+const ACTION_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)?$/i;
+
+/**
+ * Calls found outside an `action` fence — in a `json` or untagged block, or
+ * on a bare line — count only when their ids look like actions. An example
+ * the model shows, like `{"name": "C major", "notes": [...]}`, is JSON too,
+ * and used to be run as an action called "C major".
+ */
+function looseCalls(body: string): ActionCall[] | null {
+  const calls = parseCalls(body);
+  return calls && calls.every((call) => ACTION_ID.test(call.id)) ? calls : null;
+}
+
 function parseCalls(body: string): ActionCall[] | null {
   const trimmed = body.trim();
   if (!trimmed) return null;
@@ -91,7 +105,7 @@ function prose(text: string, actions: ActionCall[]) {
       return "";
     })
     .replace(BARE_LINE, (whole) => {
-      const calls = parseCalls(whole);
+      const calls = looseCalls(whole);
       if (!calls) return whole;
       actions.push(...calls);
       return "";
@@ -123,7 +137,7 @@ export function parseAssistantReply(raw: string): ParsedReply {
     }
     const tag = source.slice(open + FENCE.length, newline).trim().toLowerCase();
     const body = source.slice(newline + 1, close);
-    const calls = parseCalls(body);
+    const calls = tag === "action" || tag === "actions" ? parseCalls(body) : looseCalls(body);
     if (tag === "plan" || tag === "todo" || tag === "tasks") {
       plan = parsePlan(body) ?? plan;
     } else if (tag === "action" || tag === "actions") {

@@ -35,7 +35,8 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
       candidate.size === 0
         ? "הקובץ ריק."
         : candidate.size > limit
-          ? `הקובץ גדול מ־${formatBytes(limit)}.`
+          ? // Isolated left to right, or the page shows "MB 800".
+            `הקובץ גדול מ־\u2066${formatBytes(limit)}\u2069.`
           : isVideo(candidate)
             ? null
             : validateAudioFile(candidate, limit);
@@ -51,11 +52,17 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
   // waits under one id; it is taken once and offered here like a dropped file.
   useEffect(() => {
     let cancelled = false;
-    void getFile(SHARED_ID).then((shared) => {
-      if (!shared) return;
-      void deleteFile(SHARED_ID);
-      if (!cancelled) choose(shared);
-    });
+    void getFile(SHARED_ID)
+      .then((shared) => {
+        // Taken only by the mount that shows it: a mount that is already
+        // gone (React's development double run, a quick click away) used to
+        // delete the file and drop it, so the shared song never appeared.
+        if (!shared || cancelled) return;
+        void deleteFile(SHARED_ID).catch(() => undefined);
+        choose(shared);
+      })
+      // No file store in this browser (blocked storage): nothing was shared.
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -91,7 +98,8 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
           <div>
             <strong>{file.name}</strong>
             <small>
-              {formatBytes(file.size)} · {video ? "סרטון" : "קובץ שמע"} · מחכה במכשיר עד שתבחרו
+              {/* A Latin unit in a Hebrew line has to be isolated, or it reads "KB 5". */}
+              <bdi dir="ltr">{formatBytes(file.size)}</bdi> · {video ? "סרטון" : "קובץ שמע"} · מחכה במכשיר עד שתבחרו
             </small>
           </div>
           <button type="button" className="icon-button" onClick={() => setFile(null)} aria-label="בחירת קובץ אחר" title="קובץ אחר">
@@ -136,7 +144,12 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
           event.preventDefault();
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(event) => {
+          // Moving over the text inside the box fires dragleave on the box;
+          // only leaving the box itself ends the highlight, or it flickers.
+          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+          setDragging(false);
+        }}
         onDrop={onDrop}
       >
         <span className="quick-drop-icon">

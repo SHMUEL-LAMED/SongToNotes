@@ -18,6 +18,47 @@ export type CommandItem = {
   run: () => void;
 };
 
+/** The most the list shows at once. */
+const LIMIT = 40;
+
+/**
+ * Orders the items for a query: a match in the name beats one in the hint or
+ * the keywords, and a name that starts with the query — or has a word that
+ * does — beats one that only contains it. Every word of the query has to be
+ * found somewhere, so "מכוון גיטרה" finds the tuner by its name and its
+ * keywords together. The group's own heading is not searched, or "פים"
+ * would find every page.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function rankCommands(items: CommandItem[], query: string): CommandItem[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return items.slice(0, LIMIT);
+  const needle = words.join(" ");
+  const rank = (item: CommandItem) => {
+    const label = item.label.toLowerCase();
+    const rest = `${item.hint ?? ""} ${item.keywords ?? ""}`.toLowerCase();
+    if (!words.every((word) => label.includes(word) || rest.includes(word))) return -1;
+    if (label.startsWith(needle)) return 0;
+    if (label.split(/[\s\-־–—/·,]+/).some((part) => part.startsWith(needle))) return 1;
+    if (label.includes(needle)) return 2;
+    // Every word in the name, if not side by side.
+    if (words.every((word) => label.includes(word))) return 3;
+    return words.some((word) => label.includes(word)) ? 4 : 5;
+  };
+  const groups = [...new Set(items.map((item) => item.group))];
+  return items
+    .map((item, index) => ({ item, index, score: rank(item) }))
+    .filter((entry) => entry.score >= 0)
+    .sort(
+      (a, b) =>
+        a.score - b.score ||
+        groups.indexOf(a.item.group) - groups.indexOf(b.item.group) ||
+        a.index - b.index,
+    )
+    .map((entry) => entry.item)
+    .slice(0, LIMIT);
+}
+
 export function CommandPalette({
   open,
   items,
@@ -30,26 +71,36 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return items.slice(0, 40);
-    // A match in the name beats one in the hint or the keywords; the group's
-    // own heading is not searched, or "פים" would find every page.
-    const rank = (item: CommandItem) => {
-      const label = item.label.toLowerCase();
-      if (label.startsWith(needle)) return 0;
-      if (label.includes(needle)) return 1;
-      return `${item.hint ?? ""} ${item.keywords ?? ""}`.toLowerCase().includes(needle) ? 2 : -1;
+  const shown = useMemo(() => rankCommands(items, query), [items, query]);
+
+  // Every opening starts afresh: closing with Esc or a click outside used to
+  // leave the last query and a cursor past the end of a shorter list.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setQuery("");
+      setCursor(0);
+    }
+  }
+
+  // Focus goes back where it was — the search button, a tool's control —
+  // when the palette closes, instead of falling to the top of the page.
+  useEffect(() => {
+    if (!open) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (before && before.isConnected && document.activeElement === document.body) before.focus({ preventScroll: true });
     };
-    const groups = [...new Set(items.map((item) => item.group))];
-    return items
-      .map((item) => ({ item, score: rank(item) }))
-      .filter((entry) => entry.score >= 0)
-      .sort((a, b) => a.score - b.score || groups.indexOf(a.item.group) - groups.indexOf(b.item.group))
-      .map((entry) => entry.item)
-      .slice(0, 40);
-  }, [items, query]);
+  }, [open]);
+
+  // The arrow keys can walk past the bottom of the visible list.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>(".palette-item.is-active")?.scrollIntoView({ block: "nearest" });
+  }, [cursor, open, shown]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,8 +112,6 @@ export function CommandPalette({
 
   const pick = (item: CommandItem) => {
     onClose();
-    setQuery("");
-    setCursor(0);
     item.run();
   };
 
@@ -108,7 +157,7 @@ export function CommandPalette({
           />
           <kbd>Esc</kbd>
         </label>
-        <ul className="palette-list" role="listbox">
+        <ul className="palette-list" role="listbox" ref={listRef} aria-label="תוצאות">
           {shown.length === 0 && <li className="palette-empty">לא נמצא כלום.</li>}
           {shown.map((item, index) => {
             const heading = index === 0 || shown[index - 1].group !== item.group ? item.group : null;

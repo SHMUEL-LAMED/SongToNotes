@@ -10,6 +10,7 @@
  * a tool's state — it only calls what the tool chose to offer, and a tool
  * says in its own words what happened.
  */
+import { currentRoute } from "./router";
 import { findTool } from "./tools";
 
 export type ParamType = "string" | "number" | "boolean" | "string[]";
@@ -507,14 +508,18 @@ export function registerAssistantBinding(binding: AssistantBinding): () => void 
   };
 }
 
-/** The handler of the most recently mounted page that offers the action. */
-export function findHandler(id: string): ActionHandler | null {
+/** The most recently mounted page that offers the action. */
+function findBinding(id: string): AssistantBinding | null {
   const list = Array.from(bindings.values()).reverse();
   for (const binding of list) {
-    const handler = binding.handlers[id];
-    if (handler) return handler;
+    if (binding.handlers[id]) return binding;
   }
   return null;
+}
+
+/** The handler of the most recently mounted page that offers the action. */
+export function findHandler(id: string): ActionHandler | null {
+  return findBinding(id)?.handlers[id] ?? null;
 }
 
 /** Everything the mounted pages say about themselves, for the model. */
@@ -545,6 +550,37 @@ export function waitForHandler(id: string, timeoutMs: number): Promise<ActionHan
   });
 }
 
+/** How long the runner waits for a page to re-render after one of its handlers. */
+export const SETTLE_MAX_MS = 120;
+
+/**
+ * Waits until the page behind `binding` has re-rendered after a handler, so
+ * the next action gets handlers that close over the new state.
+ *
+ * A handler usually ends with a state update (`joiner.set` sets the
+ * transition). React applies it in a later task, and the page hands the
+ * assistant its fresh handlers only after that render. Without this wait, a
+ * second action of the same tool run straight after (`joiner.export`) read
+ * the state from before the first one. A page's `handlers` object is new on
+ * every render, so a change of identity says the render landed; a handler
+ * that changed nothing costs at most {@link SETTLE_MAX_MS}.
+ */
+export function settleAfterHandler(binding: AssistantBinding | null, before: unknown): Promise<void> {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      const stillMounted = binding ? Array.from(bindings.values()).includes(binding) : false;
+      if (!stillMounted || binding!.handlers !== before || Date.now() - started >= SETTLE_MAX_MS) {
+        // One more turn for the effects that follow the render.
+        window.setTimeout(resolve, 0);
+        return;
+      }
+      window.setTimeout(check, 8);
+    };
+    window.setTimeout(check, 0);
+  });
+}
+
 /** For tests: forget every page. */
 export function resetAssistantBindings() {
   bindings.clear();
@@ -554,10 +590,6 @@ export function resetAssistantBindings() {
 // ---------------------------------------------------------------------------
 // Running a call
 // ---------------------------------------------------------------------------
-
-function currentToolRoute() {
-  return window.location.hash.replace(/^#\/?/, "").trim();
-}
 
 /** The notes engine is a separate chunk, so its page takes longer to appear. */
 function mountWait(tool: string) {
@@ -581,7 +613,7 @@ export async function runAssistantAction(call: ActionCall): Promise<ActionRecord
   }
   let handler = findHandler(spec.id);
   if (!handler && spec.tool) {
-    if (currentToolRoute() !== spec.tool) window.location.assign(`#/${spec.tool}`);
+    if (currentRoute() !== spec.tool) window.location.assign(`#/${spec.tool}`);
     handler = await waitForHandler(spec.id, mountWait(spec.tool));
   }
   if (!handler) {
@@ -592,12 +624,18 @@ export async function runAssistantAction(call: ActionCall): Promise<ActionRecord
       message: spec.tool ? `הכלי ${spec.tool} לא נפתח, והפעולה לא בוצעה.` : "הפעולה אינה זמינה כרגע.",
     };
   }
+  const binding = findBinding(spec.id);
+  let record: ActionRecord;
   try {
     const outcome = await handler(params);
-    return { id: spec.id, params, ok: outcome.ok, message: outcome.message, ...(outcome.data !== undefined ? { data: outcome.data } : {}) };
+    record = { id: spec.id, params, ok: outcome.ok, message: outcome.message, ...(outcome.data !== undefined ? { data: outcome.data } : {}) };
   } catch (caught) {
-    return { id: spec.id, params, ok: false, message: caught instanceof Error && caught.message ? caught.message : "הפעולה נכשלה." };
+    record = { id: spec.id, params, ok: false, message: caught instanceof Error && caught.message ? caught.message : "הפעולה נכשלה." };
   }
+  // Taken once the handler is done: a render that lands while an async
+  // handler is still working is not the one its last update asks for.
+  await settleAfterHandler(binding, binding?.handlers);
+  return record;
 }
 
 const MAX_DATA_CHARS = 7000;

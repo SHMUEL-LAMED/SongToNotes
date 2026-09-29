@@ -29,6 +29,11 @@ describe("tags", () => {
       { tag: "בוקר", count: 1 },
     ]);
   });
+
+  it("count only the works that are still there", () => {
+    const marks = { a: { tags: ["ערב"] }, deleted: { tags: ["ערב", "בוקר"] } };
+    expect(allTags(marks, new Set(["a"]))).toEqual([{ tag: "ערב", count: 1 }]);
+  });
 });
 
 describe("changing a mark", () => {

@@ -32,8 +32,10 @@ export function AppNotices({ children }: PropsWithChildren) {
             <CloudOff size={17} />
           </span>
           <p>
-            <strong>אין חיבור לאינטרנט.</strong> כל הכלים ממשיכים לעבוד — רק
-            ההתחברות ושמירת ההיסטוריה ימתינו לחיבור.
+            {/* Not "every tool": transcription, song identification, the
+                assistant and the other server tools need the connection. */}
+            <strong>אין חיבור לאינטרנט.</strong> הכלים שרצים בדפדפן ממשיכים לעבוד —
+            ההתחברות, השמירה בענן והכלים שנעזרים בשרת ימתינו לחיבור.
           </p>
           <button
             type="button"

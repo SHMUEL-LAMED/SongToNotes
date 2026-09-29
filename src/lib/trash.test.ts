@@ -44,4 +44,14 @@ describe("the recycle bin", () => {
     expect(parseTrash("{}", now)).toEqual([]);
     expect(parseTrash('[{"deletedAt":"2026-03-19T12:00:00.000Z"}]', now)).toEqual([]);
   });
+
+  it("reads a damaged entry as a whole work, so the bin can still render it", () => {
+    const raw = JSON.stringify([
+      { deletedAt: "2026-03-19T12:00:00.000Z", work: { id: "a", kind: "song", origin: "ringtones" } },
+      { deletedAt: "2026-03-19T12:00:00.000Z", work: { id: "b", kind: "not-a-kind" } },
+    ]);
+    const [only, ...rest] = parseTrash(raw, now);
+    expect(rest).toEqual([]);
+    expect(only.work).toMatchObject({ id: "a", title: "שיר בשירון", summary: {}, payload: {}, origin: "ringtones" });
+  });
 });

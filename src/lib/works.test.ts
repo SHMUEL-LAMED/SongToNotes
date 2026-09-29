@@ -5,6 +5,7 @@ import {
   fromRingtone,
   fromTranscription,
   listLocalWorks,
+  mergeRemoteWorks,
   normalizeWork,
   sortNewestFirst,
   type SavedWork,
@@ -180,5 +181,41 @@ describe("describeWork", () => {
   it("leaves out what a summary does not have", () => {
     expect(describeWork(work({ kind: "vocals", summary: {} }))).toBe("קריוקי");
     expect(describeWork(work({ kind: "notes", summary: {} }))).toBe("");
+  });
+});
+
+describe("mergeRemoteWorks", () => {
+  const synced = (id: string, createdAt = "2026-09-18T10:00:00.000Z") => work({ id, createdAt, localOnly: false });
+
+  it("drops a synced work the server no longer has, and keeps what is still unsynced", () => {
+    const before = [synced("kept"), synced("deleted-elsewhere"), work({ id: "waiting" })];
+    const merged = mergeRemoteWorks({ before, now: before, uploaded: [], remote: [synced("kept")], complete: true });
+    expect(merged.map((item) => item.id).sort()).toEqual(["kept", "waiting"]);
+  });
+
+  it("keeps a work saved on this device while the request was out", () => {
+    const before = [synced("kept")];
+    const now = [work({ id: "fresh", createdAt: "2026-09-19T10:00:00.000Z" }), synced("kept")];
+    const merged = mergeRemoteWorks({ before, now, uploaded: [], remote: [synced("kept")], complete: true });
+    expect(merged.map((item) => item.id)).toEqual(["fresh", "kept"]);
+  });
+
+  it("does not bring back a work deleted here while the request was out", () => {
+    const before = [synced("kept"), work({ id: "gone" })];
+    const merged = mergeRemoteWorks({ before, now: [synced("kept")], uploaded: [], remote: [synced("kept")], complete: true });
+    expect(merged.map((item) => item.id)).toEqual(["kept"]);
+  });
+
+  it("trusts neither an empty answer nor the part past a cut-off answer", () => {
+    const before = [synced("old", "2026-01-01T00:00:00.000Z"), synced("new", "2026-09-01T00:00:00.000Z")];
+    expect(mergeRemoteWorks({ before, now: before, uploaded: [], remote: [], complete: true })).toHaveLength(2);
+    const cut = mergeRemoteWorks({ before, now: before, uploaded: [], remote: [synced("other", "2026-08-01T00:00:00.000Z")], complete: false });
+    expect(cut.map((item) => item.id)).toEqual(["other", "old"]);
+  });
+
+  it("lets the server's copy win over the local one", () => {
+    const before = [synced("a")];
+    const merged = mergeRemoteWorks({ before, now: before, uploaded: [], remote: [{ ...synced("a"), title: "שם חדש" }], complete: true });
+    expect(merged[0].title).toBe("שם חדש");
   });
 });
