@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampTrim, clipFrameRange, crossfadeGains, joinPcm, layoutTimeline, moveItem, mp3SampleRate, outputFormat } from "./joiner";
+import { clampTrim, clipFrameRange, crossfadeGains, joinPcm, joinPcmSteps, layoutTimeline, moveItem, mp3SampleRate, outputFormat, type PcmClip, type Transition } from "./joiner";
 
 const constant = (length: number, value: number) => new Float32Array(length).fill(value);
 
@@ -160,5 +160,60 @@ describe("helpers", () => {
     expect(moveItem(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
     expect(moveItem(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
     expect(moveItem(["a", "b", "c"], 1, 5)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("joinPcmSteps", () => {
+  /** The join written the plain way, one weight per frame and channel, as a reference. */
+  function reference(clips: PcmClip[], transition: Transition, sampleRate: number, count: number) {
+    const ranges = clips.map(clipFrameRange);
+    const layout = layoutTimeline(ranges.map((range) => range.length), transition, { integer: true, sampleRate });
+    const output = Array.from({ length: count }, () => new Float32Array(layout.total));
+    clips.forEach((clip, index) => {
+      const { start, length } = ranges[index];
+      const fadeIn = index > 0 ? layout.overlaps[index - 1] : 0;
+      const fadeOut = index < clips.length - 1 ? layout.overlaps[index] : 0;
+      for (let channel = 0; channel < count; channel += 1) {
+        const source = clip.channels[Math.min(channel, clip.channels.length - 1)];
+        for (let frame = 0; frame < length; frame += 1) {
+          let weight = clip.gain ?? 1;
+          if (frame < fadeIn) weight *= crossfadeGains(frame, fadeIn).fadeIn;
+          if (frame >= length - fadeOut) weight *= crossfadeGains(frame - (length - fadeOut), fadeOut).fadeOut;
+          output[channel][layout.starts[index] + frame] += source[start + frame] * weight;
+        }
+      }
+    });
+    return output;
+  }
+
+  const noise = (length: number, seed: number) => Float32Array.from({ length }, (_, index) => Math.sin(index * 0.37 + seed) * 0.5);
+  const clips: PcmClip[] = [
+    { channels: [noise(900, 1), noise(900, 2)], start: 50, end: 800, gain: 0.7 },
+    { channels: [noise(300, 3)], gain: 1.3 },
+    { channels: [noise(1200, 4), noise(1200, 5)], start: 10 },
+  ];
+
+  it("gives exactly the samples of the plain join, sliced or not", () => {
+    for (const transition of [
+      { kind: "crossfade", seconds: 0.2 },
+      { kind: "gap", seconds: 0.05 },
+      { kind: "none", seconds: 0 },
+    ] as Transition[]) {
+      const expected = reference(clips, transition, 1000, 2);
+      expect(joinPcm(clips, transition, 1000, 2)).toEqual(expected);
+      const steps = joinPcmSteps(clips, transition, 1000, 2, 37);
+      const fractions: number[] = [];
+      for (;;) {
+        const step = steps.next();
+        if (step.done) {
+          expect(step.value).toEqual(expected);
+          break;
+        }
+        fractions.push(step.value);
+      }
+      // It really pauses along the way, always moving forward and short of done.
+      expect(fractions.length).toBeGreaterThan(10);
+      expect(fractions.every((value, index) => value > (fractions[index - 1] ?? 0) && value < 1)).toBe(true);
+    }
   });
 });

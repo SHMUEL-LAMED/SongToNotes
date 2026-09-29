@@ -317,7 +317,13 @@ export function pitchShift(channel: Float32Array, sampleRate: number, semitones:
     return output;
   }
   const ratio = Math.pow(2, semitones / 12);
-  const shifted = resample(timeStretch(channel, sampleRate, 1 / ratio), ratio);
+  // The stretch only lays grains that fit whole inside its input, so the
+  // last grain's worth (~60 ms) came out silent — and a clip shorter than a
+  // grain came out as pure silence. A grain of padding lets every sample in.
+  const grain = Math.max(256, Math.round(sampleRate * 0.06));
+  const padded = new Float32Array(channel.length + grain);
+  padded.set(channel);
+  const shifted = resample(timeStretch(padded, sampleRate, 1 / ratio), ratio);
   output.set(shifted.subarray(0, Math.min(shifted.length, output.length)));
   return output;
 }
@@ -395,12 +401,39 @@ export function noiseVocode(
 
   const output = new Float32Array(input.length);
   const high = Math.min(8000, sampleRate * 0.45);
+  const attack = 1 - Math.exp(-1 / ((4 / 1000) * sampleRate));
+  const release = 1 - Math.exp(-1 / ((35 / 1000) * sampleRate));
   for (const { frequency, q } of vocoderBands(Math.max(1, Math.round(bands)), 180, high)) {
-    const coefficients = bandPassCoefficients(sampleRate, frequency, q);
-    const contour = envelope(applyBiquad(input, coefficients), sampleRate, 4, 35);
-    const carrier = applyBiquad(noise, coefficients);
+    // One pass per band doing what applyBiquad → envelope on the voice and
+    // applyBiquad on the noise do in four, rounding to 32 bits at the same
+    // points so the samples are identical: a few minutes of audio went
+    // through a dozen bands of three full-length scratch arrays each.
+    const { b0, b1, b2, a1, a2 } = bandPassCoefficients(sampleRate, frequency, q);
+    let x1 = 0;
+    let x2 = 0;
+    let y1 = 0;
+    let y2 = 0;
+    let n1 = 0;
+    let n2 = 0;
+    let m1 = 0;
+    let m2 = 0;
+    let level = 0;
     for (let index = 0; index < output.length; index += 1) {
-      output[index] += carrier[index] * contour[index];
+      const x0 = input[index];
+      const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1;
+      x1 = x0;
+      y2 = y1;
+      y1 = y0;
+      const target = Math.abs(Math.fround(y0));
+      level += (target > level ? attack : release) * (target - level);
+      const noise0 = noise[index];
+      const m0 = b0 * noise0 + b1 * n1 + b2 * n2 - a1 * m1 - a2 * m2;
+      n2 = n1;
+      n1 = noise0;
+      m2 = m1;
+      m1 = m0;
+      output[index] += Math.fround(m0) * Math.fround(level);
     }
   }
   return output;
@@ -425,65 +458,139 @@ export function crackleNoise(length: number, sampleRate: number, hiss: number, c
 
 /**
  * The part of each effect that happens on plain arrays before the Web Audio
- * graph: shifts, ring modulation, crushing and the vocoder. Returns new
- * arrays; the input is left alone.
+ * graph, for one channel: shifts, ring modulation, crushing and the vocoder.
+ * `index` is the channel's place in the file, which seeds the whisper's
+ * noise so the two sides of a stereo file are decorrelated. Returns a new
+ * array; the input is left alone.
  */
+export function preprocessChannel(
+  id: VoiceEffectId,
+  intensity: number,
+  channel: Float32Array,
+  sampleRate: number,
+  index = 0,
+): Float32Array<ArrayBuffer> {
+  switch (id) {
+    case "robot": {
+      const p = effectParams("robot", intensity);
+      return combFilter(
+        bitcrush(ringModulate(channel, sampleRate, p.ringHz, p.depth), p.bits, p.hold),
+        (p.combMs / 1000) * sampleRate,
+        p.combFeedback,
+      );
+    }
+    case "chipmunk":
+    case "deep": {
+      const { semitones } = effectParams(id, intensity);
+      return pitchShift(channel, sampleRate, semitones);
+    }
+    case "alien": {
+      const p = effectParams("alien", intensity);
+      const shifted = pitchShift(channel, sampleRate, p.semitones);
+      const ringed = ringModulate(shifted, sampleRate, p.ringHz, 1);
+      for (let sample = 0; sample < shifted.length; sample += 1) {
+        shifted[sample] = shifted[sample] * (1 - p.ringMix) + ringed[sample] * p.ringMix;
+      }
+      return shifted;
+    }
+    case "whisper": {
+      const p = effectParams("whisper", intensity);
+      const breath = noiseVocode(channel, sampleRate, p.bands, 11 + index);
+      // The vocoder comes out far quieter than the voice; match their peaks
+      // before blending so the mix knob means what it says.
+      const breathPeak = peakOf(breath) || 1;
+      const voicePeak = peakOf(channel) || 1;
+      const scale = voicePeak / breathPeak;
+      for (let sample = 0; sample < breath.length; sample += 1) {
+        breath[sample] = breath[sample] * scale * (1 - p.voiceMix) + channel[sample] * p.voiceMix;
+      }
+      return breath;
+    }
+    default: {
+      const output = new Float32Array(channel.length);
+      output.set(channel);
+      return output;
+    }
+  }
+}
+
+/** {@link preprocessChannel} for every channel of a file. */
 export function preprocessChannels(
   id: VoiceEffectId,
   intensity: number,
   channels: Float32Array[],
   sampleRate: number,
 ): Float32Array<ArrayBuffer>[] {
-  const copy = (channel: Float32Array) => {
-    const output = new Float32Array(channel.length);
-    output.set(channel);
-    return output;
-  };
-  switch (id) {
-    case "robot": {
-      const p = effectParams("robot", intensity);
-      return channels.map((channel) =>
-        combFilter(
-          bitcrush(ringModulate(channel, sampleRate, p.ringHz, p.depth), p.bits, p.hold),
-          (p.combMs / 1000) * sampleRate,
-          p.combFeedback,
-        ),
-      );
-    }
-    case "chipmunk":
-    case "deep": {
-      const { semitones } = effectParams(id, intensity);
-      return channels.map((channel) => pitchShift(channel, sampleRate, semitones));
-    }
-    case "alien": {
-      const p = effectParams("alien", intensity);
-      return channels.map((channel) => {
-        const shifted = pitchShift(channel, sampleRate, p.semitones);
-        const ringed = ringModulate(shifted, sampleRate, p.ringHz, 1);
-        for (let index = 0; index < shifted.length; index += 1) {
-          shifted[index] = shifted[index] * (1 - p.ringMix) + ringed[index] * p.ringMix;
-        }
-        return shifted;
-      });
-    }
-    case "whisper": {
-      const p = effectParams("whisper", intensity);
-      return channels.map((channel, index) => {
-        const breath = noiseVocode(channel, sampleRate, p.bands, 11 + index);
-        // The vocoder comes out far quieter than the voice; match their peaks
-        // before blending so the mix knob means what it says.
-        const breathPeak = peakOf(breath) || 1;
-        const voicePeak = peakOf(channel) || 1;
-        const scale = voicePeak / breathPeak;
-        for (let sample = 0; sample < breath.length; sample += 1) {
-          breath[sample] = breath[sample] * scale * (1 - p.voiceMix) + channel[sample] * p.voiceMix;
-        }
-        return breath;
-      });
-    }
-    default:
-      return channels.map(copy);
+  return channels.map((channel, index) => preprocessChannel(id, intensity, channel, sampleRate, index));
+}
+
+/** Effects whose array stage is heavy enough to freeze the page on a long file. */
+export function needsArrayStage(id: VoiceEffectId) {
+  return id === "robot" || id === "chipmunk" || id === "deep" || id === "alien" || id === "whisper";
+}
+
+export type VoiceFxRequest = { id: VoiceEffectId; intensity: number; channel: Float32Array<ArrayBuffer>; sampleRate: number; index: number };
+export type VoiceFxResponse = { ok: true; channel: Float32Array<ArrayBuffer> } | { ok: false; message: string };
+
+export class VoiceFxCancelled extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "VoiceFxCancelled";
   }
+}
+
+/**
+ * One channel's array stage on a worker of its own, so the pitch shift and
+ * the vocoder (seconds of work on a few minutes of audio) neither freeze the
+ * page nor keep burning after the visitor has moved on — an abort terminates
+ * the worker. Where a worker cannot start, the same function runs here, so
+ * the result is the same either way.
+ */
+function preprocessOnWorker(request: VoiceFxRequest, signal?: AbortSignal): Promise<Float32Array<ArrayBuffer>> {
+  const runHere = () => preprocessChannel(request.id, request.intensity, request.channel, request.sampleRate, request.index);
+  if (signal?.aborted) return Promise.reject(new VoiceFxCancelled());
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("../workers/voiceFx.worker.ts", import.meta.url), { type: "module" });
+  } catch {
+    return Promise.resolve().then(runHere);
+  }
+  return new Promise((resolve, reject) => {
+    let heard = false;
+    const finish = () => {
+      worker.terminate();
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      finish();
+      reject(new VoiceFxCancelled());
+    };
+    signal?.addEventListener("abort", onAbort);
+    worker.onmessage = (event: MessageEvent<VoiceFxResponse>) => {
+      heard = true;
+      finish();
+      if (event.data.ok) resolve(event.data.channel);
+      else reject(new Error(event.data.message));
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      finish();
+      // A worker that never answered most likely never loaded (a blocked
+      // module); the page can still do the work itself.
+      if (heard) reject(new Error("העיבוד נעצר באמצע."));
+      else {
+        try {
+          resolve(runHere());
+        } catch (caught) {
+          reject(caught);
+        }
+      }
+    };
+    // A copy goes to the worker; the decoded file itself stays with the page.
+    const copy = new Float32Array(request.channel.length);
+    copy.set(request.channel);
+    worker.postMessage({ ...request, channel: copy }, [copy.buffer]);
+  });
 }
 
 export function peakOf(channel: Float32Array) {
@@ -669,13 +776,21 @@ function buildGraph(context: OfflineAudioContext, source: AudioBufferSourceNode,
  * normalise so a loud echo or a quiet whisper both come out at a sensible
  * level. "none" hands back the original untouched.
  */
-export async function renderVoiceEffect(buffer: AudioBuffer, id: VoiceEffectId, intensity: number): Promise<AudioBuffer> {
+export async function renderVoiceEffect(buffer: AudioBuffer, id: VoiceEffectId, intensity: number, signal?: AbortSignal): Promise<AudioBuffer> {
   if (id === "none") return buffer;
   const Context = offlineContextClass();
   const sampleRate = buffer.sampleRate;
   const channelCount = Math.min(2, buffer.numberOfChannels);
   const input = Array.from({ length: channelCount }, (_, index) => buffer.getChannelData(index));
-  const processed = preprocessChannels(id, intensity, input, sampleRate);
+  // The heavy array work runs one worker per channel, side by side.
+  const processed = needsArrayStage(id)
+    ? await Promise.all(
+        input.map((channel, index) =>
+          preprocessOnWorker({ id, intensity, channel: channel as Float32Array<ArrayBuffer>, sampleRate, index }, signal),
+        ),
+      )
+    : preprocessChannels(id, intensity, input, sampleRate);
+  if (signal?.aborted) throw new VoiceFxCancelled();
 
   const tail = Math.round(tailSeconds(id, intensity) * sampleRate);
   const length = buffer.length + tail;
@@ -687,6 +802,7 @@ export async function renderVoiceEffect(buffer: AudioBuffer, id: VoiceEffectId, 
   buildGraph(context, source, id, intensity);
   source.start(0);
   const rendered = await context.startRendering();
+  if (signal?.aborted) throw new VoiceFxCancelled();
 
   const channels = Array.from({ length: rendered.numberOfChannels }, (_, index) => rendered.getChannelData(index));
   normalise(channels, 0.9);

@@ -236,7 +236,10 @@ export function DrumKitTool() {
   const [kit, setKit] = useState<KitId>(initial.kit);
   const [volume, setVolume] = useState(initial.volume);
   const [bpm, setBpm] = useState(initial.bpm);
-  const [click, setClick] = useState(initial.click);
+  // A metronome cannot sound before the visitor touches the page (autoplay
+  // rules), so it is never restored as on: a lit button with no click, and
+  // the beat lights' frame loop running for nothing, was the result.
+  const [click, setClick] = useState(false);
   const [quantize, setQuantize] = useState(initial.quantize);
   const [countIn, setCountIn] = useState(initial.countIn);
   const [length, setLength] = useState<LoopLength>(initial.length);
@@ -304,10 +307,19 @@ export function DrumKitTool() {
     }
   }, []);
 
+  // The engine is made on the first hit, which may come after the kit, the
+  // volume or the tempo were changed; it reads them from here, not from the
+  // first render's values.
+  const liveRef = useRef({ kit, volume, bpm, click });
+  useEffect(() => {
+    liveRef.current = { kit, volume, bpm, click };
+  }, [kit, volume, bpm, click]);
+
   const engine = useCallback(() => {
     if (!engineRef.current) {
-      const created = new KitEngine({ kit, volume, bpm });
-      created.metronome = click;
+      const { kit: currentKit, volume: currentVolume, bpm: currentBpm, click: currentClick } = liveRef.current;
+      const created = new KitEngine({ kit: currentKit, volume: currentVolume, bpm: currentBpm });
+      created.metronome = currentClick;
       created.loopBeats = loopBeatsRef.current;
       created.events = takesRef.current.flatMap((take) => take.events);
       created.onScheduledHit = (drum, velocity, delay) => {
@@ -677,8 +689,11 @@ export function DrumKitTool() {
       "drumkit.record": ({ command }) => {
         if (command === "start") {
           if (recRef.current) return { ok: true, message: "כבר מקליט" };
+          // Read before starting: starting is what sets the clock running.
+          const countsIn = countIn && !engineRef.current?.running;
           startRecording();
-          return { ok: true, message: countIn && !engineRef.current?.running ? "מקליט אחרי ספירה של תיבה" : "מקליט" };
+          if (!recRef.current) return { ok: false, message: "לא הצלחנו להפעיל את השמע" };
+          return { ok: true, message: countsIn ? "מקליט אחרי ספירה של תיבה" : "מקליט" };
         }
         if (command === "stop") {
           if (!recRef.current) return { ok: false, message: "לא הייתה הקלטה" };

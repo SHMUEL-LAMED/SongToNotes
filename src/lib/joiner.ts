@@ -114,6 +114,31 @@ export function clipFrameRange(clip: PcmClip) {
  * component normally upmixes first, this just keeps the function total).
  */
 export function joinPcm(clips: PcmClip[], transition: Transition, sampleRate: number, channelCount?: number): Float32Array[] {
+  const steps = joinPcmSteps(clips, transition, sampleRate, channelCount);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** How many frames {@link joinPcmSteps} adds before it yields. */
+export const JOIN_SLICE_FRAMES = 1 << 19;
+
+/**
+ * {@link joinPcm} in slices: yields the fraction done after every
+ * `sliceFrames` frames of one channel, and returns the joined channels.
+ * A few long files are tens of millions of frames — close to a second of
+ * solid work on a phone — so the page drives this with a pause between
+ * slices (and drops it when a newer edit arrives) instead of freezing on
+ * every trim or gain change. The samples are the same as joinPcm's.
+ */
+export function* joinPcmSteps(
+  clips: PcmClip[],
+  transition: Transition,
+  sampleRate: number,
+  channelCount?: number,
+  sliceFrames = JOIN_SLICE_FRAMES,
+): Generator<number, Float32Array[], void> {
   const count = Math.max(1, channelCount ?? Math.max(1, ...clips.map((clip) => clip.channels.length)));
   const ranges = clips.map(clipFrameRange);
   const layout = layoutTimeline(
@@ -122,25 +147,47 @@ export function joinPcm(clips: PcmClip[], transition: Transition, sampleRate: nu
     { integer: true, sampleRate },
   );
   const output = Array.from({ length: count }, () => new Float32Array(layout.total));
-  clips.forEach((clip, index) => {
+  const slice = Math.max(1, Math.floor(sliceFrames));
+  const work = Math.max(1, ranges.reduce((sum, range) => sum + range.length, 0) * count);
+  let done = 0;
+  for (let index = 0; index < clips.length; index += 1) {
+    const clip = clips[index];
     const { start, length } = ranges[index];
-    if (!length || !clip.channels.length) return;
+    if (!length || !clip.channels.length) continue;
     const gain = Number.isFinite(clip.gain) ? (clip.gain as number) : 1;
     const fadeInFrames = index > 0 ? layout.overlaps[index - 1] : 0;
     const fadeOutFrames = index < clips.length - 1 ? layout.overlaps[index] : 0;
     const fadeOutFrom = length - fadeOutFrames;
     const offset = layout.starts[index];
+    // The fades' gains are worked out once (not once per channel), and the
+    // long middle of each clip is a plain multiply-add.
+    const headEnd = Math.min(length, fadeInFrames);
+    const tailStart = Math.max(headEnd, fadeOutFrom);
+    const tailBase = headEnd - tailStart;
+    const edge = new Float64Array(headEnd + (length - tailStart));
+    const weightAt = (frame: number) => {
+      let weight = gain;
+      if (frame < fadeInFrames) weight *= crossfadeGains(frame, fadeInFrames).fadeIn;
+      if (frame >= fadeOutFrom) weight *= crossfadeGains(frame - fadeOutFrom, fadeOutFrames).fadeOut;
+      return weight;
+    };
+    for (let frame = 0; frame < headEnd; frame += 1) edge[frame] = weightAt(frame);
+    for (let frame = tailStart; frame < length; frame += 1) edge[tailBase + frame] = weightAt(frame);
     for (let channel = 0; channel < count; channel += 1) {
       const source = clip.channels[Math.min(channel, clip.channels.length - 1)];
       const target = output[channel];
-      for (let frame = 0; frame < length; frame += 1) {
-        let weight = gain;
-        if (frame < fadeInFrames) weight *= crossfadeGains(frame, fadeInFrames).fadeIn;
-        if (frame >= fadeOutFrom) weight *= crossfadeGains(frame - fadeOutFrom, fadeOutFrames).fadeOut;
-        target[offset + frame] += source[start + frame] * weight;
+      for (let from = 0; from < length; from += slice) {
+        const to = Math.min(length, from + slice);
+        const headTo = Math.min(to, headEnd);
+        for (let frame = from; frame < headTo; frame += 1) target[offset + frame] += source[start + frame] * edge[frame];
+        const middleTo = Math.min(to, tailStart);
+        for (let frame = Math.max(from, headEnd); frame < middleTo; frame += 1) target[offset + frame] += source[start + frame] * gain;
+        for (let frame = Math.max(from, tailStart); frame < to; frame += 1) target[offset + frame] += source[start + frame] * edge[tailBase + frame];
+        done += to - from;
+        if (done < work) yield done / work;
       }
     }
-  });
+  }
   return output;
 }
 

@@ -256,6 +256,17 @@ describe("pitch shift", () => {
     expect(ratio).toBeCloseTo(Math.pow(2, -7 / 12), 1);
   });
 
+  it("keeps the end of the clip, and a clip shorter than a grain, audible", () => {
+    const input = sine(300, 1);
+    for (const semitones of [7, -5]) {
+      const output = pitchShift(input, RATE, semitones);
+      // The last 50 ms were silent before the stretch was padded.
+      expect(rms(output, input.length - Math.round(RATE * 0.05))).toBeGreaterThan(0.2);
+    }
+    const blip = sine(300, 0.04);
+    expect(rms(pitchShift(blip, RATE, 7))).toBeGreaterThan(0.15);
+  });
+
   it("copies the input untouched at zero semitones", () => {
     const input = sine(300, 0.1);
     const output = pitchShift(input, RATE, 0);
@@ -265,6 +276,24 @@ describe("pitch shift", () => {
 });
 
 describe("filters and the whisper vocoder", () => {
+  it("vocodes to exactly what the separate filter, follower and noise passes give", () => {
+    const input = new Float32Array(4000);
+    for (let index = 0; index < input.length; index += 1) {
+      input[index] = 0.4 * Math.sin((2 * Math.PI * 220 * index) / RATE) * Math.sin((2 * Math.PI * 3 * index) / RATE) + 0.1 * Math.sin(index * 1.7);
+    }
+    // The plain, many-pass version the single fused pass has to match.
+    const random = mulberry32(11);
+    const noise = Float32Array.from({ length: input.length }, () => random() * 2 - 1);
+    const expected = new Float32Array(input.length);
+    for (const { frequency, q } of vocoderBands(9, 180, Math.min(8000, RATE * 0.45))) {
+      const coefficients = bandPassCoefficients(RATE, frequency, q);
+      const contour = envelope(applyBiquad(input, coefficients), RATE, 4, 35);
+      const carrier = applyBiquad(noise, coefficients);
+      for (let index = 0; index < expected.length; index += 1) expected[index] += carrier[index] * contour[index];
+    }
+    expect(Array.from(noiseVocode(input, RATE, 9))).toEqual(Array.from(expected));
+  });
+
   it("band-pass passes its centre and rejects far frequencies", () => {
     const coefficients = bandPassCoefficients(RATE, 1000, 4);
     const at = (frequency: number) => {
