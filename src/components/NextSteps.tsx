@@ -1,14 +1,35 @@
 import { ArrowLeft } from "lucide-react";
 import type { CSSProperties } from "react";
-import { findTool, type ToolDefinition } from "../lib/tools";
+import { familyOf, findTool, type ToolDefinition } from "../lib/tools";
+import { SendFileSection } from "./SendFile";
 
 /**
  * The foot of a tool's page: the tools that usually come next, so finishing
  * one job leads straight into the one after it.
  */
-export function NextSteps({ tool, onOpen }: { tool: ToolDefinition; onOpen: (id: string) => void }) {
-  const next = tool.related.map(findTool).filter((item): item is ToolDefinition => Boolean(item));
-  if (!next.length) return null;
+export function NextSteps({
+  tool,
+  onOpen,
+  disabledTools = [],
+}: {
+  tool: ToolDefinition;
+  onOpen: (id: string) => void;
+  disabledTools?: readonly string[];
+}) {
+  // The other tabs of this tool are already one click away at the top.
+  const family = familyOf(tool.id);
+  const next = tool.related
+    .map(findTool)
+    .filter((item): item is ToolDefinition => Boolean(item) && !family?.tabs.some((tab) => tab.id === item!.id));
+  return (
+    <>
+      <SendFileSection disabledTools={disabledTools} />
+      {next.length > 0 && <RelatedTools next={next} onOpen={onOpen} />}
+    </>
+  );
+}
+
+function RelatedTools({ next, onOpen }: { next: ToolDefinition[]; onOpen: (id: string) => void }) {
   return (
     <section className="next-steps" aria-labelledby="next-steps-title">
       <div className="next-steps-head">

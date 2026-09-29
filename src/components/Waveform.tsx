@@ -134,6 +134,13 @@ export function Waveform({
     onTrimChange({ start, end });
   }
 
+  // A touch the browser takes over (a system gesture, a palm) ends with a
+  // cancel rather than an up. Left armed, the drag went on following the
+  // next pointer that merely passed over the strip, with no button held.
+  function handlePointerCancel() {
+    dragRef.current = null;
+  }
+
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     dragRef.current = null;
@@ -163,6 +170,7 @@ export function Waveform({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         role="img"
         aria-label={
           clickMoves
@@ -226,7 +234,8 @@ export function Waveform({
             onChange={(event) => {
               const start = Number(event.target.value);
               const end = trim ? trim.end : Math.min(duration, start + defaultSpan);
-              onTrimChange({ start: Math.min(start, end - 0.4), end });
+              // Never below zero, even on a clip shorter than the minimum.
+              onTrimChange({ start: Math.max(0, Math.min(start, end - 0.4)), end });
             }}
             aria-valuetext={`${formatTime(trim ? trim.start : 0)}`}
           />
@@ -242,7 +251,8 @@ export function Waveform({
             onChange={(event) => {
               const end = Number(event.target.value);
               const start = trim ? trim.start : 0;
-              onTrimChange({ start, end: Math.max(end, start + 0.4) });
+              // Pushed out by the minimum length, but never past the file.
+              onTrimChange({ start, end: Math.min(duration, Math.max(end, start + 0.4)) });
             }}
             aria-valuetext={`${formatTime(trim ? trim.end : Math.min(duration, defaultSpan))}`}
           />

@@ -117,7 +117,15 @@ async function loadBundledModel() {
 }
 
 export function getModel() {
-  if (!modelReady) modelReady = loadBundledModel();
+  if (!modelReady) {
+    modelReady = loadBundledModel().catch((error: unknown) => {
+      // A failed load (a truncated bundle, a lost GPU context) must not be
+      // cached: every later run in the same worker would fail instantly with
+      // the old error instead of trying again.
+      modelReady = null;
+      throw error;
+    });
+  }
   return modelReady;
 }
 

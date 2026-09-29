@@ -86,6 +86,11 @@ export function fitKeyboard(notes: LessonNote[]): { octave: number; octaves: 2 |
     lowest = best.lowest;
     octaves = 3;
   }
+  // The keyboard cannot start below C0 or run past MIDI 127, so the notes
+  // are folded onto the keys actually shown: folding onto the unclamped
+  // span left notes (below C0, or above G9) with no key to fall on.
+  const octave = Math.max(0, Math.min(9 - octaves, lowest / 12 - 1));
+  lowest = (octave + 1) * 12;
   const top = lowest + octaves * 12;
   const fold = (midi: number) => {
     let value = midi;
@@ -93,7 +98,6 @@ export function fitKeyboard(notes: LessonNote[]): { octave: number; octaves: 2 |
     while (value > top) value -= 12;
     return value;
   };
-  const octave = Math.max(0, Math.min(7, lowest / 12 - 1));
   return { octave, octaves, notes: notes.map((note) => ({ ...note, midi: fold(note.midi) })) };
 }
 

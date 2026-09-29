@@ -142,6 +142,14 @@ class VisualizerEngine {
   private background: { source: SizedImage; aspect: VisualizerAspect; canvas: HTMLCanvasElement } | null = null;
   private lastFrame = 0;
   private lastTick = 0;
+  /**
+   * Bumped by every start and stop. Opening a session awaits the audio
+   * context, so a second click (or a stop, or leaving the page) can land in
+   * between; a start that finds the number changed when it resumes drops its
+   * session instead of installing it. Without this a double-click on play
+   * left an orphaned source playing that no button could stop.
+   */
+  private generation = 0;
 
   get busy(): Session["kind"] | null {
     return this.session?.kind ?? null;
@@ -329,9 +337,15 @@ class VisualizerEngine {
     session.raf = requestAnimationFrame(tick);
   }
 
-  async startPreview(buffer: AudioBuffer, region: Region) {
+  /** Resolves false when a later start or a stop overtook this one. */
+  async startPreview(buffer: AudioBuffer, region: Region): Promise<boolean> {
     this.stop();
+    const generation = ++this.generation;
     const session = await this.openSession("preview", buffer, region);
+    if (generation !== this.generation) {
+      this.close(session);
+      return false;
+    }
     this.session = session;
     session.source.onended = () => {
       if (this.session !== session) return;
@@ -339,6 +353,7 @@ class VisualizerEngine {
       this.events.onPreviewEnd?.();
     };
     this.startLoop(session);
+    return true;
   }
 
   /**
@@ -347,11 +362,13 @@ class VisualizerEngine {
    * recorder through a stream destination tapped off the same gain the
    * speakers hear, so picture and sound come from one clock.
    */
-  async startRecording(buffer: AudioBuffer, region: Region, type: RecordingType) {
+  async startRecording(buffer: AudioBuffer, region: Region, type: RecordingType): Promise<boolean> {
     this.stop();
+    const generation = ++this.generation;
     const canvas = this.canvas;
     if (!canvas) throw new Error("התצוגה עוד לא מוכנה.");
     const context = await this.ensureContext();
+    if (generation !== this.generation) return false;
     const destination = context.createMediaStreamDestination();
     const canvasStream = canvas.captureStream(VIDEO_FPS);
     const stream = new MediaStream([...canvasStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
@@ -370,6 +387,10 @@ class VisualizerEngine {
     session.recorder = recorder;
     session.type = type;
     session.tracks = [...stream.getTracks(), ...canvasStream.getTracks(), ...destination.stream.getTracks()];
+    if (generation !== this.generation) {
+      this.close(session);
+      return false;
+    }
     this.session = session;
     recorder.ondataavailable = (event) => {
       if (event.data.size) session.chunks.push(event.data);
@@ -400,8 +421,17 @@ class VisualizerEngine {
     };
     // Chunks every second keep the memory spread out and mean a crash near
     // the end still has something to show for it in the recorder.
-    recorder.start(1000);
+    try {
+      recorder.start(1000);
+    } catch {
+      // Without this the music went on playing, and the loop painting, after
+      // the page had already said the recording failed.
+      session.cancelled = true;
+      this.close(session);
+      throw new Error("הדפדפן לא הצליח להתחיל הקלטת וידאו.");
+    }
     this.startLoop(session);
+    return true;
   }
 
   /** Pauses picture and sound together, so a hidden tab leaves no frozen stretch in the video. */
@@ -422,6 +452,7 @@ class VisualizerEngine {
 
   /** Stops the preview, or abandons a recording without producing a file. */
   stop() {
+    this.generation += 1;
     const session = this.session;
     if (!session) return;
     session.cancelled = true;
@@ -612,7 +643,7 @@ export function VisualizerTool() {
     if (!audio || !activeRegion || recording) return false;
     setRenderError(null);
     try {
-      await engine.startPreview(audio.buffer, activeRegion);
+      if (!(await engine.startPreview(audio.buffer, activeRegion))) return false;
       setPlaying(true);
       setElapsed(0);
       return true;
@@ -642,8 +673,9 @@ export function VisualizerTool() {
     setElapsed(0);
     setRecording(true);
     try {
-      await engine.startRecording(audio.buffer, activeRegion, type);
-      return true;
+      // A recording overtaken by a cancel or a second click leaves the page
+      // state to whoever overtook it.
+      return await engine.startRecording(audio.buffer, activeRegion, type);
     } catch (caught) {
       setRecording(false);
       setRenderError(caught instanceof Error ? caught.message : "לא הצלחנו להתחיל את ההקלטה.");

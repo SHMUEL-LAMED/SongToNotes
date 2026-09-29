@@ -73,27 +73,38 @@ function pad(value: number, width = 2) {
 
 /** 00:01:02,345 for SRT, 00:01:02.345 for VTT. */
 export function formatTimestamp(seconds: number, separator: "," | "." = ",") {
-  const whole = Math.max(0, seconds);
-  const hours = Math.floor(whole / 3600);
-  const minutes = Math.floor((whole % 3600) / 60);
-  const secs = Math.floor(whole % 60);
-  const millis = Math.round((whole - Math.floor(whole)) * 1000) % 1000;
+  // Rounded to whole milliseconds first, so 2.9996 carries into 00:00:03,000
+  // rather than dropping the second and printing 00:00:02,000.
+  const total = Number.isFinite(seconds) ? Math.round(Math.max(0, seconds) * 1000) : 0;
+  const hours = Math.floor(total / 3_600_000);
+  const minutes = Math.floor((total % 3_600_000) / 60_000);
+  const secs = Math.floor((total % 60_000) / 1000);
+  const millis = total % 1000;
   return `${pad(hours)}:${pad(minutes)}:${pad(secs)}${separator}${pad(millis, 3)}`;
 }
 
-/** A segment with no end runs until the next one starts, or a beat after it began. */
+/**
+ * A segment with no end runs until the next one starts, or a beat after it
+ * began. A cue never ends at or before its start — players drop such a cue —
+ * so a zero-length segment, or one overlapped by the next, gets a second.
+ */
 function endOf(segments: TranscriptSegment[], index: number) {
   const segment = segments[index];
-  if (segment.end !== null) return segment.end;
   const next = segments[index + 1];
-  return next ? next.start : segment.start + 2;
+  const end = segment.end ?? (next ? next.start : segment.start + 2);
+  return end > segment.start ? end : segment.start + 1;
+}
+
+/** A blank line ends a cue in SRT and VTT, so a text with one inside would cut its cue short. */
+function cueText(text: string) {
+  return text.replace(/\r/g, "").replace(/\n\s*\n+/g, "\n").trim();
 }
 
 export function segmentsToSrt(segments: TranscriptSegment[]) {
   return segments
     .map(
       (segment, index) =>
-        `${index + 1}\n${formatTimestamp(segment.start, ",")} --> ${formatTimestamp(endOf(segments, index), ",")}\n${segment.text}\n`,
+        `${index + 1}\n${formatTimestamp(segment.start, ",")} --> ${formatTimestamp(endOf(segments, index), ",")}\n${cueText(segment.text)}\n`,
     )
     .join("\n");
 }
@@ -101,7 +112,7 @@ export function segmentsToSrt(segments: TranscriptSegment[]) {
 export function segmentsToVtt(segments: TranscriptSegment[]) {
   const cues = segments.map(
     (segment, index) =>
-      `${formatTimestamp(segment.start, ".")} --> ${formatTimestamp(endOf(segments, index), ".")}\n${segment.text}\n`,
+      `${formatTimestamp(segment.start, ".")} --> ${formatTimestamp(endOf(segments, index), ".")}\n${cueText(segment.text)}\n`,
   );
   return `WEBVTT\n\n${cues.join("\n")}`;
 }

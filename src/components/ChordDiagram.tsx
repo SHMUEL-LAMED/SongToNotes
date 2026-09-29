@@ -11,7 +11,8 @@ type Props = {
 };
 
 const STRINGS = 6;
-const FRETS = 4;
+/** Frets a box shows, unless the shape reaches further. */
+const MIN_FRETS = 4;
 
 /**
  * A guitar chord box: strings left to right from low E, frets top to bottom,
@@ -20,6 +21,9 @@ const FRETS = 4;
  */
 export function ChordDiagram({ root, quality, size = 88, flats = false, active = false }: Props) {
   const shape = guitarShape(root, quality);
+  // Some barre shapes span five frets (the E-shape sus2 at F, G…); a fixed
+  // four-fret box drew their top dots below the grid.
+  const FRETS = Math.max(MIN_FRETS, ...shape.frets.map((fret) => fret - shape.base + 1));
   const width = size;
   const height = size * 1.2;
   const padX = width * 0.16;

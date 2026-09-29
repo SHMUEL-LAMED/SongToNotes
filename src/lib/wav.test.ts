@@ -61,6 +61,16 @@ describe("encodeWav", () => {
     expect(wav.view.getInt16(46, true)).toBe(-32767);
   });
 
+  it("rounds to the nearest step and pads a short channel with silence", async () => {
+    const left = Float32Array.from([0.25, -0.25, 0.1]);
+    const right = Float32Array.from([0.5]);
+    const wav = await header(encodeWav({ channels: [left, right], sampleRate: 22050 }));
+    expect(wav.dataBytes).toBe(3 * 2 * 2);
+    const samples = [0, 1, 2, 3, 4, 5].map((index) => wav.view.getInt16(44 + index * 2, true));
+    // 0.25 * 32767 = 8191.75, 0.1 * 32767 = 3276.7, 0.5 * 32767 = 16383.5
+    expect(samples).toEqual([8192, 16384, -8192, 0, 3277, 0]);
+  });
+
   it("still produces a valid empty file", async () => {
     const blob = encodeWav({ channels: [], sampleRate: 44100 });
     const wav = await header(blob);

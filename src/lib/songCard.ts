@@ -290,6 +290,9 @@ export function fitText(text: string, options: FitOptions, measure: Measure): Fi
   }
   const font = cardFont(weight, minSize);
   const lines = wrapText(clean, maxWidth, font, measure);
+  // The steps from maxSize need not land on minSize itself, and the text may
+  // fit there; it is then shown whole rather than marked as cut.
+  if (lines.length <= maxLines) return { size: minSize, lines, truncated: false };
   const kept = lines.slice(0, maxLines);
   // The rest of the text joins the last kept line before it is cut, so the ellipsis marks real loss.
   kept[kept.length - 1] = ellipsize(`${kept[kept.length - 1]} ${lines.slice(maxLines).join(" ")}`, maxWidth, font, measure);

@@ -129,12 +129,19 @@ export async function saveRingtone(
   writeLocalRingtones([entry, ...listLocalRingtones()]);
   if (!userId) return entry;
 
-  const supabase = await getSupabase();
-  const { error } = await supabase
-    .from("ringtones")
-    .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
   // The local copy already holds it; the next profile read uploads it again.
-  if (error) console.warn("Ringtone could not be saved to the profile", error);
+  // That goes for a client that cannot load or a request that throws, too:
+  // letting either escape turned a ringtone that was saved on this device
+  // into "לא הצלחנו לשמור" — and skipped keeping its audio.
+  try {
+    const supabase = await getSupabase();
+    const { error } = await supabase
+      .from("ringtones")
+      .upsert([toRow(entry, userId)], { onConflict: "user_id,client_id" });
+    if (error) console.warn("Ringtone could not be saved to the profile", error);
+  } catch (error) {
+    console.warn("Ringtone could not be saved to the profile", error);
+  }
   return entry;
 }
 

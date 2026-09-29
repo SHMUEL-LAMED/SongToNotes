@@ -183,6 +183,13 @@ describe("helpers", () => {
     expect(parseSeedCode("hello")).toBeNull();
   });
 
+  it("refuses seed codes too large to be remembered", () => {
+    // "ZZZZZZ" is 36^6 - 1, past 2^31; the stored state would drop it on reload.
+    expect(parseSeedCode("ZZZZZZ-K3F9")).toBeNull();
+    expect(parseSeedCode("K3F9-ZZZZZZ")).toBeNull();
+    expect(parseSeedCode("ZIK0ZJ-K3F9")).toEqual({ rhythmSeed: 2 ** 31 - 1, noteSeed: parseInt("K3F9", 36) });
+  });
+
   it("reads key names and spells notes for the key", () => {
     expect(parseKeyName("C")).toBe(0);
     expect(parseKeyName("f#")).toBe(6);

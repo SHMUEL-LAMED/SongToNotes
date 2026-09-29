@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { registerAssistantBinding, type ActionHandler } from "./assistantActions";
 
 type Binding = {
@@ -14,7 +14,9 @@ type Binding = {
  */
 export function useAssistantTool(tool: string, binding: Binding) {
   const ref = useRef(binding);
-  useEffect(() => {
+  // Handed over as the render commits, not after paint, so an action the
+  // assistant runs right after another one already sees the page it left.
+  useLayoutEffect(() => {
     ref.current = binding;
   });
   useEffect(

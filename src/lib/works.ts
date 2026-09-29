@@ -452,42 +452,94 @@ export async function listWorks(userId?: string | null): Promise<SavedWork[]> {
   const ringtones = await listRingtones(userId)
     .then((rows) => rows.map((item) => fromRingtone(item, false)))
     .catch(() => listLocalRingtones().map((item) => fromRingtone(item, true)));
-  const supabase = await getSupabase();
+  // Offline, or with the server down, the list is what this device holds:
+  // a failed read used to reject the whole listing, and the home page, the
+  // drawer and the personal area all showed an empty history instead.
+  const supabase = await getSupabase().catch(() => null);
+  if (!supabase) return sortNewestFirst([...local, ...ringtones]);
   const [uploaded, remote, transcriptions] = await Promise.all([
     syncLocalWorks(userId).catch(() => [] as SavedWork[]),
-    supabase
-      .from("works")
-      .select(WORK_COLUMNS)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(SERVER_LIMIT)
+    Promise.resolve(
+      supabase
+        .from("works")
+        .select(WORK_COLUMNS)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(SERVER_LIMIT),
+    )
       .then(({ data, error }) => {
         if (error) throw error;
         return ((data ?? []) as WorkRow[])
           .map(fromRow)
           .filter((item): item is SavedWork => item !== null);
+      })
+      .catch((error: unknown) => {
+        console.warn("Works could not be read from the profile", error);
+        return null;
       }),
-    listTranscriptions(userId).then((rows) => rows.map(fromTranscription)),
+    listTranscriptions(userId)
+      .then((rows) => rows.map(fromTranscription))
+      .catch(() => [] as SavedWork[]),
   ]);
   // The file sync may have recorded cloud paths for ringtones since.
   const ringtonePaths = new Map(listLocalRingtones().map((item) => [item.id, item.filePath ?? null]));
   for (const item of ringtones) {
     if (!item.filePath && ringtonePaths.get(item.id)) item.filePath = ringtonePaths.get(item.id) ?? null;
   }
+  if (!remote) return sortNewestFirst([...listLocalWorks(), ...transcriptions, ...ringtones]);
 
-  // Whatever the server holds wins over the local copy of the same work,
-  // except that the local index knows which entries are still unsynced.
-  const byId = new Map<string, SavedWork>();
-  for (const item of local) byId.set(item.id, item);
-  for (const item of uploaded) byId.set(item.id, item);
-  for (const item of remote) byId.set(item.id, item);
+  const merged = mergeRemoteWorks({ before: local, now: listLocalWorks(), uploaded, remote, complete: remote.length < SERVER_LIMIT });
   // The server's copies refresh the local index so a rename made elsewhere
   // shows here after one visit.
-  writeLocalWorks(
-    sortNewestFirst(Array.from(byId.values())).filter((item) => item.origin === "works"),
-  );
+  writeLocalWorks(merged);
+  return sortNewestFirst([...merged, ...transcriptions, ...ringtones]);
+}
 
-  return sortNewestFirst([...byId.values(), ...transcriptions, ...ringtones]);
+/**
+ * The local index after a read of the profile.
+ *
+ * Whatever the server holds wins over the local copy of the same work,
+ * except that the local index knows which entries are still unsynced. The
+ * index is read again once the server has answered (`now`), so a work saved
+ * or deleted on this device while the request was out is not undone by a
+ * stale copy (`before`). And an entry that was already synced but that the
+ * server no longer has was deleted on another device: it is dropped, rather
+ * than kept here and shown forever — unless the server's answer was cut at
+ * its limit and the entry is older than what came back.
+ */
+export function mergeRemoteWorks({
+  before,
+  now,
+  uploaded,
+  remote,
+  complete,
+}: {
+  before: SavedWork[];
+  now: SavedWork[];
+  uploaded: SavedWork[];
+  remote: SavedWork[];
+  complete: boolean;
+}): SavedWork[] {
+  const onServer = new Set(remote.map((item) => item.id));
+  const justUploaded = new Set(uploaded.map((item) => item.id));
+  const syncedBefore = new Set(before.filter((item) => !item.localOnly).map((item) => item.id));
+  const oldest = remote.reduce((floor, item) => (item.createdAt && item.createdAt < floor ? item.createdAt : floor), "\uffff");
+  // An empty answer is more likely a session the server did not accept than
+  // every work deleted elsewhere; nothing is dropped on its word.
+  const authoritative = remote.length > 0;
+  const byId = new Map<string, SavedWork>();
+  for (const item of now) {
+    const gone =
+      authoritative &&
+      !item.localOnly &&
+      !onServer.has(item.id) &&
+      !justUploaded.has(item.id) &&
+      syncedBefore.has(item.id) &&
+      (complete || item.createdAt >= oldest);
+    if (!gone) byId.set(item.id, item);
+  }
+  for (const item of remote) byId.set(item.id, item);
+  return sortNewestFirst(Array.from(byId.values())).filter((item) => item.origin === "works");
 }
 
 // ---------------------------------------------------------------------------

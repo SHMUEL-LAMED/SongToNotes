@@ -11,9 +11,11 @@ import {
   circleIndex,
   diatonicChords,
   findScale,
+  keySignature,
   rootFor,
   scaleNotes,
   stepPattern,
+  type DiatonicChord,
   type ScaleId,
 } from "../lib/theory";
 import type { DetectedNote } from "../lib/types";
@@ -76,7 +78,20 @@ export function TheoryTool() {
   const nameOf = useMemo(() => new Map(notes.map((item) => [item.pc, item.name])), [notes]);
   const index = circleIndex(root, scale);
   const minorRing = ["minor", "harmonicMinor", "melodicMinor", "minorPentatonic", "blues"].includes(scale.id);
-  const key = index >= 0 ? CIRCLE[index] : null;
+  const signature = useMemo(() => keySignature(root, scale), [root, scale]);
+  // The well-worn progressions, spelled in this scale. Their numerals are
+  // worked out from the chords that actually sound here (a mixolydian v is
+  // minor, a dorian vi diminished) rather than read from the label, which is
+  // written for plain major or minor; the Andalusian cadence keeps its major
+  // V in natural minor, borrowed from harmonic minor, as it is always played.
+  const progressions = useMemo(() => {
+    if (!chords.length) return [];
+    const harmonic = scale.id === "minor" ? diatonicChords(root, findScale("harmonicMinor"), sevenths) : null;
+    return PROGRESSIONS.filter((item) => Boolean(item.minor) === scale.minorish).map((item) => {
+      const list = item.degrees.map((degree) => (degree === 5 && item.harmonicV && harmonic ? harmonic[4] : chords[degree - 1]));
+      return { ...item, title: `${item.label.split(" · ")[0]} · ${list.map((chord) => chord.roman).join("–")}`, chords: list };
+    });
+  }, [chords, root, scale, sevenths]);
 
   useEffect(() => {
     try {
@@ -149,12 +164,10 @@ export function TheoryTool() {
     play(`chord-${degree}`, chord.midi.map((midi, position) => note(midi, position * 0.03, 1.3)));
   };
 
-  const playProgression = (id: string, degrees: number[]) => {
+  const playProgression = (id: string, progression: DiatonicChord[]) => {
     if (playing === id) return stop();
     const list: DetectedNote[] = [];
-    degrees.forEach((degree, position) => {
-      const chord = chords[degree - 1];
-      if (!chord) return;
+    progression.forEach((chord, position) => {
       chord.midi.forEach((midi) => list.push(note(midi, position * 0.95, 0.9)));
       list.push(note(chord.midi[0] - 12, position * 0.95, 0.9));
     });
@@ -292,7 +305,7 @@ export function TheoryTool() {
               {rootName}
             </text>
             <text x={c} y={c + 16} className="fifths-sub">
-              {key ? key.accidentals : ""}
+              {signature.label}
             </text>
           </svg>
         </div>
@@ -334,11 +347,11 @@ export function TheoryTool() {
           <dl className="theory-facts">
             <div>
               <dt>סימני היתק</dt>
-              <dd>{key ? key.accidentals : "—"}</dd>
+              <dd>{signature.label}</dd>
             </div>
             <div>
               <dt>{scale.minorish ? "המז׳ור המקביל" : "המינור המקביל"}</dt>
-              <dd dir="ltr">{key ? (scale.minorish ? key.major : key.minor) : "—"}</dd>
+              <dd dir="ltr">{scale.minorish ? signature.relativeMajor : signature.relativeMinor}</dd>
             </div>
             <div>
               <dt>מבנה (טונים)</dt>
@@ -385,7 +398,7 @@ export function TheoryTool() {
                   className={`theory-key ${item.black ? "black" : "white"} ${inScale ? "in-scale" : ""} ${isRoot ? "is-root" : ""} ${on ? "is-lit" : ""}`}
                   style={item.black ? { left: `calc((${item.whiteIndex} + 0.68) * (100% / ${whiteCount}))` } : undefined}
                   onClick={() => playSingle(item.midi)}
-                  aria-label={inScale ? nameOf.get(item.midi % 12) : undefined}
+                  aria-label={inScale ? nameOf.get(item.midi % 12) : ROOTS[item.midi % 12].name}
                 >
                   {inScale && <span>{nameOf.get(item.midi % 12)}</span>}
                 </button>
@@ -470,12 +483,12 @@ export function TheoryTool() {
           <div className="progressions">
             <h3>מהלכים מוכרים</h3>
             <ul>
-              {PROGRESSIONS.filter((item) => Boolean(item.minor) === scale.minorish).map((item) => (
+              {progressions.map((item) => (
                 <li key={item.id}>
-                  <button type="button" className={`secondary-button ${playing === item.id ? "is-on" : ""}`} onClick={() => playProgression(item.id, item.degrees)}>
-                    {playing === item.id ? <Pause size={15} /> : <Repeat size={15} />} {item.label}
+                  <button type="button" className={`secondary-button ${playing === item.id ? "is-on" : ""}`} onClick={() => playProgression(item.id, item.chords)}>
+                    {playing === item.id ? <Pause size={15} /> : <Repeat size={15} />} {item.title}
                   </button>
-                  <span dir="ltr">{item.degrees.map((degree) => chords[degree - 1]?.name).join(" – ")}</span>
+                  <span dir="ltr">{item.chords.map((chord) => chord.name).join(" – ")}</span>
                 </li>
               ))}
             </ul>

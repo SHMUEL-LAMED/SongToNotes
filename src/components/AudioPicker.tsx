@@ -3,8 +3,10 @@ import { currentRoute } from "../lib/router";
 import { FileAudio, Mic, Square, Trash2, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decodeAudioFile, formatTime } from "../lib/audio";
+import { offerFile } from "../lib/currentFile";
 import { hasHandoff, takeHandoff } from "../lib/handoff";
 import { decodeMonoAt } from "../lib/longAudio";
+import { SendFileMenu } from "./SendFile";
 import {
   isRecordingSupported,
   MicRecorder,
@@ -190,6 +192,14 @@ export function useAudioFile(options: AudioFileOptions = {}) {
     });
   }, [acceptHandoff, load]);
 
+  // The song can be carried on to another tool from the foot of the page
+  // (see SendFile.tsx) for as long as this tool has it open.
+  const offeredFile = audio?.file ?? null;
+  useEffect(() => {
+    if (!offeredFile) return;
+    return offerFile({ kind: "source", name: offeredFile.name, tool: currentRoute(), get: () => offeredFile });
+  }, [offeredFile]);
+
   const clear = useCallback(() => {
     loadTokenRef.current += 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -340,6 +350,7 @@ export function AudioPicker({
           </span>
         </div>
         {children}
+        <SendFileMenu file={audio.file} />
         <label className="secondary-button compact replace-file-button">
           <UploadCloud size={16} /> החלף קובץ
           <input

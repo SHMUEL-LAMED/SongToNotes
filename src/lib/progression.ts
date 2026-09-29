@@ -86,24 +86,32 @@ export function chordFor(token: string, keyPc: number, minor: boolean, sevenths:
     "4m": { offset: 5, intervals: [0, 3, 7], seventh: 10, suffix: "m", seventhSuffix: "m7", roman: "iv" },
     "4M": { offset: 5, intervals: [0, 4, 7], seventh: 10, suffix: "", seventhSuffix: "7", roman: "IV" },
   };
-  const spec = borrowed[token] ?? borrowed["5M"];
+  // Anything unknown (an old or hand-edited saved state) reads as the
+  // dominant rather than throwing and taking the whole page down.
+  const known = token in borrowed;
+  const spec = known ? borrowed[token] : borrowed["5M"];
   const rootPc = (keyPc + spec.offset) % 12;
   // Spelled from the scale degree it sits on, so C♯ minor gets G♯ and not
   // A♭; the flat chords of a major key lower that degree's letter.
-  const degree = token === "5M" ? 5 : token === "4m" || token === "4M" ? 4 : Number(token.slice(1));
+  const degree = !known || token === "5M" ? 5 : token === "4m" || token === "4M" ? 4 : Number(token.slice(1));
   const letterName = diatonic[degree - 1].name.match(/^[A-G][♯♭]*/)?.[0] ?? ROOTS[rootPc].name;
   const flattened = token.startsWith("b") && !minor ? (letterName.endsWith("♯") ? letterName.slice(0, -1) : `${letterName}♭`) : letterName;
   // A double flat is correct but unreadable on a lead sheet; the enharmonic wins.
   const lowered = flattened.endsWith("♭♭") ? ROOTS[rootPc].name : flattened;
   const name = `${lowered}${sevenths ? spec.seventhSuffix : spec.suffix}`;
   return {
-    token,
+    token: known ? token : "5M",
     roman: sevenths ? `${spec.roman}${spec.seventhSuffix.replace(/^m/, "")}` : spec.roman,
     name,
     plain: plainChordName(name),
     rootPc,
     intervals: sevenths ? [...spec.intervals, spec.seventh] : spec.intervals,
   };
+}
+
+/** Whether a token is one this module can spell. */
+export function isProgressionToken(token: unknown): token is string {
+  return typeof token === "string" && /^([1-7]|b7|b6|b3|5M|4m|4M)$/.test(token);
 }
 
 export function spellProgression(tokens: string[], keyPc: number, minor: boolean, sevenths: boolean) {
@@ -264,7 +272,9 @@ export function arrange(chords: ProgChord[], arrangement: Arrangement): Detected
     }
 
     const root = bassNote(chord.rootPc);
-    const fifth = root + 7;
+    // The chord's own fifth: a diminished chord's is flat, and a perfect fifth
+    // under it would clash with the chord part.
+    const fifth = root + (chord.intervals[2] ?? 7);
     switch (arrangement.bass) {
       case "none":
         break;

@@ -1,5 +1,5 @@
 import { Download, Headphones, Layers, Pause, Play, Plus, Repeat, Square, Trash2, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatBytes, validateAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
@@ -31,7 +31,7 @@ export function MixerTool({ initial = null }: Props) {
   const [notice] = useState<string | null>(initial ? `פתחת „${initial.title}”. הוסף את הערוצים שוב כדי לערבב מחדש.` : null);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
-  const [loop, setLoop] = useState<TrimRange>(null);
+  const [chosenLoop, setLoop] = useState<TrimRange>(null);
   const [rendering, setRendering] = useState(false);
   const [result, setResult] = useState<{ file: File; url: string } | null>(null);
   const playerRef = useRef<MixPlayer | null>(null);
@@ -63,9 +63,6 @@ export function MixerTool({ initial = null }: Props) {
     });
   }, []);
   useEffect(() => {
-    playerRef.current?.setLoop(loop);
-  }, [loop]);
-  useEffect(() => {
     if (!playing) return;
     let frame = 0;
     const tick = () => {
@@ -81,6 +78,20 @@ export function MixerTool({ initial = null }: Props) {
   useEffect(() => resetSave(), [resetSave, result]);
 
   const duration = mixDuration(tracks);
+  // A region drawn before a track was removed (or moved earlier) can reach
+  // past the end of what is left; it is cut to the mix, and dropped once
+  // nothing of it remains, instead of looping silence.
+  const loop = useMemo<TrimRange>(() => {
+    if (!chosenLoop || chosenLoop.start >= duration - 0.05) return null;
+    return chosenLoop.end > duration ? { start: chosenLoop.start, end: duration } : chosenLoop;
+  }, [chosenLoop, duration]);
+  useEffect(() => {
+    playerRef.current?.setLoop(loop);
+  }, [loop]);
+  // The offset sliders reach as far as the longest file, a scale that stays
+  // put while one is dragged (the mix itself grows as a track moves later).
+  const offsetRange = Math.max(1, Math.ceil(tracks.reduce((longestFile, track) => Math.max(longestFile, track.buffer.duration), 0)));
+  const audibleIds = useMemo(() => new Set(audibleTracks(tracks).map((track) => track.id)), [tracks]);
   const longest = useMemo(() => tracks.reduce<MixTrack | null>((best, track) => (!best || track.buffer.duration > best.buffer.duration ? track : best), null), [tracks]);
   const peaks = useMemo(() => (longest ? buildPeaks(longest.buffer) : null), [longest]);
 
@@ -135,10 +146,62 @@ export function MixerTool({ initial = null }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handed]);
 
-  const update = (id: string, patch: Partial<MixTrack>) => {
+  const update = useCallback((id: string, patch: Partial<MixTrack>) => {
     setTracks((current) => current.map((track) => (track.id === id ? { ...track, ...patch } : track)));
     setResult(null);
-  };
+  }, []);
+
+  // The playhead re-renders the page every frame while the mix plays; the
+  // track strips only change with the tracks, so they are built once per change.
+  const trackRows = useMemo(
+    () => (
+      <div className="mixer-tracks" role="list" aria-label="ערוצים">
+        {tracks.map((track) => {
+          const audible = audibleIds.has(track.id);
+          return (
+            <div key={track.id} role="listitem" className={`mixer-track ${audible ? "" : "is-silent"}`} style={{ "--track-hue": track.color } as React.CSSProperties}>
+              <div className="mixer-track-head">
+                <input className="mixer-track-name" value={track.name} onChange={(event) => update(track.id, { name: event.target.value })} aria-label="שם הערוץ" dir="auto" />
+                <span className="mixer-track-meta">{formatTime(track.buffer.duration)}</span>
+                <button type="button" className={`mixer-toggle ${track.muted ? "active" : ""}`} onClick={() => update(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`השתק ${track.name}`} title="השתק">
+                  {track.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                </button>
+                <button type="button" className={`mixer-toggle ${track.solo ? "active" : ""}`} onClick={() => update(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`סולו ${track.name}`} title="סולו">
+                  <Headphones size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => {
+                    setTracks((current) => current.filter((item) => item.id !== track.id));
+                    setResult(null);
+                  }}
+                  aria-label={`הסר את ${track.name}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div className="mixer-track-controls">
+                <label>
+                  <span>עוצמה {Math.round(track.gain * 100)}%</span>
+                  <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => update(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
+                </label>
+                <label>
+                  <span>פאן {track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</span>
+                  <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => update(track.id, { pan: Number(event.target.value) / 100 })} aria-label={`פאן של ${track.name}`} />
+                </label>
+                <label>
+                  <span>התחלה {track.offset.toFixed(2)} ש׳</span>
+                  <input type="range" min={0} max={offsetRange} step={0.05} value={track.offset} onChange={(event) => update(track.id, { offset: Number(event.target.value) })} aria-label={`התחלה של ${track.name}`} />
+                </label>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ),
+    [audibleIds, offsetRange, tracks, update],
+  );
 
   const toggle = () => {
     const player = playerRef.current;
@@ -154,6 +217,10 @@ export function MixerTool({ initial = null }: Props) {
   /** Resolves with the rendered file, or null when there was nothing to render or it failed. */
   const render = async (): Promise<File | null> => {
     if (!tracks.length || rendering) return null;
+    if (!audibleIds.size) {
+      setError("כל הערוצים מושתקים — אין מה לרנדר.");
+      return null;
+    }
     setRendering(true);
     setError(null);
     try {
@@ -224,7 +291,7 @@ export function MixerTool({ initial = null }: Props) {
         if (typeof pan === "number") changes.pan = Math.max(-1, Math.min(1, pan / 100));
         if (typeof muted === "boolean") changes.muted = muted;
         if (typeof solo === "boolean") changes.solo = solo;
-        if (typeof offset === "number") changes.offset = Math.max(0, Math.min(Math.max(1, Math.ceil(duration)), offset));
+        if (typeof offset === "number") changes.offset = Math.max(0, Math.min(offsetRange, offset));
         if (typeof name === "string" && name.trim()) changes.name = name.trim().slice(0, 60);
         if (!Object.keys(changes).length) return { ok: false, message: "לא צוין מה לשנות" };
         update(track.id, changes);
@@ -327,50 +394,7 @@ export function MixerTool({ initial = null }: Props) {
 
         {tracks.length > 0 && (
           <>
-            <div className="mixer-tracks" role="list" aria-label="ערוצים">
-              {tracks.map((track) => {
-                const audible = audibleTracks(tracks).includes(track);
-                return (
-                  <div key={track.id} role="listitem" className={`mixer-track ${audible ? "" : "is-silent"}`} style={{ "--track-hue": track.color } as React.CSSProperties}>
-                    <div className="mixer-track-head">
-                      <input className="mixer-track-name" value={track.name} onChange={(event) => update(track.id, { name: event.target.value })} aria-label="שם הערוץ" dir="auto" />
-                      <span className="mixer-track-meta">{formatTime(track.buffer.duration)}</span>
-                      <button type="button" className={`mixer-toggle ${track.muted ? "active" : ""}`} onClick={() => update(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`השתק ${track.name}`} title="השתק">
-                        {track.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-                      </button>
-                      <button type="button" className={`mixer-toggle ${track.solo ? "active" : ""}`} onClick={() => update(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`סולו ${track.name}`} title="סולו">
-                        <Headphones size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        onClick={() => {
-                          setTracks((current) => current.filter((item) => item.id !== track.id));
-                          setResult(null);
-                        }}
-                        aria-label={`הסר את ${track.name}`}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                    <div className="mixer-track-controls">
-                      <label>
-                        <span>עוצמה {Math.round(track.gain * 100)}%</span>
-                        <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => update(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
-                      </label>
-                      <label>
-                        <span>פאן {track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</span>
-                        <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => update(track.id, { pan: Number(event.target.value) / 100 })} aria-label={`פאן של ${track.name}`} />
-                      </label>
-                      <label>
-                        <span>התחלה {track.offset.toFixed(2)} ש׳</span>
-                        <input type="range" min={0} max={Math.max(1, Math.ceil(duration))} step={0.05} value={track.offset} onChange={(event) => update(track.id, { offset: Number(event.target.value) })} aria-label={`התחלה של ${track.name}`} />
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {trackRows}
             {anySolo && <p className="table-footnote">סולו פעיל: נשמעים רק הערוצים המסומנים באוזניות.</p>}
 
             {peaks && longest && (

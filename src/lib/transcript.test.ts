@@ -23,6 +23,13 @@ describe("formatTimestamp", () => {
     expect(formatTimestamp(3600 + 5.5, ".")).toBe("01:00:05.500");
     expect(formatTimestamp(-3)).toBe("00:00:00,000");
   });
+
+  it("carries a rounded-up millisecond into the second, minute and hour", () => {
+    expect(formatTimestamp(2.9996)).toBe("00:00:03,000");
+    expect(formatTimestamp(59.9999, ".")).toBe("00:01:00.000");
+    expect(formatTimestamp(3599.9995)).toBe("01:00:00,000");
+    expect(formatTimestamp(Number.NaN)).toBe("00:00:00,000");
+  });
 });
 
 describe("SRT and VTT", () => {
@@ -37,6 +44,21 @@ describe("SRT and VTT", () => {
     expect(segmentsToSrt([{ start: 10, end: null, text: "סוף" }])).toContain(
       "00:00:10,000 --> 00:00:12,000",
     );
+  });
+
+  it("never writes a cue that ends at or before it starts", () => {
+    const srt = segmentsToSrt([
+      { start: 5, end: 5, text: "רגע" },
+      { start: 8, end: null, text: "חפיפה" },
+      { start: 7, end: 9, text: "הבא" },
+    ]);
+    expect(srt).toContain("00:00:05,000 --> 00:00:06,000\nרגע");
+    expect(srt).toContain("00:00:08,000 --> 00:00:09,000\nחפיפה");
+  });
+
+  it("keeps a cue whole when its text has a blank line inside", () => {
+    const srt = segmentsToSrt([{ start: 0, end: 1, text: "שורה\n\nועוד" }]);
+    expect(srt).toBe("1\n00:00:00,000 --> 00:00:01,000\nשורה\nועוד\n");
   });
 
   it("writes a WEBVTT header and dotted millis", () => {

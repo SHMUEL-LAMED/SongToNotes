@@ -18,11 +18,16 @@ export function setSongbookDraft(draft: { title: string; body: string }) {
   }
 }
 
-export function takeSongbookDraft(): { title: string; body: string } | null {
+/**
+ * The waiting draft, left in place. The songbook reads it while it renders
+ * and clears it once it is on screen: a render React throws away (one that
+ * waited on a lazily loaded part) would otherwise have taken the draft with
+ * it, and the page opened empty.
+ */
+export function peekSongbookDraft(): { title: string; body: string } | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
-    sessionStorage.removeItem(DRAFT_KEY);
     const parsed = JSON.parse(raw) as { title?: unknown; body?: unknown };
     return typeof parsed.body === "string" ? { title: typeof parsed.title === "string" ? parsed.title : "", body: parsed.body } : null;
   } catch {
@@ -30,11 +35,41 @@ export function takeSongbookDraft(): { title: string; body: string } | null {
   }
 }
 
-const CHORD_TOKEN = /^([A-G])([#b]?)(m|maj7|m7|7|sus4|sus2|dim|aug|add9|m6|6|9|m9|maj9|13|11)?(?:\/([A-G][#b]?))?$/;
+export function clearSongbookDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Nothing was stored, then.
+  }
+}
 
-/** True for "Am", "F#m7", "G/B" — a bare chord symbol. */
+/** The waiting draft, and it stops waiting. */
+export function takeSongbookDraft(): { title: string; body: string } | null {
+  const draft = peekSongbookDraft();
+  clearSongbookDraft();
+  return draft;
+}
+
+/**
+ * A chord symbol: root, accidental, the rest of the name, and a bass note.
+ * The rest is built from the usual pieces — m, maj, dim, sus, add, 7, b5,
+ * (maj7) — so sheets that write Bm7b5, E7sus4, Cdim7, C5 or Cm(maj7) are
+ * read, transposed and folded like the simple ones. It used to know a fixed
+ * list, and a song with Bm7b5 kept that chord in the old key when moved.
+ */
+const CHORD_TOKEN =
+  /^([A-G])([#b]?)((?:maj|min|m|M|dim|aug|sus|add|\+|°|ø)?(?:maj\d{0,2}|sus\d?|add\d{1,2}|dim\d?|aug|[#b]?\d{1,2}|\([^)\s]*\))*)(?:\/([A-G][#b]?))?$/;
+/** Longer than any real chord name; keeps the pattern from chewing on a long bracketed remark. */
+const MAX_CHORD_LENGTH = 16;
+
+function matchChord(token: string) {
+  const clean = token.trim();
+  return clean.length <= MAX_CHORD_LENGTH ? clean.match(CHORD_TOKEN) : null;
+}
+
+/** True for "Am", "F#m7", "G/B", "Bm7b5" — a bare chord symbol. */
 export function isChordToken(token: string) {
-  return CHORD_TOKEN.test(token.trim());
+  return matchChord(token) !== null;
 }
 
 /** A line made only of chord symbols (and spaces) is a chord line. */
@@ -75,6 +110,16 @@ export function foldChordLines(text: string) {
   return out.join("\n");
 }
 
+/** ChordPro's section openers, by the name the sheet shows. */
+const SECTIONS: Record<string, string> = {
+  soc: "פזמון",
+  start_of_chorus: "פזמון",
+  sov: "בית",
+  start_of_verse: "בית",
+  sob: "גשר",
+  start_of_bridge: "גשר",
+};
+
 /** Parses bracketed text into lines the renderer can lay out. */
 export function parseSong(text: string): SongLine[] {
   return text
@@ -82,8 +127,21 @@ export function parseSong(text: string): SongLine[] {
     .split("\n")
     .map((raw): SongLine => {
       if (!raw.trim()) return { chords: [], lyric: "", kind: "blank" };
-      const heading = raw.match(/^\s*\[(?:(?:verse|chorus|bridge|intro|outro|בית|פזמון|גשר|פתיחה|סיום)[^\]]*)\]\s*$/i) ?? raw.match(/^\s*\{(?:c|comment|soc|start_of_chorus|sov|start_of_verse|title|t):?\s*([^}]*)\}\s*$/i);
-      if (heading) return { chords: [], lyric: raw.trim().replace(/^[[{]|[\]}]$/g, "").replace(/^(c|comment|title|t):\s*/i, ""), kind: "heading" };
+      const heading = raw.match(/^\s*\[(?:(?:verse|chorus|bridge|intro|outro|בית|פזמון|גשר|פתיחה|סיום)[^\]]*)\]\s*$/i);
+      if (heading) return { chords: [], lyric: raw.trim().replace(/^\[|\]$/g, ""), kind: "heading" };
+      // ChordPro directives: a section's start is its heading (named in
+      // Hebrew, not "soc"), its end takes no room, a comment is shown.
+      const directive = raw.match(/^\s*\{\s*([a-z_]+)\s*(?::\s*([^}]*))?\}\s*$/i);
+      if (directive) {
+        const name = directive[1].toLowerCase();
+        const label = directive[2]?.trim() ?? "";
+        if (/^(eoc|eov|eob|end_of_\w+)$/.test(name)) return { chords: [], lyric: "", kind: "blank" };
+        const section = SECTIONS[name];
+        if (section) return { chords: [], lyric: label || section, kind: "heading" };
+        if (/^(c|comment|ci|comment_italic|title|t|st|subtitle)$/.test(name)) {
+          return label ? { chords: [], lyric: label, kind: "heading" } : { chords: [], lyric: "", kind: "blank" };
+        }
+      }
       const chords: { at: number; name: string }[] = [];
       let lyric = "";
       const pattern = /\[([^\]]+)\]/g;
@@ -101,7 +159,7 @@ export function parseSong(text: string): SongLine[] {
 
 /** Moves one chord symbol by semitones, keeping its quality and bass note. */
 export function transposeChord(name: string, semitones: number, flats = false) {
-  const match = name.trim().match(CHORD_TOKEN);
+  const match = matchChord(name);
   if (!match || semitones === 0) return name;
   const shift = (letter: string, accidental: string) => {
     const base = ROOT_NAMES.indexOf(letter);
@@ -133,13 +191,30 @@ export function songChords(text: string) {
 
 /** A chord symbol as the diagram wants it: pitch class and quality. */
 export function parseChordSymbol(name: string): { root: number; quality: ChordQuality } | null {
-  const match = name.trim().match(CHORD_TOKEN);
+  const match = matchChord(name);
   if (!match) return null;
   const base = ROOT_NAMES.indexOf(match[1]);
   const root = (((base + (match[2] === "#" ? 1 : match[2] === "b" ? -1 : 0)) % 12) + 12) % 12;
-  const raw = match[3] ?? "";
-  const quality: ChordQuality = raw === "m" || raw === "m6" || raw === "m9" ? "m" : raw === "7" || raw === "9" || raw === "13" || raw === "11" ? "7" : raw === "m7" ? "m7" : raw === "maj7" || raw === "maj9" ? "maj7" : raw === "sus4" ? "sus4" : raw === "sus2" ? "sus2" : raw === "dim" ? "dim" : raw === "aug" ? "aug" : "";
-  return { root, quality };
+  return { root, quality: qualityOf(match[3] ?? "") };
+}
+
+/**
+ * The nearest shape the diagrams know for the rest of a chord's name:
+ * half-diminished shows as diminished, 9/11/13 as their seventh, 6 and
+ * add9 as the plain triad.
+ */
+function qualityOf(raw: string): ChordQuality {
+  const name = raw.replace(/[()]/g, "");
+  if (/^(m7b5|min7b5|ø|dim|°)/.test(name)) return "dim";
+  if (/^(aug|\+)/.test(name)) return "aug";
+  const minor = /^(m|min)(?!aj)/.test(name);
+  const rest = minor ? name.replace(/^(min|m)/, "") : name;
+  if (rest.includes("sus2")) return "sus2";
+  if (rest.includes("sus")) return "sus4";
+  if (minor) return /^(7|11|13)/.test(rest) ? "m7" : "m";
+  if (/^(maj|M)\d/.test(rest)) return "maj7";
+  if (/^(7|9|11|13)/.test(rest)) return "7";
+  return "";
 }
 
 /** The song as chords-over-lyrics plain text, for printing and copying. */

@@ -92,6 +92,16 @@ export function useSeparation(context: AudioContext | null) {
 
   const run = useCallback(
     (buffer: AudioBuffer, options: SeparateOptions) => {
+      // The worker runs a job to its end before it reads the next message,
+      // so a superseded job used to be finished first: three moves of the
+      // strength slider on a long song queued three full separations, and
+      // the one on screen came last. Terminating the busy worker is what
+      // actually discards it.
+      if (pendingRef.current) {
+        pendingRef.current.reject(new Error("ההפרדה בוטלה."));
+        pendingRef.current = null;
+        teardown();
+      }
       jobRef.current += 1;
       const jobId = jobRef.current;
       setState({ isRunning: true, progress: 0, error: null });
@@ -133,7 +143,7 @@ export function useSeparation(context: AudioContext | null) {
         );
       });
     },
-    [settle],
+    [settle, teardown],
   );
 
   const cancel = useCallback(() => {

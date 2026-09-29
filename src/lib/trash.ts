@@ -6,7 +6,7 @@
  * the finger is a slip and not a loss. The audio file itself is not kept — it
  * can be large, and the entry is what people actually mourn.
  */
-import type { SavedWork } from "./works";
+import { normalizeWork, type SavedWork } from "./works";
 
 export type TrashEntry = { work: SavedWork; deletedAt: string };
 
@@ -39,13 +39,20 @@ export function parseTrash(raw: string | null, now: Date = new Date()): TrashEnt
   try {
     const value = JSON.parse(raw) as unknown;
     if (!Array.isArray(value)) return [];
-    const entries = value.filter(
-      (entry): entry is TrashEntry =>
-        Boolean(entry) &&
-        typeof entry === "object" &&
-        typeof (entry as TrashEntry).deletedAt === "string" &&
-        Boolean((entry as TrashEntry).work?.id),
-    );
+    const entries: TrashEntry[] = [];
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object" || typeof (entry as TrashEntry).deletedAt !== "string") continue;
+      // A stored entry is read like any other work, so one with a missing
+      // title or summary cannot take the recycle bin down when it renders.
+      const raw = (entry as TrashEntry).work as unknown;
+      const work = normalizeWork(raw);
+      if (!work) continue;
+      const origin = (raw as SavedWork).origin;
+      entries.push({
+        work: { ...work, origin: origin === "transcriptions" || origin === "ringtones" ? origin : "works" },
+        deletedAt: (entry as TrashEntry).deletedAt,
+      });
+    }
     return pruneTrash(entries, now);
   } catch {
     return [];
@@ -57,7 +64,11 @@ export function listTrash(now: Date = new Date()): TrashEntry[] {
 }
 
 function write(entries: TrashEntry[]) {
-  store()?.setItem(TRASH_KEY, JSON.stringify(entries));
+  try {
+    store()?.setItem(TRASH_KEY, JSON.stringify(entries));
+  } catch {
+    // A full or blocked storage loses the undo, never the delete itself.
+  }
 }
 
 export function pushToTrash(work: SavedWork, now: Date = new Date()) {

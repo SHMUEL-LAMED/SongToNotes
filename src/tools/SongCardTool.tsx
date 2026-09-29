@@ -292,7 +292,15 @@ function drawDiagram(ctx: CanvasRenderingContext2D, box: DiagramBox, palette: Ca
   });
 
   ctx.fillStyle = palette.diagramInk;
-  ctx.font = cardFont(700, Math.min(nameH * 0.62, unit * 20));
+  // A long name ("C#m7b5/G#") at the usual size ran past its box into the
+  // next one; it is set smaller until it fits the box's width.
+  let nameSize = Math.min(nameH * 0.62, unit * 20);
+  ctx.font = cardFont(700, nameSize);
+  const nameWidth = ctx.measureText(box.name).width;
+  if (nameWidth > box.w * 0.9) {
+    nameSize = Math.max(unit * 9, (nameSize * box.w * 0.9) / nameWidth);
+    ctx.font = cardFont(700, nameSize);
+  }
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.direction = "ltr";

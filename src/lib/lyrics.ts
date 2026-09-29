@@ -16,7 +16,12 @@ export function buildLines(segments: TranscriptSegment[], words: SpeechWord[]): 
     .filter((segment) => segment.text.trim())
     .map((segment) => ({ start: segment.start, end: segment.end ?? segment.start + 3, text: segment.text.trim(), words: [] }));
   if (!lines.length) return [];
-  for (const word of words) {
+  for (const raw of words) {
+    // The recogniser's words can come with a leading space, or without a
+    // time; either would show as a gap or a word that never lights up.
+    const text = typeof raw.word === "string" ? raw.word.trim() : "";
+    if (!text || !Number.isFinite(raw.start)) continue;
+    const word = { word: text, start: raw.start, end: Number.isFinite(raw.end) && raw.end >= raw.start ? raw.end : raw.start + 0.3 };
     // The segment whose own span holds the word wins; a little tolerance
     // only helps a word that sits just outside every segment.
     let line = lines.find((item) => word.start >= item.start && word.start < item.end);
@@ -36,14 +41,22 @@ export function buildLines(segments: TranscriptSegment[], words: SpeechWord[]): 
 }
 
 /** Edits from a textbox, line for line, keep the line times; word times are
- *  spread evenly across the new words when the count changed. */
+ *  spread evenly across the new words when the count changed. Rows added
+ *  past the last line follow it, three seconds each, rather than all taking
+ *  the last line's time — which left every one but the final one never lit. */
 export function applyLineEdits(lines: LyricLine[], text: string): LyricLine[] {
   const rows = text.replace(/\r/g, "").split("\n");
   const next: LyricLine[] = [];
   rows.forEach((row, index) => {
     const clean = row.trim();
     if (!clean) return;
-    const source = lines[Math.min(index, lines.length - 1)] ?? { start: 0, end: 3, text: "", words: [] };
+    const previous = next[next.length - 1];
+    const source =
+      index < lines.length
+        ? lines[index]
+        : previous
+          ? { start: previous.end, end: previous.end + 3, text: "", words: [] }
+          : { start: 0, end: 3, text: "", words: [] };
     const tokens = clean.split(/\s+/);
     const oldTokens = source.words.map((word) => word.text);
     const same = tokens.length === oldTokens.length;

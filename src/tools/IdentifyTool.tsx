@@ -191,6 +191,8 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
   const history = identified.reduceRight((list, song) => pushSong(list, song), saved).slice(0, HISTORY_SIZE);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
+  // The identification under way, dropped when the page closes.
+  const lookupRef = useRef<AbortController | null>(null);
   // Song pages whose video was already asked for again on this visit, found or not.
   const [videoChecked, setVideoChecked] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -246,6 +248,7 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
   useEffect(() => () => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     recorder.cancel();
+    lookupRef.current?.abort();
   }, [recorder]);
 
   /**
@@ -258,12 +261,18 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
     setResult(null);
     setExhausted(false);
     const session = newSession();
+    lookupRef.current?.abort();
+    const controller = new AbortController();
+    lookupRef.current = controller;
     let last: Identification | null = null;
     let answered = false;
+    let failure: string | null = null;
     for (let index = 0; index < clips.length; index += 1) {
+      if (controller.signal.aborted) return;
       setBusy(index === 0 ? "מזהה…" : TRYING_ANOTHER);
       try {
-        const found = await identifyClip(await clips[index](), session);
+        const found = await identifyClip(await clips[index](), session, controller.signal);
+        if (controller.signal.aborted) return;
         answered = true;
         last = found;
         if (found.found) {
@@ -277,17 +286,21 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
           return;
         }
       } catch (caught) {
+        if (controller.signal.aborted) return;
         if (caught instanceof AiError && STOP_CODES.has(caught.code)) {
           setError(caught.message);
           setBusy(null);
           return;
         }
-        // Any other failure of one clip: on to the next.
+        // Any other failure of one clip: on to the next. The reason is kept,
+        // so a server that cannot be reached is named as such at the end.
+        if (caught instanceof AiError) failure = caught.message;
       }
     }
+    if (lookupRef.current === controller) lookupRef.current = null;
     setResult(last);
     setExhausted(true);
-    if (!answered) setError("לא הצלחנו לזהות את השיר כרגע. אפשר לנסות שוב בקטע אחר.");
+    if (!answered) setError(failure ?? "לא הצלחנו לזהות את השיר כרגע. אפשר לנסות שוב בקטע אחר.");
     setBusy(null);
   };
 

@@ -58,7 +58,11 @@ export function loadMarks(): Marks {
 }
 
 export function saveMarks(marks: Marks) {
-  store()?.setItem(MARKS_KEY, JSON.stringify(marks));
+  try {
+    store()?.setItem(MARKS_KEY, JSON.stringify(marks));
+  } catch {
+    // Full or blocked storage: the marks last as long as the page does.
+  }
 }
 
 export function isStarred(marks: Marks, id: string) {
@@ -83,10 +87,16 @@ export function withTags(marks: Marks, id: string, tags: readonly string[]): Mar
   return next;
 }
 
-/** Every tag in use, most used first — the list the filter row shows. */
-export function allTags(marks: Marks): { tag: string; count: number }[] {
+/**
+ * Every tag in use, most used first — the list the filter row shows. With
+ * `ids`, only the marks of those works count: a deleted work keeps its marks
+ * (so a restore brings them back), and its tags used to inflate the counts
+ * and offer a filter that found nothing.
+ */
+export function allTags(marks: Marks, ids?: ReadonlySet<string>): { tag: string; count: number }[] {
   const table = new Map<string, number>();
-  for (const mark of Object.values(marks)) {
+  for (const [id, mark] of Object.entries(marks)) {
+    if (ids && !ids.has(id)) continue;
     for (const tag of mark.tags ?? []) table.set(tag, (table.get(tag) ?? 0) + 1);
   }
   return [...table.entries()]

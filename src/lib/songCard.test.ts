@@ -162,6 +162,13 @@ describe("songCard: direction and text fitting", () => {
     for (const line of fit.lines) expect(measure(line, "800 40px x")).toBeLessThanOrEqual(500);
     expect(ellipsize("קצר", 500, "400 20px x", measure)).toBe("קצר");
   });
+
+  it("shows text whole when it fits at the smallest size even if the steps skipped it", () => {
+    // 61 → 41 in steps of 2 never tries 40, where these 20 letters fit one line (440 ≤ 445).
+    const text = "אבגדהוזחטיכלמנסעפצקר";
+    const fit = fitText(text, { maxWidth: 445, maxLines: 1, maxSize: 61, minSize: 40, weight: 800 }, measure);
+    expect(fit).toEqual({ size: 40, lines: [text], truncated: false });
+  });
 });
 
 describe("songCard: palettes", () => {

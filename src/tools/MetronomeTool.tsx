@@ -42,7 +42,12 @@ function normalizeSaved(parsed: Partial<Saved> | null | undefined, fallback: Sav
     meter: METERS.some((meter) => meter.id === parsed.meter) ? (parsed.meter as string) : fallback.meter,
     subdivision: [1, 2, 3, 4].includes(Number(parsed.subdivision)) ? Number(parsed.subdivision) : fallback.subdivision,
     sound: parsed.sound === "wood" || parsed.sound === "beep" ? parsed.sound : parsed.sound === "click" ? "click" : fallback.sound,
-    volume: Math.max(0, Math.min(1, Number(parsed.volume) || fallback.volume)),
+    // A muted metronome (volume 0) is a real setting, not a missing one, so
+    // only a value that is not a number falls back.
+    volume:
+      typeof parsed.volume === "number" && Number.isFinite(parsed.volume)
+        ? Math.max(0, Math.min(1, parsed.volume))
+        : fallback.volume,
   };
 }
 
@@ -117,6 +122,10 @@ export function MetronomeTool({ initial = null }: Props) {
   const meterRef = useRef(meter);
   const tapsRef = useRef<number[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  // Bumped by every start and stop, so a start still awaiting the audio
+  // context or the wake lock knows it was overtaken (a double click, a stop,
+  // leaving the tool) and does not start a second, orphaned timer.
+  const runIdRef = useRef(0);
   const saving = useSaveWork();
   const resetSave = saving.reset;
 
@@ -196,11 +205,18 @@ export function MetronomeTool({ initial = null }: Props) {
     const context = contextRef.current;
     if (!context) return;
     const lookahead = 0.12;
+    // If the timer fell far behind (a long main-thread stall, a throttled
+    // tab), the missed clicks are skipped rather than fired all at once.
+    if (nextTimeRef.current < context.currentTime - 0.05) {
+      nextTimeRef.current = context.currentTime + 0.02;
+    }
     while (nextTimeRef.current < context.currentTime + lookahead) {
       const { bpm: currentBpm, subdivision: subs } = settingsRef.current;
       const currentMeter = meterRef.current;
-      const beat = beatRef.current;
-      const sub = subRef.current;
+      // A meter or subdivision changed mid-bar can leave the counters past
+      // the new length; fold them back so the next click is still in range.
+      const beat = beatRef.current % currentMeter.beats;
+      const sub = subRef.current % subs;
       const accent = beat === 0 && sub === 0;
       clickAt(nextTimeRef.current, accent, sub !== 0);
       queueRef.current.push({ time: nextTimeRef.current, beat, sub });
@@ -235,6 +251,7 @@ export function MetronomeTool({ initial = null }: Props) {
   }, [running]);
 
   const start = useCallback(async () => {
+    const runId = ++runIdRef.current;
     if (!contextRef.current) {
       const Context =
         window.AudioContext ||
@@ -248,6 +265,8 @@ export function MetronomeTool({ initial = null }: Props) {
     }
     const context = contextRef.current;
     if (context.state === "suspended") await context.resume();
+    if (runId !== runIdRef.current) return;
+    if (timerRef.current !== null) window.clearInterval(timerRef.current);
     beatRef.current = 0;
     subRef.current = 0;
     queueRef.current = [];
@@ -259,13 +278,15 @@ export function MetronomeTool({ initial = null }: Props) {
       const lock = await (navigator as Navigator & {
         wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
       }).wakeLock?.request("screen");
-      if (lock) wakeLockRef.current = lock;
+      if (lock && runId !== runIdRef.current) void lock.release().catch(() => undefined);
+      else if (lock) wakeLockRef.current = lock;
     } catch {
       // Wake lock is a nicety; a denied request changes nothing.
     }
   }, [schedule]);
 
   const stop = useCallback(() => {
+    runIdRef.current += 1;
     if (timerRef.current !== null) window.clearInterval(timerRef.current);
     timerRef.current = null;
     queueRef.current = [];
@@ -277,6 +298,7 @@ export function MetronomeTool({ initial = null }: Props) {
 
   useEffect(
     () => () => {
+      runIdRef.current += 1;
       if (timerRef.current !== null) window.clearInterval(timerRef.current);
       void contextRef.current?.close();
       void wakeLockRef.current?.release().catch(() => undefined);
@@ -312,10 +334,15 @@ export function MetronomeTool({ initial = null }: Props) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Ctrl+T, Cmd+Arrow and the like belong to the browser.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+      if (target?.isContentEditable) return;
       if (event.code === "Space") {
         event.preventDefault();
+        // Holding the bar down would otherwise flicker start/stop.
+        if (event.repeat) return;
         toggle();
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
@@ -323,7 +350,8 @@ export function MetronomeTool({ initial = null }: Props) {
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
         nudge(event.shiftKey ? -10 : -1);
-      } else if (event.key.toLowerCase() === "t") {
+      } else if ((event.code === "KeyT" || event.key?.toLowerCase() === "t") && !event.repeat) {
+        // By physical key, so the shortcut also works with the Hebrew layout on.
         tap();
       }
     };

@@ -13,6 +13,7 @@ import {
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
+import type { AnalyzeRequest, AnalyzeResponse } from "../workers/analyze.worker";
 
 const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 const HEBREW_NAMES = ["דו", "דו♯", "רה", "רה♯", "מי", "פה", "פה♯", "סול", "סול♯", "לה", "לה♯", "סי"];
@@ -57,7 +58,12 @@ function readInitial(work: SavedWork | null | undefined): Restored | null {
     !tempo ||
     !key ||
     typeof tempo.bpm !== "number" ||
+    !Number.isFinite(tempo.bpm) ||
     typeof key.tonicPitchClass !== "number" ||
+    // An index into the note names: anything else renders "undefined מז׳ור".
+    !Number.isInteger(key.tonicPitchClass) ||
+    key.tonicPitchClass < 0 ||
+    key.tonicPitchClass > 11 ||
     !Array.isArray(key.chroma) ||
     key.chroma.length !== 12
   ) {
@@ -90,6 +96,36 @@ function keyLabel(key: AudioKey) {
   return `${NOTE_NAMES[key.tonicPitchClass]} ${key.mode === "major" ? "מז׳ור" : "מינור"}`;
 }
 
+/**
+ * Whether any pitch was heard at all. A silent file comes back as "C major"
+ * with an all-zero profile, which the page used to present — Camelot code,
+ * relative key and all — as the song's key.
+ */
+function hasKey(key: AudioKey) {
+  return key.chroma.some((value) => value > 0);
+}
+
+/** A mono copy of the song, to hand to the worker without giving up the page's own buffer. */
+function monoCopy(buffer: AudioBuffer) {
+  if (buffer.numberOfChannels === 1) return buffer.getChannelData(0).slice();
+  const mono = new Float32Array(buffer.length);
+  const scale = 1 / buffer.numberOfChannels;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let index = 0; index < mono.length; index += 1) mono[index] += data[index] * scale;
+  }
+  return mono;
+}
+
+/** The same readers on this thread, for a browser that cannot start the worker. */
+function analyseHere(buffer: AudioBuffer) {
+  return {
+    tempo: detectTempoFromAudio(buffer),
+    key: detectKeyFromAudio(buffer),
+    loudness: averageLoudness(buffer),
+  };
+}
+
 function relativeKey(key: AudioKey): AudioKey {
   return key.mode === "major"
     ? { ...key, tonicPitchClass: (key.tonicPitchClass + 9) % 12, mode: "minor" }
@@ -110,7 +146,9 @@ function confidenceLabel(value: number) {
 
 export function AnalyzeTool({ initial = null }: Props) {
   const { audio, error, setError, isLoading, load, clear } = useAudioFile();
-  const [result, setResult] = useState<{ key: string; analysis: Analysis } | null>(null);
+  // `analysis` is null when the reading failed, so the page can say so rather
+  // than showing "listening…" forever.
+  const [result, setResult] = useState<{ key: string; analysis: Analysis | null } | null>(null);
   const [restored] = useState(() => readInitial(initial));
   const saving = useSaveWork();
   const resetSave = saving.reset;
@@ -119,37 +157,68 @@ export function AnalyzeTool({ initial = null }: Props) {
   useEffect(() => {
     if (!audio) return;
     let cancelled = false;
-    // The transform is synchronous and slow; the gap lets the pending state
-    // paint before it takes the thread.
-    const timer = window.setTimeout(() => {
-      const startedAt = performance.now();
-      const tempo = detectTempoFromAudio(audio.buffer);
-      const key = detectKeyFromAudio(audio.buffer);
-      const loudness = averageLoudness(audio.buffer);
+    let worker: Worker | null = null;
+    const url = audio.url;
+    const startedAt = performance.now();
+    const finish = (reading: Omit<Analysis, "ms"> | null) => {
       if (cancelled) return;
-      setResult({
-        key: audio.url,
-        analysis: { tempo, key, loudness, ms: performance.now() - startedAt },
-      });
+      setResult({ key: url, analysis: reading ? { ...reading, ms: performance.now() - startedAt } : null });
+    };
+    // The gap lets the pending state paint before the downmix takes the thread.
+    const timer = window.setTimeout(() => {
+      try {
+        worker = new Worker(new URL("../workers/analyze.worker.ts", import.meta.url), { type: "module" });
+      } catch {
+        worker = null;
+      }
+      if (!worker) {
+        try {
+          finish(analyseHere(audio.buffer));
+        } catch {
+          finish(null);
+        }
+        return;
+      }
+      const running = worker;
+      running.onmessage = (event: MessageEvent<AnalyzeResponse>) => {
+        running.terminate();
+        const reply = event.data;
+        finish(reply.type === "done" ? { tempo: reply.tempo, key: reply.key, loudness: reply.loudness } : null);
+      };
+      running.onerror = (event) => {
+        event.preventDefault();
+        running.terminate();
+        finish(null);
+      };
+      const mono = monoCopy(audio.buffer);
+      const request: AnalyzeRequest = { mono, sampleRate: audio.buffer.sampleRate };
+      running.postMessage(request, [mono.buffer]);
     }, 60);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      // A song replaced or a page left mid-analysis: the old reading is not
+      // wanted, and a worker left running would keep a core busy for nothing.
+      (worker as Worker | null)?.terminate();
     };
   }, [audio]);
 
   useEffect(() => resetSave(), [analysisKey, resetSave]);
 
-  const fresh = result && result.key === analysisKey ? result.analysis : null;
-  const busy = Boolean(audio) && !fresh;
+  const settled = result !== null && result.key === analysisKey;
+  const fresh = settled ? result.analysis : null;
+  const failed = Boolean(audio) && settled && !fresh;
+  const busy = Boolean(audio) && !settled;
   // Until a song is picked, a restored analysis stands in for a fresh one.
   const showingSaved = !audio && restored !== null;
   const analysis = fresh ?? (showingSaved ? restored.analysis : null);
   const shownDuration = audio ? audio.buffer.duration : (restored?.duration ?? 0);
   const shownChannels = audio ? audio.buffer.numberOfChannels : (restored?.channels ?? 2);
-  const shownRate = audio ? audio.buffer.sampleRate : (restored?.sampleRate ?? 44100);
 
-  const relative = analysis ? relativeKey(analysis.key) : null;
+  const keyHeard = analysis ? hasKey(analysis.key) : false;
+  const relative = analysis && keyHeard ? relativeKey(analysis.key) : null;
+  const shownKey = analysis && keyHeard ? keyLabel(analysis.key) : "—";
+  const shownCamelot = analysis && keyHeard ? camelot(analysis.key) : "—";
   const chromaMax = analysis ? Math.max(...analysis.key.chroma, 0.0001) : 1;
 
   const saveAnalysis = () => {
@@ -160,8 +229,8 @@ export function AnalyzeTool({ initial = null }: Props) {
       sourceName: audio.file.name,
       summary: {
         bpm: fresh.tempo.bpm,
-        keyName: keyLabel(fresh.key),
-        camelot: camelot(fresh.key),
+        keyName: hasKey(fresh.key) ? keyLabel(fresh.key) : "—",
+        camelot: hasKey(fresh.key) ? camelot(fresh.key) : "—",
         loudness: fresh.loudness,
         duration: audio.buffer.duration,
       },
@@ -182,24 +251,26 @@ export function AnalyzeTool({ initial = null }: Props) {
         busy
           ? "מנתח עכשיו"
           : analysis
-            ? `${Math.round(analysis.tempo.bpm)} BPM (${confidenceLabel(analysis.tempo.confidence)}), ${keyLabel(analysis.key)} (${confidenceLabel(analysis.key.confidence)})${relative ? `, סולם יחסי ${keyLabel(relative)}` : ""}, Camelot ${camelot(analysis.key)}, עוצמה ממוצעת ${Math.round(analysis.loudness * 100)}%, משך ${formatTime(shownDuration)}`
-            : "אין ניתוח"
+            ? `${analysis.tempo.bpm ? `${Math.round(analysis.tempo.bpm)} BPM (${confidenceLabel(analysis.tempo.confidence)})` : "קצב לא זוהה"}, ${keyHeard ? `${shownKey} (${confidenceLabel(analysis.key.confidence)})` : "סולם לא זוהה (אין צלילים בקובץ)"}${relative ? `, סולם יחסי ${keyLabel(relative)}` : ""}${keyHeard ? `, Camelot ${shownCamelot}` : ""}, עוצמה ממוצעת ${Math.round(analysis.loudness * 100)}%, משך ${formatTime(shownDuration)}`
+            : failed
+              ? "הניתוח נכשל"
+              : "אין ניתוח"
       }.`,
     handlers: {
       "analyze.read": () => {
-        if (!analysis) return { ok: false, message: "אין ניתוח; הגולש צריך לבחור שיר" };
+        if (!analysis) return { ok: false, message: failed ? "הניתוח נכשל; אפשר לבחור את השיר שוב" : "אין ניתוח; הגולש צריך לבחור שיר" };
         return {
           ok: true,
-          message: `${Math.round(analysis.tempo.bpm)} BPM, ${keyLabel(analysis.key)}`,
+          message: `${Math.round(analysis.tempo.bpm)} BPM, ${shownKey}`,
           data: {
             bpm: Math.round(analysis.tempo.bpm),
             bpmAlternatives: analysis.tempo.bpm > 0 ? [Math.round(analysis.tempo.bpm / 2), Math.round(analysis.tempo.bpm * 2)] : [],
             tempoConfidence: Number(analysis.tempo.confidence.toFixed(2)),
-            key: keyLabel(analysis.key),
-            keyHebrew: HEBREW_NAMES[analysis.key.tonicPitchClass],
+            key: keyHeard ? shownKey : null,
+            keyHebrew: keyHeard ? HEBREW_NAMES[analysis.key.tonicPitchClass] : null,
             keyConfidence: Number(analysis.key.confidence.toFixed(2)),
             relativeKey: relative ? keyLabel(relative) : null,
-            camelot: camelot(analysis.key),
+            camelot: keyHeard ? shownCamelot : null,
             loudness: Math.round(analysis.loudness * 100),
             duration: Number(shownDuration.toFixed(1)),
             chroma: analysis.key.chroma.map((value, index) => ({ note: NOTE_NAMES[index], weight: Number(value.toFixed(3)) })),
@@ -249,6 +320,12 @@ export function AnalyzeTool({ initial = null }: Props) {
           </div>
         )}
 
+        {failed && (
+          <div className="error-message" role="alert">
+            לא הצלחנו לנתח את השיר. אפשר לבחור אותו שוב, או קובץ אחר.
+          </div>
+        )}
+
         {audio && busy && (
           <div className="processing-box">
             <div className="processing-top">
@@ -275,14 +352,16 @@ export function AnalyzeTool({ initial = null }: Props) {
                 )}
               </div>
               <div className="stat-card is-hero">
-                <strong>{keyLabel(analysis.key)}</strong>
+                <strong>{shownKey}</strong>
                 <span>
-                  {HEBREW_NAMES[analysis.key.tonicPitchClass]} · {confidenceLabel(analysis.key.confidence)}
+                  {keyHeard
+                    ? `${HEBREW_NAMES[analysis.key.tonicPitchClass]} · ${confidenceLabel(analysis.key.confidence)}`
+                    : "לא נשמעו צלילים"}
                 </span>
                 {relative && <small>סולם יחסי: {keyLabel(relative)}</small>}
               </div>
               <div className="stat-card">
-                <strong>{camelot(analysis.key)}</strong>
+                <strong>{shownCamelot}</strong>
                 <span>
                   <Disc3 size={13} /> קוד Camelot
                 </span>
@@ -299,6 +378,7 @@ export function AnalyzeTool({ initial = null }: Props) {
               </div>
             </div>
 
+            {keyHeard && (
             <div className="chroma-card">
               <div className="settings-title">
                 <Music4 size={18} /> פרופיל הצלילים
@@ -323,6 +403,7 @@ export function AnalyzeTool({ initial = null }: Props) {
                 })}
               </div>
             </div>
+            )}
 
             {audio && fresh && (
               <SaveButton
@@ -335,8 +416,9 @@ export function AnalyzeTool({ initial = null }: Props) {
 
             <p className="engine-note">
               {fresh ? `הניתוח הסתיים ב־${(analysis.ms / 1000).toFixed(1)} שנ׳ · ` : ""}
-              {shownChannels === 1 ? "מונו" : "סטריאו"} ·{" "}
-              {Math.round(shownRate / 100) / 10} kHz. לתווים מלאים של המנגינה, פתח את „שיר לתווים”.
+              {/* No sample rate here: the decoded buffer is at the device's
+                  rate, not the file's, so a 48 kHz file read as "44.1 kHz". */}
+              {shownChannels === 1 ? "מונו" : "סטריאו"}. לתווים מלאים של המנגינה, פתח את „שיר לתווים”.
             </p>
           </>
         )}

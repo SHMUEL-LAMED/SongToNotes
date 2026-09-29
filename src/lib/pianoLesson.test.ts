@@ -75,6 +75,19 @@ describe("fitKeyboard", () => {
     // Most notes keep their own octave.
     expect(fitted.notes.filter((note, index) => note.midi === at([30, 60, 62, 64, 65, 67, 69, 71, 72, 100])[index].midi)).toHaveLength(8);
   });
+
+  it("keeps every note on a key that is shown, even at the ends of the MIDI range", () => {
+    for (const midis of [[5, 9, 14], [2, 30], [110, 118, 124], [100, 127]]) {
+      const fitted = fitKeyboard(at(midis));
+      const lowest = (fitted.octave + 1) * 12;
+      const top = lowest + fitted.octaves * 12;
+      expect(top).toBeLessThanOrEqual(127);
+      for (const note of fitted.notes) {
+        expect(note.midi).toBeGreaterThanOrEqual(lowest);
+        expect(note.midi).toBeLessThanOrEqual(top);
+      }
+    }
+  });
 });
 
 describe("handing the lesson to the piano", () => {

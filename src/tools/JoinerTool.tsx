@@ -5,8 +5,9 @@ import { Transport } from "../components/Transport";
 import { buildPeaks, decodeAudioFile, formatTime, getOfflineAudioContextClass } from "../lib/audio";
 import { BITRATES, encodeMp3 } from "../lib/convert";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo, hasHandoff, takeHandoffFiles } from "../lib/handoff";
-import { MAX_TRANSITION_SECONDS, clampTransitionSeconds, clampTrim, joinPcm, layoutTimeline, moveItem, mp3SampleRate, outputFormat, type PcmClip, type Transition, type TransitionKind } from "../lib/joiner";
+import { MAX_TRANSITION_SECONDS, clampTransitionSeconds, clampTrim, joinPcmSteps, layoutTimeline, moveItem, mp3SampleRate, outputFormat, type PcmClip, type Transition, type TransitionKind } from "../lib/joiner";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
 import "./joiner.css";
@@ -62,6 +63,26 @@ function toAudioBuffer(channels: Float32Array[], sampleRate: number): AudioBuffe
   }
   channels.forEach((channel, index) => buffer.copyToChannel(channel as Float32Array<ArrayBuffer>, index));
   return buffer;
+}
+
+/**
+ * A pause that lets the page paint and handle input. A message on a channel
+ * comes back sooner than setTimeout(0), which browsers stretch to 4 ms once
+ * timeouts nest.
+ */
+function yieldToPage() {
+  return new Promise<void>((resolve) => {
+    if (typeof MessageChannel === "undefined") {
+      window.setTimeout(resolve, 0);
+      return;
+    }
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
 }
 
 const WAVE_WIDTH = 1000;
@@ -325,7 +346,7 @@ export function JoinerTool() {
   const [error, setError] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
   const [busy, setBusy] = useState<{ message: string; fraction: number } | null>(null);
-  const [result, setResult] = useState<{ file: File; url: string; clips: Clip[]; transition: Transition } | null>(null);
+  const [result, setResult] = useState<{ file: File; url: string; clips: Clip[]; transition: Transition; kbps: number } | null>(null);
   const [preview, setPreview] = useState<AudioBuffer | null>(null);
   const [clipPlayback, setClipPlayback] = useState<{ id: string; from: number; startedAt: number } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -405,8 +426,13 @@ export function JoinerTool() {
     return converted;
   };
 
-  /** The whole join, at the output rate unless another is asked for (MP3 caps it at 48 kHz). */
-  const buildJoin = async (list: Clip[], how: Transition, rate?: number) => {
+  /**
+   * The whole join, at the output rate unless another is asked for (MP3 caps
+   * it at 48 kHz). The sample work runs in slices with a pause between them,
+   * so a few long files do not freeze the page on every edit; null when
+   * `cancelled` says a newer edit has made this one moot.
+   */
+  const buildJoin = async (list: Clip[], how: Transition, rate?: number, cancelled: () => boolean = () => false, onProgress?: (fraction: number) => void) => {
     const shape = outputFormat(list.map((clip) => clip.buffer));
     const sampleRate = rate ?? shape.sampleRate;
     const pcm: PcmClip[] = [];
@@ -417,8 +443,16 @@ export function JoinerTool() {
         end: Math.round(clip.end * sampleRate),
         gain: clip.gain,
       });
+      if (cancelled()) return null;
     }
-    return { channels: joinPcm(pcm, how, sampleRate, shape.channels), sampleRate };
+    const steps = joinPcmSteps(pcm, how, sampleRate, shape.channels);
+    for (;;) {
+      const step = steps.next();
+      if (step.done) return { channels: step.value, sampleRate };
+      onProgress?.(step.value);
+      await yieldToPage();
+      if (cancelled()) return null;
+    }
   };
 
   // The preview follows every change, a beat later, so dragging a handle
@@ -430,9 +464,9 @@ export function JoinerTool() {
         setPreview(null);
         return;
       }
-      void buildJoin(clips, transition)
-        .then(({ channels, sampleRate }) => {
-          if (!cancelled) setPreview(toAudioBuffer(channels, sampleRate));
+      void buildJoin(clips, transition, undefined, () => cancelled)
+        .then((joined) => {
+          if (joined && !cancelled) setPreview(toAudioBuffer(joined.channels, joined.sampleRate));
         })
         .catch((caught) => {
           if (!cancelled) setError(caught instanceof Error ? caught.message : "לא הצלחנו לבנות את התצוגה המקדימה.");
@@ -482,6 +516,9 @@ export function JoinerTool() {
         // Cards appear one by one, so a long batch visibly makes progress.
         // A hand-off goes to the front, in its own order.
         setClips((current) => {
+          // A second batch dropped while this one is still opening counted
+          // its room from a list that had not grown yet; the cap holds here.
+          if (current.length >= MAX_CLIPS) return current;
           const withHue = { ...clip, hue: HUES[current.length % HUES.length] };
           return atStart ? [...current.slice(0, position), withHue, ...current.slice(position)] : [...current, withHue];
         });
@@ -598,10 +635,18 @@ export function JoinerTool() {
 
   const baseName = () => `${safeFilename(clips.map((clip) => clip.name).join("+").slice(0, 60)) || "joined"}-joined`;
 
+  // The joined file, not the first clip, is what goes on to the next tool.
+  useOfferResult(clips.length > 1 ? preview : null, `${baseName()}.wav`, () => {
+    const joined = preview!;
+    const channels = Array.from({ length: joined.numberOfChannels }, (_, index) => joined.getChannelData(index));
+    return new File([encodeWav({ channels, sampleRate: joined.sampleRate })], `${baseName()}.wav`, { type: "audio/wav" });
+  });
+
   /** Renders the join as a file; downloads it unless told otherwise. */
   const exportJoin = async (as: Format, download = true): Promise<File | null> => {
     if (!clips.length || busyRef.current) return null;
-    if (fresh && fresh.file.name.endsWith(`.${as}`)) {
+    // An MP3 made at another quality is not what was asked for now.
+    if (fresh && fresh.file.name.endsWith(`.${as}`) && (as === "wav" || fresh.kbps === kbps)) {
       if (download) downloadFile(fresh.file, fresh.file.name, fresh.file.type);
       return fresh.file;
     }
@@ -615,7 +660,11 @@ export function JoinerTool() {
       // MP3 carries at most 48 kHz; a 96 kHz join is rendered straight at
       // 48 kHz for it instead of being resampled twice.
       const rate = as === "mp3" ? mp3SampleRate(shape.sampleRate) : shape.sampleRate;
-      const { channels, sampleRate } = await buildJoin(list, how, rate);
+      const joined = await buildJoin(list, how, rate, undefined, (fraction) =>
+        setBusy({ message: "מחבר את הקבצים…", fraction: 0.05 + fraction * (as === "wav" ? 0.6 : 0.15) }),
+      );
+      if (!joined) return null;
+      const { channels, sampleRate } = joined;
       let file: File;
       if (as === "wav") {
         setBusy({ message: "כותב WAV…", fraction: 0.7 });
@@ -625,7 +674,7 @@ export function JoinerTool() {
         const bytes = await encodeMp3(channels, sampleRate, kbps, (fraction) => setBusy({ message: "מקודד MP3…", fraction: 0.2 + fraction * 0.78 }));
         file = new File([bytes], `${baseName()}.mp3`, { type: "audio/mpeg" });
       }
-      setResult({ file, url: URL.createObjectURL(file), clips: list, transition: how });
+      setResult({ file, url: URL.createObjectURL(file), clips: list, transition: how, kbps });
       if (download) downloadFile(file, file.name, file.type);
       return file;
     } catch (caught) {
@@ -899,7 +948,7 @@ export function JoinerTool() {
                 </span>
                 <div>
                   <h3>{fresh ? fresh.file.name : "להמשיך בכלי אחר"}</h3>
-                  <p>{fresh ? `${formatBytes(fresh.file.size)} · ${fresh.file.name.endsWith(".mp3") ? `MP3 ${kbps} kbps` : "WAV"}` : "הקובץ המחובר נשלח ישר לכלי הבא, בלי להוריד ולהעלות מחדש."}</p>
+                  <p>{fresh ? `${formatBytes(fresh.file.size)} · ${fresh.file.name.endsWith(".mp3") ? `MP3 ${fresh.kbps} kbps` : "WAV"}` : "הקובץ המחובר נשלח ישר לכלי הבא, בלי להוריד ולהעלות מחדש."}</p>
                 </div>
               </div>
               <div className="download-buttons">

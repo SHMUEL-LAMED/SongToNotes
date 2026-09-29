@@ -21,7 +21,7 @@ import {
   Volume2,
   Wand2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { PianoRoll } from "../components/PianoRoll";
 import { SheetMusic, printSheet, sheetToSvg } from "../components/SheetMusic";
@@ -36,7 +36,7 @@ import {
 import { scoreToAbc } from "../lib/abc";
 import { useAuth } from "../lib/auth";
 import { downloadFile, notesToCsv, notesToMidi, safeFilename } from "../lib/export";
-import { detectKey, keyName, scientificName } from "../lib/key";
+import { detectKey, keyName, scientificName, transposeKey } from "../lib/key";
 import { saveTranscription } from "../lib/history";
 import { saveWork } from "../lib/works";
 import { scoreToMusicXml } from "../lib/musicxml";
@@ -49,7 +49,7 @@ import { buildScore } from "../lib/score";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
 import { moveTabFocus } from "../lib/tablist";
 import { alignOffset, estimateTempo } from "../lib/tempo";
-import type { DetectedNote } from "../lib/types";
+import type { DetectedNote, KeySignature } from "../lib/types";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useTranscriber } from "../lib/useTranscriber";
 import {
@@ -69,6 +69,95 @@ type Props = {
    */
   initial: PendingTranscription | null;
 };
+
+/**
+ * The playback position, kept outside React state. It changes on every
+ * animation frame while the result plays; as state of the tool itself it
+ * re-rendered the whole page (settings, the 800-row note table, the waveform)
+ * sixty times a second, which dropped a three-minute song's playback to a
+ * handful of frames per second. Only the few pieces that show the position
+ * subscribe to it.
+ */
+type PlayheadClock = {
+  get: () => number;
+  set: (time: number) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+
+function createPlayheadClock(): PlayheadClock {
+  let time = 0;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => time,
+    set: (next) => {
+      if (next === time) return;
+      time = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+function usePlayhead(clock: PlayheadClock) {
+  return useSyncExternalStore(clock.subscribe, clock.get, clock.get);
+}
+
+function PlayheadSeek({
+  clock,
+  duration,
+  onSeek,
+}: {
+  clock: PlayheadClock;
+  duration: number;
+  onSeek: (time: number) => void;
+}) {
+  const playhead = usePlayhead(clock);
+  return (
+    <>
+      <input
+        className="transport-seek"
+        type="range"
+        min={0}
+        max={Math.max(0.1, duration)}
+        step={0.01}
+        value={Math.min(playhead, duration)}
+        onChange={(event) => onSeek(Number(event.target.value))}
+        aria-label="מיקום הנגינה"
+      />
+      <span className="transport-time" dir="ltr">
+        {formatTime(playhead)} / {formatTime(duration)}
+      </span>
+    </>
+  );
+}
+
+function LivePianoRoll(
+  props: Omit<React.ComponentProps<typeof PianoRoll>, "playhead"> & { clock: PlayheadClock },
+) {
+  const { clock, ...rest } = props;
+  const playhead = usePlayhead(clock);
+  return <PianoRoll {...rest} playhead={playhead} />;
+}
+
+/**
+ * Whether a key press belongs to the element it landed on rather than to the
+ * page-wide playback shortcuts: Space activates a focused button or link, and
+ * the arrow keys move between tabs, radio buttons and slider values.
+ */
+function ownsKey(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return Boolean(
+    target.closest(
+      'input, select, textarea, button, a[href], summary, [role="tab"], [role="button"], [role="slider"], [role="menuitem"], [role="option"], [role="radio"], [contenteditable="true"]',
+    ),
+  );
+}
 
 /** "3.4 שניות" / "2:05 דקות" — the run time, in words a person reads. */
 function formatDuration(milliseconds: number) {
@@ -98,7 +187,7 @@ export function TranscriberTool({ initial }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("sheet");
   const [zoom, setZoom] = useState(70);
-  const [playhead, setPlayhead] = useState(0);
+  const [clock] = useState(createPlayheadClock);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const [instrument, setInstrument] = useState<Instrument>("piano");
@@ -120,10 +209,25 @@ export function TranscriberTool({ initial }: Props) {
 
   const resultsRef = useRef<HTMLElement>(null);
   const sheetSvgRef = useRef<SVGSVGElement | null>(null);
+  // The staff only exists while its tab is open. Printing or saving it from
+  // another tab used to do nothing at all (print) or ask the visitor to go and
+  // open the tab (image); now the tab opens and the action runs once drawn.
+  const pendingSheetRef = useRef<"print" | "svg" | null>(null);
   const playerRef = useRef<NotePlayer | null>(null);
 
   const transcriber = useTranscriber();
   const cancelTranscription = transcriber.cancel;
+
+  // Leaving the page while the audio is still being prepared must abandon the
+  // run: otherwise it went on to start a worker after the transcriber's own
+  // cleanup had already run, and that worker analysed the whole song in the
+  // background and was never terminated.
+  useEffect(() => {
+    const tokens = runTokenRef;
+    return () => {
+      tokens.current += 1;
+    };
+  }, []);
 
   useEffect(() => saveSettings(settings), [settings]);
 
@@ -176,7 +280,13 @@ export function TranscriberTool({ initial }: Props) {
     [refined, settings.quantize, settings.stepsPerBeat, settings.swing, tempo.bpm, tempo.offset],
   );
 
-  const keySignature = useMemo(() => detectKey(notes), [notes]);
+  // The key is read from the notes as detected, then moved with them: a song
+  // transposed from C to D is written in D, not in C with a sharp on every F
+  // and C.
+  const keySignature: KeySignature = useMemo(
+    () => transposeKey(detectKey(notes), settings.transpose),
+    [notes, settings.transpose],
+  );
   const title = audio
     ? audio.file.name.replace(/\.[^/.]+$/, "")
     : historyTitle ?? "SongToNotes";
@@ -227,12 +337,12 @@ export function TranscriberTool({ initial }: Props) {
     player.setHandlers({
       onEnd: () => {
         setIsPlaying(false);
-        setPlayhead(0);
+        clock.set(0);
       },
     });
     playerRef.current = player;
     return () => player.dispose();
-  }, []);
+  }, [clock]);
 
   useEffect(() => {
     playerRef.current?.load(notes, settings.transpose);
@@ -277,12 +387,12 @@ export function TranscriberTool({ initial }: Props) {
     let frame = 0;
     const tick = () => {
       const player = playerRef.current;
-      if (player) setPlayhead(player.currentTime);
+      if (player) clock.set(player.currentTime);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [isPlaying]);
+  }, [clock, isPlaying]);
 
   const togglePlayback = useCallback(async () => {
     const player = playerRef.current;
@@ -291,29 +401,42 @@ export function TranscriberTool({ initial }: Props) {
       player.pause();
       setIsPlaying(false);
     } else {
-      await player.play();
-      setIsPlaying(true);
+      try {
+        await player.play();
+      } catch {
+        // A browser that refuses to start audio leaves nothing playing; the
+        // button must not claim otherwise.
+      }
+      // Read back rather than assumed: a pause or stop that landed while the
+      // audio context was still resuming has already won.
+      setIsPlaying(player.isPlaying);
     }
   }, [notes.length]);
 
   const stopPlayback = useCallback(() => {
     playerRef.current?.stop(true);
     setIsPlaying(false);
-    setPlayhead(0);
-  }, []);
+    clock.set(0);
+  }, [clock]);
 
-  const seek = useCallback((time: number) => {
-    playerRef.current?.seek(time);
-    setPlayhead(time);
-  }, []);
+  const seek = useCallback(
+    (time: number) => {
+      playerRef.current?.seek(time);
+      clock.set(time);
+    },
+    [clock],
+  );
 
   const hasResults = notes.length > 0;
 
   useEffect(() => {
     if (!hasResults) return;
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      // A focused button, tab or link keeps its own keys: Space on "שיר חדש"
+      // used to toggle playback instead of pressing the button, and the arrow
+      // keys moved between the result tabs and seeked at the same time.
+      if (ownsKey(event.target)) return;
       if (event.code === "Space") {
         event.preventDefault();
         void togglePlayback();
@@ -335,6 +458,11 @@ export function TranscriberTool({ initial }: Props) {
     (candidate?: File | null) => {
       if (!candidate) return;
       runTokenRef.current += 1;
+      // A run still going for the previous file would keep the progress panel
+      // up (and the start button hidden) until it finished, only for its
+      // result to be dropped; and the old notes would keep sounding.
+      cancelTranscription();
+      stopPlayback();
       setError(null);
       setNotice(null);
       setRawNotes([]);
@@ -344,7 +472,7 @@ export function TranscriberTool({ initial }: Props) {
       setHistoryTitle(null);
       void audioFile.load(candidate);
     },
-    [audioFile],
+    [audioFile, cancelTranscription, stopPlayback],
   );
 
   const loadDemo = useCallback(async () => {
@@ -362,11 +490,15 @@ export function TranscriberTool({ initial }: Props) {
 
   // ---- analysis ----
 
+  // Which melody/chords choice and engine produced the notes on screen.
+  const analysedWithRef = useRef<string | null>(null);
+
   const startTranscription = useCallback(async () => {
     if (!audio || transcriber.isRunning || startingRef.current) return;
     startingRef.current = true;
     setIsStarting(true);
     const token = runTokenRef.current;
+    const runSignature = `${settings.mode}-${settings.engine}`;
     setError(null);
     setNotice(null);
     setElapsed(0);
@@ -387,12 +519,16 @@ export function TranscriberTool({ initial }: Props) {
         return;
       }
       setRawNotes(detected);
+      // Recorded by the run itself: a setting flipped while it was running
+      // must still count as not yet analysed, so the effect below re-runs.
+      analysedWithRef.current = runSignature;
       // The result is kept either way: in the profile's own table with an
       // account, and on this device without one — where it waits in the
       // personal area and is uploaded on the first sign-in.
       const refined = refineNotes(detected, refineOptions);
       const savedTempo = estimateTempo(refined);
-      const savedKey = detectKey(refined);
+      // The key as the page shows it: moved with the transposition.
+      const savedKey = transposeKey(detectKey(refined), settings.transpose);
       const keep = user
         ? saveTranscription({
             user_id: user.id,
@@ -445,11 +581,15 @@ export function TranscriberTool({ initial }: Props) {
   // filters over one result, and so is the choice of engine. Now that a pass
   // costs seconds rather than minutes, flipping either simply re-runs it, and
   // the promise that every control updates the page still holds.
-  const analysedWithRef = useRef<string | null>(null);
   useEffect(() => {
     const signature = `${settings.mode}-${settings.engine}`;
+    // Mid-run, nothing is decided: the finished run records what it used,
+    // and this effect runs again once it is done. Deciding here used to mark
+    // a setting flipped mid-run as analysed, leaving "כל התווים" selected over
+    // a melody-only result (or the reverse) until the next change.
+    if (transcriber.isRunning || isStarting) return;
     if (!rawNotes.length) {
-      if (!transcriber.isRunning && !isStarting) analysedWithRef.current = null;
+      analysedWithRef.current = null;
       return;
     }
     if (analysedWithRef.current === null) {
@@ -529,13 +669,26 @@ export function TranscriberTool({ initial }: Props) {
         "text/csv;charset=utf-8",
       );
     } else {
-      const svg = sheetToSvg(sheetSvgRef.current);
-      if (!svg) {
-        setError("התווים עדיין לא הוצגו. פתח את לשונית התווים ונסה שוב.");
-        return;
-      }
-      downloadFile(svg, `${base}.svg`, "image/svg+xml;charset=utf-8");
+      withSheet("svg");
     }
+  }
+
+  function runSheetAction(action: "print" | "svg", staff: SVGSVGElement) {
+    if (action === "print") {
+      printSheet(staff, title);
+      return;
+    }
+    const svg = sheetToSvg(staff);
+    if (svg) downloadFile(svg, `${safeFilename(title)}.svg`, "image/svg+xml;charset=utf-8");
+  }
+
+  function withSheet(action: "print" | "svg") {
+    if (sheetSvgRef.current) {
+      runSheetAction(action, sheetSvgRef.current);
+      return;
+    }
+    pendingSheetRef.current = action;
+    setActiveTab("sheet");
   }
 
   const copyTab = async () => {
@@ -713,16 +866,19 @@ export function TranscriberTool({ initial }: Props) {
       },
       "notes.tab": ({ tab }) => {
         if (!hasResults) return { ok: false, message: "אין תוצאה להציג" };
-        setActiveTab(tab as Tab);
+        // An unknown name would select no tab and leave the result area blank.
+        if (tab !== "sheet" && tab !== "piano" && tab !== "notes" && tab !== "tab") {
+          return { ok: false, message: "tab הוא sheet, piano, notes או tab" };
+        }
+        setActiveTab(tab);
         return { ok: true, message: tab === "sheet" ? "מוצגים התווים" : tab === "piano" ? "מוצג ה־Piano Roll" : tab === "tab" ? "מוצגים הטאבים לגיטרה" : "מוצגת רשימת התווים" };
       },
       "notes.download": ({ format }) => {
         if (!hasResults) return { ok: false, message: "אין תוצאה להורדה" };
         if (format === "print") {
-          printSheet(sheetSvgRef.current, title);
+          withSheet("print");
           return { ok: true, message: "חלון ההדפסה נפתח" };
         }
-        if (format === "svg" && !sheetSvgRef.current) return { ok: false, message: "לתמונת התווים צריך שלשונית התווים תהיה פתוחה (notes.tab sheet) ואז לנסות שוב" };
         download(format as "midi" | "musicxml" | "abc" | "csv" | "svg" | "tab");
         return { ok: true, message: `קובץ ${String(format).toUpperCase()} ירד` };
       },
@@ -995,19 +1151,7 @@ export function TranscriberTool({ initial }: Props) {
               <button className="transport-button" onClick={stopPlayback} type="button" aria-label="עצור">
                 <Square size={16} />
               </button>
-              <input
-                className="transport-seek"
-                type="range"
-                min={0}
-                max={Math.max(0.1, duration)}
-                step={0.01}
-                value={Math.min(playhead, duration)}
-                onChange={(event) => seek(Number(event.target.value))}
-                aria-label="מיקום הנגינה"
-              />
-              <span className="transport-time">
-                {formatTime(playhead)} / {formatTime(duration)}
-              </span>
+              <PlayheadSeek clock={clock} duration={duration} onSeek={seek} />
             </div>
 
             <div className="playback-options">
@@ -1312,7 +1456,7 @@ export function TranscriberTool({ initial }: Props) {
                   <button
                     className="icon-button"
                     type="button"
-                    onClick={() => printSheet(sheetSvgRef.current, title)}
+                    onClick={() => withSheet("print")}
                     aria-label="הדפס את התווים"
                     title="הדפסה / שמירה כ־PDF"
                   >
@@ -1347,19 +1491,24 @@ export function TranscriberTool({ initial }: Props) {
                   abc={abc}
                   onRendered={(svg) => {
                     sheetSvgRef.current = svg;
+                    const pending = pendingSheetRef.current;
+                    if (svg && pending) {
+                      pendingSheetRef.current = null;
+                      runSheetAction(pending, svg);
+                    }
                   }}
                 />
               </div>
             )}
             {activeTab === "piano" && (
               <div id="panel-piano" role="tabpanel" aria-labelledby="tab-piano">
-                <PianoRoll
+                <LivePianoRoll
+                  clock={clock}
                   notes={notes}
                   tempo={tempo}
                   meter={{ beats: settings.beatsPerMeasure, beatType: 4 }}
                   keySignature={keySignature}
                   transpose={settings.transpose}
-                  playhead={playhead}
                   zoom={zoom}
                   onSeek={seek}
                 />
@@ -1446,7 +1595,7 @@ export function TranscriberTool({ initial }: Props) {
                   תמונת תווים<small>SVG להדפסה ולשיתוף</small>
                 </span>
               </button>
-              <button onClick={() => printSheet(sheetSvgRef.current, title)} type="button">
+              <button onClick={() => withSheet("print")} type="button">
                 <Printer size={17} />
                 <span>
                   הדפסה / PDF<small>דף תווים להדפסה</small>

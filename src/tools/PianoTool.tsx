@@ -16,6 +16,17 @@ import { useSaveWork } from "../lib/useSaveWork";
 type Timbre = "piano" | "organ" | "synth";
 
 const KEYBOARD_ROW = "awsedftgyhujkolp;'";
+/**
+ * The same row by physical key. `event.key` is "ש" for A while the Hebrew
+ * layout is on — the usual layout for this site's visitors — so matching
+ * characters left the computer keyboard silent; codes do not change with it.
+ */
+const KEYBOARD_CODES = [
+  "KeyA", "KeyW", "KeyS", "KeyE", "KeyD", "KeyF", "KeyT", "KeyG", "KeyY",
+  "KeyH", "KeyU", "KeyJ", "KeyK", "KeyO", "KeyL", "KeyP", "Semicolon", "Quote",
+];
+/** The highest octave the keys may start at, so the top key stays a MIDI note (≤ 127). */
+const maxOctave = (octaves: number) => 9 - octaves;
 const ROOT_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 const SCALES: { id: string; label: string; steps: number[] }[] = [
@@ -78,7 +89,17 @@ export function PianoTool() {
   const timbreRef = useRef(timbre);
   const sustainRef = useRef(sustain);
   const recordingRef = useRef<{ startedAt: number; open: Map<number, number> } | null>(null);
-  const pointerNoteRef = useRef<number | null>(null);
+  // Which note each pointer (mouse, or each finger) is holding, so one
+  // finger sliding off a key releases its own note, not another finger's.
+  const pointerNotesRef = useRef<Map<number, number>>(new Map());
+  // Which note each computer key started: releasing the key releases that
+  // note even if the octave moved (Z / X) while it was held.
+  const keyNotesRef = useRef<Map<string, number>>(new Map());
+  // Whether the sustain came from holding Space, so losing focus lifts it.
+  const spaceSustainRef = useRef(false);
+  // The keys that are physically down right now (as against notes still
+  // ringing on the pedal), kept in step with every note on and off.
+  const downRef = useRef<Set<number>>(new Set());
   const keysRef = useRef<HTMLDivElement>(null);
   const lessonPressRef = useRef<((midi: number) => void) | null>(null);
 
@@ -115,7 +136,15 @@ export function PianoTool() {
     (midi: number) => {
       const context = ensureContext();
       const master = masterRef.current;
-      if (!context || !master || voicesRef.current.has(midi)) return;
+      if (!context || !master || downRef.current.has(midi)) return;
+      // A note still ringing on the sustain pedal is struck again, as on a
+      // piano; before, the key did nothing at all until the pedal came up.
+      const ringing = voicesRef.current.get(midi);
+      if (ringing) {
+        ringing.release();
+        voicesRef.current.delete(midi);
+      }
+      downRef.current.add(midi);
       const now = context.currentTime;
       const frequency = midiToFrequency(midi);
       const gain = context.createGain();
@@ -195,6 +224,7 @@ export function PianoTool() {
   );
 
   const noteOff = useCallback((midi: number, force = false) => {
+    downRef.current.delete(midi);
     setHeld((current) => {
       if (!current.has(midi)) return current;
       const next = new Set(current);
@@ -253,7 +283,10 @@ export function PianoTool() {
     });
   }, [held, sustain]);
 
-  const lowest = (octave + 1) * 12;
+  // Three octaves from the top octave would run past MIDI 127 (C10), which
+  // also made a corrupt MIDI file of a recording up there.
+  const shownOctave = Math.min(octave, maxOctave(octaveCount));
+  const lowest = (shownOctave + 1) * 12;
   const keys = useMemo(() => {
     const list: { midi: number; black: boolean; whiteIndex: number }[] = [];
     let whiteIndex = 0;
@@ -274,44 +307,77 @@ export function PianoTool() {
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
+      // Ctrl+F, Ctrl+S, Cmd+D… belong to the browser, not to the keys.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      if (event.repeat) return;
-      const key = event.key.toLowerCase();
-      if (key === "z") {
-        if (!locked) setOctave((value) => Math.max(0, value - 1));
+      if (target?.isContentEditable) return;
+      const code = event.code;
+      if (code === "KeyZ" || code === "KeyX") {
+        if (!event.repeat && !locked) {
+          setOctave((value) =>
+            code === "KeyZ"
+              ? Math.max(0, Math.min(maxOctave(octaveCount), value) - 1)
+              : Math.min(maxOctave(octaveCount), value + 1),
+          );
+        }
         return;
       }
-      if (key === "x") {
-        if (!locked) setOctave((value) => Math.min(7, value + 1));
-        return;
-      }
-      if (event.code === "Space") {
+      if (code === "Space") {
+        // Repeats too, or holding the pedal scrolls the page.
         event.preventDefault();
+        if (event.repeat) return;
+        spaceSustainRef.current = true;
         setSustain(true);
         return;
       }
-      const index = KEYBOARD_ROW.indexOf(event.key);
+      const index = KEYBOARD_CODES.indexOf(code);
       if (index < 0) return;
       event.preventDefault();
-      playerNoteOn(lowest + index);
+      if (event.repeat || keyNotesRef.current.has(code)) return;
+      const midi = lowest + index;
+      keyNotesRef.current.set(code, midi);
+      playerNoteOn(midi);
     };
     const up = (event: KeyboardEvent) => {
       if (event.code === "Space") {
-        setSustain(false);
+        if (spaceSustainRef.current) {
+          spaceSustainRef.current = false;
+          setSustain(false);
+        }
         return;
       }
-      const index = KEYBOARD_ROW.indexOf(event.key);
-      if (index < 0) return;
-      noteOff(lowest + index);
+      const midi = keyNotesRef.current.get(event.code);
+      if (midi === undefined) return;
+      keyNotesRef.current.delete(event.code);
+      noteOff(midi);
+    };
+    // Switching window or tab swallows the key-up and pointer-up that would
+    // have ended a note; without this it rings (and records) forever.
+    const releaseAll = () => {
+      keyNotesRef.current.forEach((midi) => noteOff(midi));
+      keyNotesRef.current.clear();
+      pointerNotesRef.current.forEach((midi) => noteOff(midi));
+      pointerNotesRef.current.clear();
+      if (spaceSustainRef.current) {
+        spaceSustainRef.current = false;
+        setSustain(false);
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) releaseAll();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", releaseAll);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", releaseAll);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [locked, lowest, noteOff, playerNoteOn]);
+  }, [locked, lowest, noteOff, octaveCount, playerNoteOn]);
 
   // A new take is a new recording, whatever the last one's button says.
   useEffect(() => {
@@ -335,19 +401,18 @@ export function PianoTool() {
   const toggleRecording = () => {
     if (recording) {
       const session = recordingRef.current;
-      if (session) {
-        session.open.forEach((startedAt, midi) => {
-          setRecorded((current) => [
-            ...current,
-            {
-              midi,
-              start: (startedAt - session.startedAt) / 1000,
-              duration: Math.max(0.05, (performance.now() - startedAt) / 1000),
-              confidence: 0.9,
-            },
-          ]);
+      const stillHeld: DetectedNote[] = [];
+      session?.open.forEach((startedAt, midi) => {
+        stillHeld.push({
+          midi,
+          start: (startedAt - session.startedAt) / 1000,
+          duration: Math.max(0.05, (performance.now() - startedAt) / 1000),
+          confidence: 0.9,
         });
-      }
+      });
+      // Notes are logged as they are released, so a held chord lands after
+      // the quick notes played over it; the take is kept in playing order.
+      setRecorded((current) => [...current, ...stillHeld].sort((a, b) => a.start - b.start || a.midi - b.midi));
       recordingRef.current = null;
       setRecording(false);
     } else {
@@ -370,7 +435,7 @@ export function PianoTool() {
 
   useAssistantTool("piano", {
     state: () =>
-      `פסנתר וירטואלי: מקשים C${octave}–C${octave + octaveCount}, צליל ${timbre}, הדגשת סולם ${scale.id === "none" ? "כבויה" : `${ROOT_NAMES[scaleRoot]} ${scale.label}`}, סוסטיין ${sustain ? "פועל" : "כבוי"}, עוצמה ${Math.round(volume * 100)}%${recording ? `; מקליט (${recorded.length} תווים עד כה)` : recorded.length ? `; יש הקלטה של ${recorded.length} תווים` : ""}${lesson ? `; פתוח לימוד של „${lesson.title || "שיר"}” (${lesson.notes.length} תווים; המקשים קבועים עד שהגולש סוגר אותו)` : ""}.`,
+      `פסנתר וירטואלי: מקשים C${shownOctave}–C${shownOctave + octaveCount}, צליל ${timbre}, הדגשת סולם ${scale.id === "none" ? "כבויה" : `${ROOT_NAMES[scaleRoot]} ${scale.label}`}, סוסטיין ${sustain ? "פועל" : "כבוי"}, עוצמה ${Math.round(volume * 100)}%${recording ? `; מקליט (${recorded.length} תווים עד כה)` : recorded.length ? `; יש הקלטה של ${recorded.length} תווים` : ""}${lesson ? `; פתוח לימוד של „${lesson.title || "שיר"}” (${lesson.notes.length} תווים; המקשים קבועים עד שהגולש סוגר אותו)` : ""}.`,
     handlers: {
       "piano.play": async ({ notes: names, mode: how, seconds }) => {
         const list = (names as string[]).slice(0, 32);
@@ -402,7 +467,7 @@ export function PianoTool() {
           return { ok: false, message: "בזמן לימוד שיר המקשים קבועים; כדי לשנות אוקטבה צריך לסגור את הלימוד" };
         }
         if (typeof nextOctave === "number") {
-          const clamped = Math.max(0, Math.min(7, Math.round(nextOctave)));
+          const clamped = Math.max(0, Math.min(maxOctave(typeof octaves === "number" && octaves >= 3 ? 3 : octaveCount), Math.round(nextOctave)));
           setOctave(clamped);
           done.push(`אוקטבה ${clamped}`);
         }
@@ -458,10 +523,28 @@ export function PianoTool() {
       "piano.read": () => ({
         ok: true,
         message: recorded.length ? `${recorded.length} תווים בהקלטה` : "אין הקלטה",
-        data: { recording, count: recorded.length, notes: recorded.slice(0, 200).map((note) => ({ note: scientificName(note.midi), start: Number(note.start.toFixed(2)), duration: Number(note.duration.toFixed(2)) })), octave, timbre, scale: scale.id, root: ROOT_NAMES[scaleRoot] },
+        data: { recording, count: recorded.length, notes: recorded.slice(0, 200).map((note) => ({ note: scientificName(note.midi), start: Number(note.start.toFixed(2)), duration: Number(note.duration.toFixed(2)) })), octave: shownOctave, timbre, scale: scale.id, root: ROOT_NAMES[scaleRoot] },
       }),
     },
   });
+
+  /** A pointer lands on a key, or slides onto it from the one it held. */
+  const pressPointer = (pointerId: number, midi: number) => {
+    const notes = pointerNotesRef.current;
+    const previous = notes.get(pointerId);
+    if (previous === midi) return;
+    notes.set(pointerId, midi);
+    // Another finger may still be on the key this one slid off.
+    if (previous !== undefined && ![...notes.values()].includes(previous)) noteOff(previous);
+    playerNoteOn(midi);
+  };
+  const releasePointer = (pointerId: number) => {
+    const notes = pointerNotesRef.current;
+    const midi = notes.get(pointerId);
+    if (midi === undefined) return;
+    notes.delete(pointerId);
+    if (![...notes.values()].includes(midi)) noteOff(midi);
+  };
 
   const heldNames = Array.from(held)
     .sort((a, b) => a - b)
@@ -508,10 +591,7 @@ export function PianoTool() {
           className="piano-keys"
           dir="ltr"
           style={{ "--white-count": whiteCount } as React.CSSProperties}
-          onPointerLeave={() => {
-            if (pointerNoteRef.current !== null) noteOff(pointerNoteRef.current);
-            pointerNoteRef.current = null;
-          }}
+          onPointerLeave={(event) => releasePointer(event.pointerId)}
         >
           {keys.map((key) => {
             const active = held.has(key.midi);
@@ -533,26 +613,19 @@ export function PianoTool() {
                 aria-pressed={active}
                 onPointerDown={(event) => {
                   event.preventDefault();
-                  event.currentTarget.releasePointerCapture?.(event.pointerId);
-                  pointerNoteRef.current = key.midi;
-                  playerNoteOn(key.midi);
+                  // Touch captures the pointer to the first key; letting go
+                  // of that lets a finger slide across the keys.
+                  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                  pressPointer(event.pointerId, key.midi);
                 }}
                 onPointerEnter={(event) => {
                   if (event.buttons !== 1) return;
-                  if (pointerNoteRef.current !== null && pointerNoteRef.current !== key.midi) {
-                    noteOff(pointerNoteRef.current);
-                  }
-                  pointerNoteRef.current = key.midi;
-                  playerNoteOn(key.midi);
+                  pressPointer(event.pointerId, key.midi);
                 }}
-                onPointerUp={() => {
-                  noteOff(key.midi);
-                  pointerNoteRef.current = null;
-                }}
-                onPointerCancel={() => {
-                  noteOff(key.midi);
-                  pointerNoteRef.current = null;
-                }}
+                onPointerUp={(event) => releasePointer(event.pointerId)}
+                onPointerCancel={(event) => releasePointer(event.pointerId)}
               >
                 {showNames && !key.black && (
                   <span className="piano-key-name">
@@ -573,11 +646,11 @@ export function PianoTool() {
 
       <div className="piano-controls">
         <div className="segmented-control" role="group" aria-label="אוקטבה">
-          <button type="button" disabled={locked} onClick={() => setOctave((value) => Math.max(0, value - 1))}>
+          <button type="button" disabled={locked || shownOctave <= 0} onClick={() => setOctave(Math.max(0, shownOctave - 1))}>
             אוקטבה −
           </button>
-          <span className="segmented-label">C{octave}–C{octave + octaveCount}</span>
-          <button type="button" disabled={locked} onClick={() => setOctave((value) => Math.min(7, value + 1))}>
+          <span className="segmented-label" dir="ltr">C{shownOctave}–C{shownOctave + octaveCount}</span>
+          <button type="button" disabled={locked || shownOctave >= maxOctave(octaveCount)} onClick={() => setOctave(Math.min(maxOctave(octaveCount), shownOctave + 1))}>
             אוקטבה +
           </button>
         </div>

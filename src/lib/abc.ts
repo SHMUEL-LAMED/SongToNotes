@@ -69,9 +69,10 @@ function renderEvent(
   event: ScoreEvent,
   fifths: number,
   accidentals: MeasureAccidentals,
+  units: number,
 ) {
   if (!event.midis.length) {
-    return `z${durationSuffix(event.length)}`;
+    return `z${durationSuffix(units)}`;
   }
 
   const pitches = event.midis.map((midi) => {
@@ -84,7 +85,7 @@ function renderEvent(
     pitches.length === 1
       ? pitches[0]
       : `[${pitches.join("")}]`;
-  return `${body}${durationSuffix(event.length)}${event.tiedTo ? "-" : ""}`;
+  return `${body}${durationSuffix(units)}${event.tiedTo ? "-" : ""}`;
 }
 
 export type AbcOptions = {
@@ -96,7 +97,18 @@ export type AbcOptions = {
 export function scoreToAbc(score: Score, options: AbcOptions = {}) {
   const measuresPerLine = options.measuresPerLine ?? 4;
   const fifths = score.key.fifths;
-  const unitDenominator = score.stepsPerBeat * score.meter.beatType;
+  // A triplet grid has no plain note value for one step: it used to be written
+  // as L:1/12, which ABC readers (abcjs included) do not understand as
+  // triplets, so the sheet showed wrong note values and no brackets. Instead
+  // the unit is an eighth, whole beats are written as ordinary notes, and
+  // each beat split into steps becomes a "(3" group of three triplet eighths.
+  // (The score only ever splits a triplet beat into single steps.)
+  const triplets = score.stepsPerBeat === 3;
+  const unitDenominator = triplets ? 2 * score.meter.beatType : score.stepsPerBeat * score.meter.beatType;
+  const unitsFor = (event: ScoreEvent) =>
+    triplets && event.length % 3 === 0 ? (event.length / 3) * 2 : event.length;
+  const opensTriplet = (event: ScoreEvent) =>
+    triplets && event.offset % 3 === 0 && event.length % 3 !== 0;
   const chords = options.withChords ? detectChords(score) : [];
 
   const staffLines = score.staves.map((staff, staffIndex) => {
@@ -104,14 +116,15 @@ export function scoreToAbc(score: Score, options: AbcOptions = {}) {
     return staff.measures.map((measure, measureIndex) => {
       accidentals.reset();
       const tokens = measure.map((event) => {
-        const rendered = renderEvent(event, fifths, accidentals);
-        if (staffIndex > 0) return rendered;
+        const rendered = renderEvent(event, fifths, accidentals, unitsFor(event));
+        const tuplet = opensTriplet(event) ? "(3" : "";
+        if (staffIndex > 0) return tuplet + rendered;
         // Chord symbols attach to the note that starts the window they cover.
         const mark = chords.find(
           (chord) =>
             chord.measure === measureIndex && chord.offset === event.offset,
         );
-        return mark ? `"${mark.symbol}"${rendered}` : rendered;
+        return mark ? `${tuplet}"${mark.symbol}"${rendered}` : tuplet + rendered;
       });
       return tokens.join(" ");
     });

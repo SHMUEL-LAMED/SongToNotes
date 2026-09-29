@@ -10,6 +10,7 @@ import { encodeMp3 } from "../lib/convert";
 import { ttsCost } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
@@ -25,6 +26,12 @@ type Props = { initial?: SavedWork | null };
 
 function languageOf(text: string) {
   return /[֐-׿]/.test(text) ? "he" : /[؀-ۿ]/.test(text) ? "ar" : "en";
+}
+
+/** A voice speaks `language`; Android and older Chrome still tag Hebrew with the old code "iw". */
+function speaks(voice: SpeechSynthesisVoice, language: string) {
+  const lang = voice.lang.toLowerCase().replace("_", "-");
+  return lang.startsWith(language) || (language === "he" && lang.startsWith("iw"));
 }
 
 /** The server's voice answers in WAV; the file the visitor keeps is an MP3, encoded here. */
@@ -47,6 +54,9 @@ export function TtsTool({ initial = null }: Props) {
   const { rules: creditRules } = useCredits();
   const [text, setText] = useState(() => (typeof initial?.payload.text === "string" ? initial.payload.text : ""));
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  // Some devices have no voices at all; after a moment the page says so
+  // instead of "loading voices…" for ever.
+  const [voicesWaited, setVoicesWaited] = useState(false);
   const [voiceName, setVoiceName] = useState(() => {
     try {
       return (JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as { voice?: string } | null)?.voice ?? "";
@@ -62,6 +72,8 @@ export function TtsTool({ initial = null }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ file: File; url: string; text: string } | null>(null);
+  // The spoken file can go on to another tool — a ringtone, the mixer.
+  useOfferResult(result?.file ?? null, result?.file.name ?? "speech.mp3", () => result!.file);
   const abortRef = useRef<AbortController | null>(null);
   // Chrome drops an utterance it no longer sees referenced, and its `onend`
   // with it; holding it here keeps the buttons in step with the voice.
@@ -76,11 +88,17 @@ export function TtsTool({ initial = null }: Props) {
     const load = () => setVoices(window.speechSynthesis.getVoices());
     load();
     window.speechSynthesis.addEventListener("voiceschanged", load);
+    const waited = window.setTimeout(() => setVoicesWaited(true), 3000);
     return () => {
+      window.clearTimeout(waited);
       window.speechSynthesis.removeEventListener("voiceschanged", load);
+      // Anything still sounding, or queued, stops with the page; its events are ignored.
+      utteranceRef.current = null;
       window.speechSynthesis.cancel();
     };
   }, [supported]);
+  // Leaving the page also drops a server recording under way.
+  useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ voice: voiceName }));
@@ -104,11 +122,11 @@ export function TtsTool({ initial = null }: Props) {
 
   // Voices for the text's language first, the rest after.
   const sorted = useMemo(() => {
-    const mine = voices.filter((voice) => voice.lang.toLowerCase().startsWith(language));
+    const mine = voices.filter((voice) => speaks(voice, language));
     const others = voices.filter((voice) => !mine.includes(voice));
     return [...mine, ...others];
   }, [language, voices]);
-  const hasLanguageVoice = sorted.some((voice) => voice.lang.toLowerCase().startsWith(language));
+  const hasLanguageVoice = sorted.some((voice) => speaks(voice, language));
   const chosen = sorted.find((voice) => voice.name === voiceName) ?? sorted[0] ?? null;
 
   const speak = () => {
@@ -120,17 +138,27 @@ export function TtsTool({ initial = null }: Props) {
     utterance.lang = chosen?.lang ?? (language === "he" ? "he-IL" : language === "ar" ? "ar" : "en-US");
     utterance.rate = rate;
     utterance.pitch = pitch;
-    utterance.onboundary = (event) => setSpokenChars(event.charIndex);
+    // Only the current utterance moves the buttons: cancelling one (stop, or
+    // pressing play again) fires its end or an "interrupted" error later,
+    // which used to flip the new reading's buttons back to "play" and show
+    // a failure that never happened.
+    utterance.onboundary = (event) => {
+      if (utteranceRef.current === utterance) setSpokenChars(event.charIndex);
+    };
     utterance.onend = () => {
-      if (utteranceRef.current === utterance) utteranceRef.current = null;
+      if (utteranceRef.current !== utterance) return;
+      utteranceRef.current = null;
       setSpeaking(false);
       setPaused(false);
       setSpokenChars(0);
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
+      if (utteranceRef.current !== utterance) return;
+      utteranceRef.current = null;
       setSpeaking(false);
       setPaused(false);
-      setError("ההקראה נכשלה. נסה קול אחר.");
+      setSpokenChars(0);
+      if (event.error !== "interrupted" && event.error !== "canceled") setError("ההקראה נכשלה. נסה קול אחר.");
     };
     setError(null);
     setSpeaking(true);
@@ -140,7 +168,7 @@ export function TtsTool({ initial = null }: Props) {
 
   /** Resolves with what went wrong, or null once the file is ready. */
   const makeFile = async (): Promise<string | null> => {
-    if (!text.trim() || busy) return "אין טקסט, או שקובץ כבר נוצר";
+    if (!text.trim() || busy) return "אין טקסט, או שקובץ כבר בהכנה";
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -150,10 +178,9 @@ export function TtsTool({ initial = null }: Props) {
       const file = await asMp3(await speakToFile(text.trim(), { speed: rate, format: "mp3", signal: controller.signal }), controller.signal);
       if (controller.signal.aborted) return "בוטל";
       const named = new File([file], `${safeFilename(text.trim().slice(0, 30) || "speech")}.mp3`, { type: file.type });
-      setResult((previous) => {
-        if (previous) URL.revokeObjectURL(previous.url);
-        return { file: named, url: URL.createObjectURL(named), text: text.trim() };
-      });
+      // The previous address is let go by the effect that watches `result`;
+      // made inside a state updater it was made twice under StrictMode and one leaked.
+      setResult({ file: named, url: URL.createObjectURL(named), text: text.trim() });
       return null;
     } catch (caught) {
       if (controller.signal.aborted) return "בוטל";
@@ -182,6 +209,7 @@ export function TtsTool({ initial = null }: Props) {
   };
 
   const stopSpeaking = () => {
+    utteranceRef.current = null;
     window.speechSynthesis.cancel();
     setSpeaking(false);
     setPaused(false);
@@ -310,9 +338,19 @@ export function TtsTool({ initial = null }: Props) {
                       {voice.name} ({voice.lang})
                     </option>
                   ))}
-                  {!sorted.length && <option value="">טוען קולות…</option>}
+                  {!sorted.length && <option value="">{voicesWaited ? "אין קולות במכשיר" : "טוען קולות…"}</option>}
                 </select>
-                <small>{hasLanguageVoice ? "הקולות של המכשיר, בשפת הטקסט קודם." : text.trim() ? "למכשיר הזה אין קול בשפת הטקסט; יישמע במבטא של קול אחר." : "הקולות מגיעים מהמכשיר — אין מה להוריד."}</small>
+                <small>
+                  {hasLanguageVoice
+                    ? "הקולות של המכשיר, בשפת הטקסט קודם."
+                    : !sorted.length
+                      ? voicesWaited
+                        ? "למכשיר הזה אין קולות הקראה. אפשר ליצור קובץ בשרת למטה."
+                        : "הקולות מגיעים מהמכשיר — אין מה להוריד."
+                      : text.trim()
+                        ? "למכשיר הזה אין קול בשפת הטקסט; יישמע במבטא של קול אחר."
+                        : "הקולות מגיעים מהמכשיר — אין מה להוריד."}
+                </small>
               </label>
               <label className="setting-field range-field">
                 <span>

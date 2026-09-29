@@ -97,7 +97,20 @@ export function rootFor(pc: number, scale: ScaleDefinition) {
   return minorRoot ? { ...root, ...minorRoot } : root;
 }
 
-const DEGREE_NAMES = ["1", "♭2", "2", "♭3", "3", "4", "♯4", "5", "♭6", "6", "♭7", "7"];
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * A degree as written — its number from the letter it is spelled on, and an
+ * accidental against the major scale — so the locrian and blues fifth reads
+ * ♭5 and the lydian fourth ♯4, though both are six semitones up.
+ */
+function degreeName(letterIndex: number, semitones: number) {
+  let offset = semitones - MAJOR_STEPS[letterIndex];
+  if (offset > 6) offset -= 12;
+  if (offset < -6) offset += 12;
+  const sign = offset > 0 ? "♯".repeat(offset) : "♭".repeat(-offset);
+  return `${sign}${letterIndex + 1}`;
+}
 
 export type ScaleNote = { name: string; pc: number; semitones: number; degree: string };
 
@@ -107,18 +120,16 @@ export function scaleNotes(rootPc: number, scale: ScaleDefinition): ScaleNote[] 
   const heptatonic = scale.steps.length === 7;
   return scale.steps.map((semitones, index) => {
     const pc = (rootPc + semitones) % 12;
-    let name: string;
-    if (heptatonic) {
-      name = spell(root.letter + index, pc);
-    } else {
+    let letterIndex = index;
+    if (!heptatonic) {
       // Five- and six-note scales skip letters, so they borrow the spelling
       // of the parent major or minor scale.
-      const parent = scale.minorish ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
-      const letterIndex = parent.indexOf(semitones);
+      const parent = scale.minorish ? [0, 2, 3, 5, 7, 8, 10] : MAJOR_STEPS;
       // The one note outside both parents is the blues ♭5, written as a flat fifth.
-      name = letterIndex >= 0 ? spell(root.letter + letterIndex, pc) : spell(root.letter + 4, pc);
+      letterIndex = parent.indexOf(semitones);
+      if (letterIndex < 0) letterIndex = 4;
     }
-    return { name, pc, semitones, degree: DEGREE_NAMES[semitones] };
+    return { name: spell(root.letter + letterIndex, pc), pc, semitones, degree: degreeName(letterIndex, semitones) };
   });
 }
 
@@ -234,13 +245,20 @@ export function diatonicChords(rootPc: number, scale: ScaleDefinition, sevenths:
 }
 
 /** Well-worn progressions, as degrees of the scale (1-based). */
-export const PROGRESSIONS: { id: string; label: string; degrees: number[]; minor?: boolean }[] = [
+export const PROGRESSIONS: {
+  id: string;
+  label: string;
+  degrees: number[];
+  minor?: boolean;
+  /** Its V is the major dominant of harmonic minor, not natural minor's minor v. */
+  harmonicV?: boolean;
+}[] = [
   { id: "pop", label: "הפופ הנצחי · I–V–vi–IV", degrees: [1, 5, 6, 4] },
   { id: "fifties", label: "שנות ה־50 · I–vi–IV–V", degrees: [1, 6, 4, 5] },
   { id: "jazz", label: "ג׳אז · ii–V–I", degrees: [2, 5, 1] },
   { id: "sad", label: "מלנכולי · vi–IV–I–V", degrees: [6, 4, 1, 5] },
   { id: "canon", label: "הקאנון של פכלבל", degrees: [1, 5, 6, 3, 4, 1, 4, 5] },
-  { id: "andalusian", label: "אנדלוסי · i–VII–VI–V", degrees: [1, 7, 6, 5], minor: true },
+  { id: "andalusian", label: "אנדלוסי · i–VII–VI–V", degrees: [1, 7, 6, 5], minor: true, harmonicV: true },
   { id: "minorPop", label: "מינור · i–VI–III–VII", degrees: [1, 6, 3, 7], minor: true },
 ];
 
@@ -284,3 +302,57 @@ export function circleIndex(rootPc: number, scale: ScaleDefinition) {
 /** Standard guitar tuning, low string first, as MIDI notes. */
 export const GUITAR_STRINGS = [40, 45, 50, 55, 59, 64];
 export const STRING_NAMES = ["E", "A", "D", "G", "B", "e"];
+
+export type KeySignature = {
+  sharps: number;
+  flats: number;
+  /** In Hebrew, as the circle writes it: "3 דיאזים". */
+  label: string;
+  /** The major key that shares the signature, and its relative minor, spelled as the scale is. */
+  relativeMajor: string;
+  relativeMinor: string;
+};
+
+/**
+ * The key signature of a scale, counted from the notes as this module spells
+ * them — so F♯ lydian reads seven sharps and B♭ phrygian six flats, where a
+ * lookup on the circle by pitch class would give the enharmonic key (five
+ * flats, six sharps) and contradict the notes on the screen. Harmonic and
+ * melodic minor, and the short scales, carry their natural parent's signature.
+ */
+export function keySignature(rootPc: number, scale: ScaleDefinition): KeySignature {
+  const parentId: Partial<Record<ScaleId, ScaleId>> = {
+    harmonicMinor: "minor",
+    melodicMinor: "minor",
+    minorPentatonic: "minor",
+    blues: "minor",
+    majorPentatonic: "major",
+  };
+  const parent = findScale(parentId[scale.id] ?? scale.id);
+  const notes = scaleNotes(rootPc, parent);
+  let sharps = 0;
+  let flats = 0;
+  for (const note of notes) {
+    sharps += (note.name.match(/♯/g)?.length ?? 0) + 2 * (note.name.match(/𝄪/gu)?.length ?? 0);
+    flats += (note.name.match(/♭/g)?.length ?? 0) + 2 * (note.name.match(/𝄫/gu)?.length ?? 0);
+  }
+  const count = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+  const parts = [sharps ? count(sharps, "דיאז אחד", "דיאזים") : "", flats ? count(flats, "במול אחד", "במולים") : ""].filter(Boolean);
+  // Which degree the parent major scale starts on: the rotation that gives the major step pattern.
+  const steps = parent.steps;
+  let tonic = 0;
+  for (let start = 0; start < steps.length; start += 1) {
+    const rotated = steps.map((_, index) => (steps[(start + index) % steps.length] - steps[start] + 12) % 12);
+    if (rotated.join() === MAJOR_STEPS.join()) {
+      tonic = start;
+      break;
+    }
+  }
+  return {
+    sharps,
+    flats,
+    label: parts.length ? parts.join(" ו־") : "ללא סימנים",
+    relativeMajor: notes[tonic].name,
+    relativeMinor: `${notes[(tonic + 5) % 7].name}m`,
+  };
+}

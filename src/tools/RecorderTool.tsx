@@ -5,6 +5,7 @@ import { decodeAudioFile } from "../lib/audio";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
+import { useOfferResult } from "../lib/currentFile";
 import {
   MAX_LATENCY_OFFSET_MS,
   MAX_TAKE_SECONDS,
@@ -276,7 +277,7 @@ export function RecorderTool() {
   const clickNodesRef = useRef<OscillatorNode[]>([]);
   const frameRef = useRef(0);
   const mountedRef = useRef(false);
-  const stopRecordingRef = useRef<() => Promise<void>>(async () => undefined);
+  const stopRecordingRef = useRef<() => Promise<string | null>>(async () => null);
   const stopPlaybackRef = useRef<() => void>(() => undefined);
   const playRef = useRef<() => Promise<string | null>>(async () => null);
 
@@ -495,6 +496,13 @@ export function RecorderTool() {
       changePhase("idle");
       return "לא הצלחנו להתחיל את ההקלטה בדפדפן הזה.";
     }
+    // Loading the capture worklet takes a moment; a visitor who left the
+    // page meanwhile must not leave the microphone open (and a click
+    // scheduler running) behind a tool that no longer exists.
+    if (!mountedRef.current) {
+      capture.release();
+      return null;
+    }
     const auto = estimateRoundTripSeconds({
       baseLatency: context.baseLatency,
       outputLatency: context.outputLatency,
@@ -513,10 +521,11 @@ export function RecorderTool() {
     return null;
   };
 
-  const stopRecording = async () => {
+  /** Resolves with why no track was kept, or null when one was added. */
+  const stopRecording = async (): Promise<string | null> => {
     const session = sessionRef.current;
     const context = contextRef.current;
-    if (!session || session.kind !== "record" || !session.capture || !context) return;
+    if (!session || session.kind !== "record" || !session.capture || !context) return "אין הקלטה פעילה.";
     cancelAnimationFrame(frameRef.current);
     stopClicks();
     stopSources();
@@ -526,12 +535,13 @@ export function RecorderTool() {
     await session.capture.stop();
     setLevel(0);
     setPosition(0);
-    if (!mountedRef.current) return;
+    if (!mountedRef.current) return null;
     const rate = context.sampleRate;
     if (endedAt < session.at + 0.15) {
-      setNotice("ההקלטה נעצרה לפני שהתחילה, ולא נשמר ערוץ.");
+      const notice = "ההקלטה נעצרה לפני שהתחילה, ולא נשמר ערוץ.";
+      setNotice(notice);
       changePhase("idle");
-      return;
+      return notice;
     }
     const samples = assembleTake(session.capture.chunks, {
       startFrame: Math.round(session.at * rate),
@@ -539,14 +549,16 @@ export function RecorderTool() {
       maxFrames: MAX_TAKE_SECONDS * rate,
     });
     if (samples.length < rate * 0.1) {
-      setNotice("ההקלטה קצרה מדי, ולא נשמר ערוץ.");
+      const notice = "ההקלטה קצרה מדי, ולא נשמר ערוץ.";
+      setNotice(notice);
       changePhase("idle");
-      return;
+      return notice;
     }
     const buffer = context.createBuffer(1, samples.length, rate);
     buffer.getChannelData(0).set(samples);
     setTracks((list) => (list.length >= MAX_TRACKS ? list : [...list, makeTrack(buffer, nextTrackName(list.map((track) => track.name)), list.length, "mic")]));
     changePhase("idle");
+    return null;
   };
 
   // The animation frame loop and the space key run outside React's render
@@ -662,6 +674,14 @@ export function RecorderTool() {
     setBusy(null);
   };
 
+  // The mix of every take can go on to another tool — the vocal remover, a
+  // ringtone, the converter — built only if someone sends it.
+  useOfferResult(audibleTracks(tracks).length ? tracks : null, "multitrack-mix.wav", async () => {
+    const rendered = await renderMix(tracksRef.current, 44_100);
+    const blob = encodeWav({ channels: [rendered.getChannelData(0), rendered.getChannelData(1)], sampleRate: rendered.sampleRate });
+    return new File([blob], "multitrack-mix.wav", { type: "audio/wav" });
+  });
+
   const exportMix = async (): Promise<File | null> => {
     if (!tracksRef.current.length) return null;
     if (!audibleTracks(tracksRef.current).length) {
@@ -731,11 +751,12 @@ export function RecorderTool() {
     handlers: {
       "recorder.record": async ({ command }) => {
         if (command === "stop") {
-          if (!recordingNow) return { ok: false, message: "אין הקלטה פעילה" };
-          await stopRecording();
-          return { ok: true, message: "ההקלטה נעצרה והערוץ נוסף" };
+          if (phaseRef.current !== "countin" && phaseRef.current !== "recording") return { ok: false, message: "אין הקלטה פעילה" };
+          // A take stopped during the count-in, or too short, adds nothing.
+          const notice = await stopRecording();
+          return notice ? { ok: false, message: notice } : { ok: true, message: "ההקלטה נעצרה והערוץ נוסף" };
         }
-        if (recordingNow) return { ok: false, message: "כבר מקליט" };
+        if (phaseRef.current !== "idle" && phaseRef.current !== "playing") return { ok: false, message: "כבר מקליט" };
         const problem = await startRecording();
         if (problem) {
           setError(problem);

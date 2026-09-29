@@ -49,6 +49,7 @@ export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdm
   const { rules, status: credits } = useCredits();
   const [works, setWorks] = useState<SavedWork[] | null>(null);
   const [query, setQuery] = useState("");
+  const [now, setNow] = useState(() => new Date());
   const panelRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const userId = user?.id ?? null;
@@ -113,7 +114,11 @@ export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdm
     const timer = window.setTimeout(() => {
       void listWorks(userId)
         .then((list) => {
-          if (alive) setWorks(list);
+          if (!alive) return;
+          setWorks(list);
+          // The drawer stays mounted for the whole visit: "today" is read at
+          // each opening, or a tab left open overnight counts yesterday.
+          setNow(new Date());
         })
         .catch(() => {
           if (alive) setWorks([]);
@@ -125,7 +130,6 @@ export function AccountDrawer({ open, onClose, onOpenWork, onOpenPage, onOpenAdm
     };
   }, [open, userId]);
 
-  const [now] = useState(() => new Date());
   const all = useMemo(() => works ?? [], [works]);
   const figures = useMemo(
     () => ({ streak: streak(all, now), month: monthCount(all, now), top: topKind(all) }),

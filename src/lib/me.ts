@@ -124,7 +124,7 @@ export function filterWorks(
   });
   switch (sort) {
     case "title":
-      return list.sort((a, b) => a.title.localeCompare(b.title, "he"));
+      return list.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? ""), "he"));
     case "oldest":
       return list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     case "kind":

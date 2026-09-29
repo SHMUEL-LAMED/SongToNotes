@@ -413,9 +413,32 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     };
   }, [open, width]);
 
+  // The list follows a reply as it streams in only while the visitor is at
+  // the bottom: scrolling up to read an earlier answer used to be yanked back
+  // down with every token. Sending a question brings it back to the bottom.
+  const followRef = useRef(true);
+  const lastTopRef = useRef(0);
+  const onListScroll = () => {
+    const list = listRef.current;
+    if (!list) return;
+    // Only a move up lets go: the list's own smooth scroll down passes
+    // through positions far from the bottom too, and must not count.
+    if (list.scrollHeight - list.scrollTop - list.clientHeight < 80) followRef.current = true;
+    else if (list.scrollTop < lastTopRef.current - 2) followRef.current = false;
+    lastTopRef.current = list.scrollTop;
+  };
+  const lastRole = messages[messages.length - 1]?.role;
+  const lastHidden = messages[messages.length - 1]?.hidden;
+  // A question waiting for the visitor's yes is always brought into view.
+  const asking = Boolean(confirmation);
   useEffect(() => {
+    if ((lastRole === "user" && !lastHidden) || asking) followRef.current = true;
+  }, [asking, lastRole, lastHidden, messages.length]);
+  useEffect(() => {
+    if (!followRef.current) return;
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: partial ? "auto" : "smooth" });
   }, [messages, busy, partial, acting, confirmation]);
+
 
   useEffect(
     () => () => {
@@ -476,11 +499,16 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       document.documentElement.classList.remove("is-resizing-assistant");
     };
     document.documentElement.classList.add("is-resizing-assistant");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    // A drag the browser takes over (a touch turned into a scroll) ends in
+    // pointercancel, not pointerup; without this the page kept resizing the
+    // panel on every later mouse move.
+    window.addEventListener("pointercancel", up);
   };
 
   const stop = () => {
@@ -1020,7 +1048,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             </div>
           )}
 
-          <div className="assistant-messages" ref={listRef} aria-live="polite">
+          <div className="assistant-messages" ref={listRef} onScroll={onListScroll} aria-live="polite" aria-busy={busy}>
             {shown.length === 0 && !busy && (
               <div className="assistant-empty">
                 <span className="assistant-hero-orb" aria-hidden="true">

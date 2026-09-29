@@ -84,27 +84,14 @@ export function PianoRoll({
     return lines;
   }, [tempo.offset, barSeconds, beatSeconds, meter.beats, layout.duration, zoom]);
 
-  function handleClick(event: React.MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const bounds = svg.getBoundingClientRect();
-    const scale = width / bounds.width;
-    const x = (event.clientX - bounds.left) * scale - GUTTER;
-    onSeek(Math.max(0, x / zoom));
-  }
-
-  return (
-    <div className="piano-roll-wrap" dir="ltr">
-      <svg
-        ref={svgRef}
-        className="piano-roll"
-        viewBox={`0 0 ${width} ${height}`}
-        width={width}
-        height={height}
-        onClick={handleClick}
-        role="img"
-        aria-label={`תצוגת פסנתר של ${notes.length} תווים`}
-      >
+  // Everything but the playhead depends only on the notes and the view, while
+  // the playhead moves every animation frame during playback. Building this
+  // once per real change means a frame costs one <line>, not thousands of
+  // rects re-rendered and diffed.
+  const fifths = keySignature.fifths;
+  const staticLayers = useMemo(
+    () => (
+      <>
         <defs>
           <linearGradient id="roll-note" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stopColor="var(--roll-note-top)" />
@@ -171,7 +158,7 @@ export function PianoRoll({
               strokeWidth="0.5"
               opacity={0.45 + Math.min(0.55, note.confidence * 0.7)}
             >
-              <title>{`${scientificName(midi, keySignature.fifths)} · ${note.start.toFixed(2)}s · ${Math.round(note.confidence * 100)}%`}</title>
+              <title>{`${scientificName(midi, fifths)} · ${note.start.toFixed(2)}s · ${Math.round(note.confidence * 100)}%`}</title>
             </rect>
           );
         })}
@@ -198,12 +185,39 @@ export function PianoRoll({
                   fontSize="9"
                   fontFamily="system-ui, sans-serif"
                 >
-                  {scientificName(midi, keySignature.fifths)}
+                  {scientificName(midi, fifths)}
                 </text>
               )}
             </g>
           );
         })}
+      </>
+    ),
+    [gridLines, height, layout.highest, notes, rows, transpose, width, zoom, fifths],
+  );
+
+  function handleClick(event: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const bounds = svg.getBoundingClientRect();
+    const scale = width / bounds.width;
+    const x = (event.clientX - bounds.left) * scale - GUTTER;
+    onSeek(Math.max(0, x / zoom));
+  }
+
+  return (
+    <div className="piano-roll-wrap" dir="ltr">
+      <svg
+        ref={svgRef}
+        className="piano-roll"
+        viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
+        onClick={handleClick}
+        role="img"
+        aria-label={`תצוגת פסנתר של ${notes.length} תווים`}
+      >
+        {staticLayers}
 
         <line
           x1={GUTTER + playhead * zoom}

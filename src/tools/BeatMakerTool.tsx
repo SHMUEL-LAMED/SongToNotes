@@ -179,8 +179,8 @@ export function BeatMakerTool() {
 
   const start = useCallback(async () => {
     try {
-      await player().start();
-      setPlaying(true);
+      const running = await player().start();
+      setPlaying(running);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "לא הצלחנו להפעיל את השמע.");

@@ -38,6 +38,13 @@ describe("parseAssistantReply", () => {
     expect(parsed.text).toContain("[Am]היה [G]פעם");
   });
 
+  it("keeps an example written as JSON as prose rather than running it", () => {
+    const reply = 'אקורד לדוגמה:\n```json\n{"name": "C major", "notes": ["C", "E", "G"]}\n```';
+    const parsed = parseAssistantReply(reply);
+    expect(parsed.actions).toEqual([]);
+    expect(parsed.text).toContain('"C major"');
+  });
+
   it("marks a broken action block so the model hears about it", () => {
     const parsed = parseAssistantReply("```action\n{not json\n```");
     expect(parsed.actions[0].id).toBe("invalid");

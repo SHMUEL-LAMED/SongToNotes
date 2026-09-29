@@ -11,6 +11,7 @@ import {
   chordHebrew,
   chordName,
   chordSheet,
+  segmentIndexAt,
   transposeRoot,
   uniqueChords,
   type ChordQuality,
@@ -80,7 +81,13 @@ export function ChordsTool({ initial = null }: Props) {
   const [capo, setCapo] = useState(restored?.capo ?? 0);
   const [flats, setFlats] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The playback position, but only as fine as the chord timeline needs it.
+  // Transport reports a new time on every animation frame; stored as is, it
+  // re-rendered the whole page — every timeline block and chord diagram —
+  // sixty times a second while the song played.
   const [time, setTime] = useState(0);
+  const timeRef = useRef(0);
+  const segmentsRef = useRef<ChordSegment[]>(restored?.result.segments ?? []);
   const [seek, setSeek] = useState<{ time: number; key: number; play?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(initial ? "פתחת אקורדים שמורים. השיר עצמו לא נשמר." : null);
@@ -90,6 +97,21 @@ export function ChordsTool({ initial = null }: Props) {
   const resetSave = saving.reset;
 
   useEffect(() => () => workerRef.current?.terminate(), []);
+  useEffect(() => {
+    segmentsRef.current = result?.segments ?? [];
+  }, [result]);
+
+  const followTime = useCallback((seconds: number) => {
+    const segments = segmentsRef.current;
+    const before = segmentIndexAt(segments, timeRef.current);
+    timeRef.current = seconds;
+    if (segmentIndexAt(segments, seconds) !== before) setTime(seconds);
+  }, []);
+
+  const resetTime = () => {
+    timeRef.current = 0;
+    setTime(0);
+  };
   useEffect(() => resetSave(), [resetSave, result, transpose, capo]);
 
   const analyse = useCallback(
@@ -98,6 +120,14 @@ export function ChordsTool({ initial = null }: Props) {
       const jobId = jobRef.current;
       setBusy(true);
       setError(null);
+      setNotice(null);
+      // The previous song's chords go only now that the new one has decoded:
+      // clearing them on pick lost them for good when the new file then
+      // failed to open, since the old audio stays loaded and is never
+      // analysed again.
+      setResult(null);
+      timeRef.current = 0;
+      setTime(0);
       if (!workerRef.current) {
         workerRef.current = new Worker(new URL("../workers/chords.worker.ts", import.meta.url), { type: "module" });
       }
@@ -115,15 +145,27 @@ export function ChordsTool({ initial = null }: Props) {
         }
         setResult({ segments: event.data.segments, duration: buffer.duration, sourceName, elapsed: event.data.elapsed });
       };
-      worker.onerror = () => {
+      worker.onerror = (event) => {
+        event.preventDefault();
+        // A crashed worker (out of memory on a long song, most often) is not
+        // reused: the next song gets a fresh one.
+        worker.terminate();
+        if (workerRef.current === worker) workerRef.current = null;
+        if (jobId !== jobRef.current) return;
         setBusy(false);
-        setError("זיהוי האקורדים נכשל.");
+        setError("זיהוי האקורדים נכשל. נסה שוב, או קטע קצר יותר מהשיר.");
       };
       // A mono copy, handed over so the page keeps its own buffer.
-      const mono = new Float32Array(buffer.length);
-      for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-        const data = buffer.getChannelData(channel);
-        for (let index = 0; index < mono.length; index += 1) mono[index] += data[index] / buffer.numberOfChannels;
+      let mono: Float32Array;
+      if (buffer.numberOfChannels === 1) {
+        mono = buffer.getChannelData(0).slice();
+      } else {
+        mono = new Float32Array(buffer.length);
+        const scale = 1 / buffer.numberOfChannels;
+        for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+          const data = buffer.getChannelData(channel);
+          for (let index = 0; index < mono.length; index += 1) mono[index] += data[index] * scale;
+        }
       }
       const request: ChordsRequest = { jobId, mono, sampleRate: buffer.sampleRate };
       worker.postMessage(request, [mono.buffer]);
@@ -146,7 +188,7 @@ export function ChordsTool({ initial = null }: Props) {
     [result, shift],
   );
   const unique = useMemo(() => uniqueChords(shown), [shown]);
-  const currentIndex = shown.findIndex((segment) => time >= segment.start && time < segment.end);
+  const currentIndex = segmentIndexAt(shown, time);
   const current = currentIndex >= 0 ? shown[currentIndex] : null;
   const title = result?.sourceName ? result.sourceName.replace(/\.[^/.]+$/, "") : audio ? audio.file.name.replace(/\.[^/.]+$/, "") : "אקורדים";
   const sheet = result ? chordSheet(result.segments, shift, flats) : "";
@@ -267,15 +309,13 @@ export function ChordsTool({ initial = null }: Props) {
           isLoading={isLoading}
           onPick={(file) => {
             setError(null);
-            setNotice(null);
-            setResult(null);
-            setTime(0);
             void load(file);
           }}
           onClear={() => {
             jobRef.current += 1;
             setBusy(false);
             setResult(null);
+            resetTime();
             clear();
           }}
           allowRecording
@@ -331,7 +371,7 @@ export function ChordsTool({ initial = null }: Props) {
             </div>
 
             {audio && (
-              <Transport buffer={audio.buffer} label="נגן עם האקורדים" onTime={setTime} seek={seek} />
+              <Transport buffer={audio.buffer} label="נגן עם האקורדים" onTime={followTime} seek={seek} />
             )}
 
             <div className="chords-now" aria-live="polite">
@@ -376,7 +416,8 @@ export function ChordsTool({ initial = null }: Props) {
               ))}
             </div>
             <p className="table-footnote">
-              {unique.length} אקורדים שונים · {result.segments.length} מעברים
+              {unique.length === 1 ? "אקורד אחד" : `${unique.length} אקורדים שונים`} ·{" "}
+              {result.segments.length === 1 ? "קטע אחד" : `${result.segments.length} קטעים`}
               {result.elapsed !== null ? ` · זוהו ב־${(result.elapsed / 1000).toFixed(1)} שניות בדפדפן` : ""}
               {capo ? ` · האחיזות מוצגות עם קאפו בשריג ${capo}` : ""}
             </p>

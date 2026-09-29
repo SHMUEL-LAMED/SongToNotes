@@ -1,3 +1,4 @@
+import { changeChannelsSpeedAndPitch } from "../lib/dsp";
 import {
   separate,
   separateMono,
@@ -12,6 +13,24 @@ export type SeparateRequest = {
   sampleRate: number;
   options: SeparateOptions;
 };
+
+/**
+ * The practice slow-downer's tempo and pitch change. It shares this worker
+ * because it is the same kind of work — seconds of arithmetic over a whole
+ * song — that froze the page when it ran in the slider's handler.
+ */
+export type StretchRequest = {
+  type: "stretch";
+  jobId: number;
+  channels: Float32Array[];
+  sampleRate: number;
+  speed: number;
+  semitones: number;
+};
+
+export type StretchResponse =
+  | { type: "stretched"; jobId: number; channels: Float32Array[] }
+  | { type: "error"; jobId: number; message: string };
 
 export type SeparateResponse =
   | { type: "progress"; jobId: number; progress: number }
@@ -31,8 +50,28 @@ const post = self.postMessage.bind(self) as (
   transfer?: Transferable[],
 ) => void;
 
-self.onmessage = (event: MessageEvent<SeparateRequest>) => {
+function stretch(request: StretchRequest) {
+  const { jobId, channels, sampleRate, speed, semitones } = request;
+  try {
+    const result = changeChannelsSpeedAndPitch(channels, sampleRate, speed, semitones);
+    const message: StretchResponse = { type: "stretched", jobId, channels: result };
+    self.postMessage(message, result.map((channel) => channel.buffer));
+  } catch (error) {
+    const message: StretchResponse = {
+      type: "error",
+      jobId,
+      message: error instanceof Error ? error.message : "העיבוד נכשל.",
+    };
+    self.postMessage(message);
+  }
+}
+
+self.onmessage = (event: MessageEvent<SeparateRequest | StretchRequest>) => {
   const request = event.data;
+  if (request.type === "stretch") {
+    stretch(request);
+    return;
+  }
   if (request.type !== "separate") return;
   const { jobId, left, right, sampleRate, options } = request;
   const started = Date.now();

@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -187,6 +188,13 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
   const userId = user?.id ?? null;
 
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "gallery");
+  // The page stays mounted when the address moves between `#/me` and
+  // `#/me/links` (typed, or back and forward), so the tab follows the route.
+  const [routeTab, setRouteTab] = useState(initialTab);
+  if (routeTab !== initialTab) {
+    setRouteTab(initialTab);
+    setTab(isTab(initialTab) ? initialTab : "gallery");
+  }
   const [works, setWorks] = useState<SavedWork[] | null>(null);
   const [files, setFiles] = useState<StoredFileInfo[]>([]);
   const [failed, setFailed] = useState(false);
@@ -257,14 +265,30 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
     return () => URL.revokeObjectURL(url);
   }, [playing]);
 
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  const previewId = preview?.id ?? null;
+  /**
+   * Closing the preview stops what it was playing: the tile behind it would
+   * otherwise start the same file again from the top.
+   */
+  const closePreview = useCallback(() => {
+    setPreview(null);
+    setPlaying((current) => (current && current.id === previewId ? null : current));
+  }, [previewId]);
   useEffect(() => {
-    if (!preview) return;
+    if (!previewId) return;
+    // Focus moves into the preview and back to the tile that opened it.
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previewCloseRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPreview(null);
+      if (event.key === "Escape") closePreview();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [preview]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (before?.isConnected) before.focus({ preventScroll: true });
+    };
+  }, [closePreview, previewId]);
 
   const setMarksAndSave = (next: Marks) => {
     setMarks(next);
@@ -288,12 +312,15 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
     for (const item of all) table[item.kind] += 1;
     return table;
   }, [all]);
-  const tags = useMemo(() => allTags(marks), [marks]);
+  const tags = useMemo(() => allTags(marks, new Set(all.map((item) => item.id))), [all, marks]);
   const starredCount = useMemo(() => all.filter((item) => isStarred(marks, item.id)).length, [all, marks]);
 
+  // The box shows each key at once; the gallery catches up when it can, so
+  // typing never waits for a few hundred tiles to render.
+  const deferredQuery = useDeferredValue(query);
   const visible = useMemo(
-    () => filterWorks(all, { query, kind, tag, starred: starredOnly }, marks, describeWork, sort),
-    [all, kind, marks, query, sort, starredOnly, tag],
+    () => filterWorks(all, { query: deferredQuery, kind, tag, starred: starredOnly }, marks, describeWork, sort),
+    [all, deferredQuery, kind, marks, sort, starredOnly, tag],
   );
 
   // Time is read once per load so the insights do not drift while the page
@@ -387,8 +414,8 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
     })();
   };
 
-  /** Into the recycle bin first; the account row goes at once. */
-  const remove = async (work: SavedWork) => {
+  /** Into the recycle bin first; the account row goes at once. Says whether it went. */
+  const remove = async (work: SavedWork): Promise<boolean> => {
     if (playing?.id === work.id) setPlaying(null);
     if (preview?.id === work.id) setPreview(null);
     setTrash(pushToTrash(work));
@@ -396,22 +423,37 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
       await deleteWork(work, userId);
       setWorks((current) => (current ?? []).filter((item) => item.id !== work.id));
       setFiles((current) => current.filter((item) => item.id !== work.id));
+      setSelected((current) => {
+        if (!current.has(work.id)) return current;
+        const next = new Set(current);
+        next.delete(work.id);
+        return next;
+      });
+      return true;
     } catch {
       setTrash(removeFromTrash(work.id));
       setMessage("לא הצלחנו למחוק. נסה שוב.");
+      return false;
     }
   };
 
   const removeMany = async (ids: string[]) => {
     setBusy("מוחק…");
+    let removed = 0;
     for (const id of ids) {
       const work = all.find((item) => item.id === id);
-      if (work) await remove(work);
+      if (work && (await remove(work))) removed += 1;
     }
     setBusy(null);
-    setSelected(new Set());
-    setSelecting(false);
-    setMessage(`${ids.length} פריטים עברו לסל המיחזור ל־${TRASH_DAYS} ימים.`);
+    // What failed stays chosen, so another try is one tap away; the count
+    // says what really went instead of what was asked for.
+    const failedCount = ids.length - removed;
+    if (!failedCount) setSelecting(false);
+    setMessage(
+      failedCount
+        ? `${removed} פריטים עברו לסל המיחזור; ${failedCount} לא נמחקו. נסה שוב.`
+        : `${removed} פריטים עברו לסל המיחזור ל־${TRASH_DAYS} ימים.`,
+    );
   };
 
   const restore = async (entry: TrashEntry) => {
@@ -842,7 +884,8 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
                           <button type="button" className="icon-button" aria-label="בטל" onClick={() => setTagging(null)}><X size={16} /></button>
                         </form>
                       )}
-                      {isPlaying && playing && (
+                      {/* While the preview is open it holds the player; two would play the file twice. */}
+                      {isPlaying && playing && preview?.id !== work.id && (
                         <audio className="me-player" controls autoPlay src={playing.url} onEnded={() => setPlaying(null)} />
                       )}
                     </div>
@@ -940,8 +983,8 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
           </Card>
           <Card title="איפה הקבצים" icon={<Cloud size={17} />}>
             <ul className="admin-facts">
-              <li><span>בענן, בתיקייה פרטית שלך</span><b>{cloud.count} <small>{formatBytes(cloud.bytes)}</small></b></li>
-              <li><span>עותקים במכשיר הזה</span><b>{files.length} <small>{formatBytes(fileBytes)}</small></b></li>
+              <li><span>בענן, בתיקייה פרטית שלך</span><b>{cloud.count} <small><bdi dir="ltr">{formatBytes(cloud.bytes)}</bdi></small></b></li>
+              <li><span>עותקים במכשיר הזה</span><b>{files.length} <small><bdi dir="ltr">{formatBytes(fileBytes)}</bdi></small></b></li>
             </ul>
             <p className="admin-foot-note">
               {user
@@ -1155,9 +1198,9 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
 
       {/* ================================================== preview */}
       {preview && (
-        <div className="preview-overlay" role="presentation" onMouseDown={() => setPreview(null)}>
+        <div className="preview-overlay" role="presentation" onMouseDown={closePreview}>
           <div className="preview" role="dialog" aria-modal="true" aria-label={preview.title} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent-hue": findTool(KIND_TOOL[preview.kind])?.hue ?? 292 } as CSSProperties}>
-            <button type="button" className="icon-button preview-close" aria-label="סגור" onClick={() => setPreview(null)}>
+            <button ref={previewCloseRef} type="button" className="icon-button preview-close" aria-label="סגור" onClick={closePreview}>
               <X size={18} />
             </button>
             <WorkThumb work={preview} className="is-large" />

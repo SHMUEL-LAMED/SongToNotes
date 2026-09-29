@@ -19,7 +19,7 @@ import { balanceOf, creditsLabel, referralLink } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { markShared } from "../lib/siteShare";
 import { clearRecentTools, useFavorites, useRecentTools } from "../lib/prefs";
-import { CATEGORY_LABELS, TOOLS, findTool, type ToolCategory, type ToolDefinition } from "../lib/tools";
+import { CATEGORY_LABELS, MENU_TOOLS, findTool, type ToolCategory, type ToolDefinition } from "../lib/tools";
 import { WORKFLOWS } from "../lib/workflows";
 import { KIND_LABELS, KIND_TOOL, describeWork, listWorks, type SavedWork } from "../lib/works";
 import { QuickStart } from "./QuickStart";
@@ -78,7 +78,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return TOOLS.filter((tool) => {
+    return MENU_TOOLS.filter((tool) => {
       if (filter === "favorites" && !favorites.includes(tool.id)) return false;
       if (filter !== "all" && filter !== "favorites" && tool.category !== filter) return false;
       if (!needle) return true;
@@ -87,6 +87,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
   }, [favorites, filter, query]);
 
   const recent = recentTools.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool)).slice(0, 6);
+  // Favourites whose tool was hidden since drop out; a list of only those
+  // used to leave the "your tools" heading over an empty shelf.
+  const favoriteTools = favorites.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool));
   const firstName = user ? profile?.full_name?.split(" ")[0] : null;
 
   const scrollToCatalog = () => document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -102,14 +105,14 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
         <div className="hero-copy">
           <span className="hero-kicker">
-            <Sparkles size={14} /> {firstName ? `${greeting(now)}, ${firstName}` : `${TOOLS.length} כלים · חינם · בלי הרשמה`}
+            <Sparkles size={14} /> {firstName ? `${greeting(now)}, ${firstName}` : `${MENU_TOOLS.length} כלים · חינם · בלי הרשמה`}
           </span>
           <h1>
             הסטודיו המוזיקלי <span className="gradient-text">שלך, בדפדפן.</span>
           </h1>
           <p>
-            תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {TOOLS.length} כלים, ורובם רצים
-            כולם אצלך במכשיר, בלי להעלות את הקובץ.
+            תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {MENU_TOOLS.length} כלים, ורובם רצים
+            אצלך במכשיר, בלי להעלות את הקובץ.
           </p>
           <div className="hero-actions">
             <button type="button" className="primary-button compact" onClick={() => onOpen("notes")}>
@@ -122,11 +125,11 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
           <dl className="hero-stats">
             <div>
               <dt>כלים</dt>
-              <dd>{TOOLS.length}</dd>
+              <dd>{MENU_TOOLS.length}</dd>
             </div>
             <div>
               <dt>כלים בדפדפן בלבד</dt>
-              <dd>{TOOLS.filter((tool) => !tool.server).length}</dd>
+              <dd>{MENU_TOOLS.filter((tool) => !tool.server).length}</dd>
             </div>
             <div>
               <dt>מחיר</dt>
@@ -142,7 +145,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
       <CreditsPromo onOpen={onOpen} />
 
-      {(recent.length > 0 || favorites.length > 0) && (
+      {(recent.length > 0 || favoriteTools.length > 0) && (
         <section className="home-section" aria-labelledby="mine-title">
           <div className="section-head">
             <div>
@@ -156,12 +159,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
             )}
           </div>
           <div className="shelf">
-            {favorites
-              .map(findTool)
-              .filter((tool): tool is ToolDefinition => Boolean(tool))
-              .map((tool) => (
-                <MiniTool key={`fav-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Star size={12} fill="currentColor" />} />
-              ))}
+            {favoriteTools.map((tool) => (
+              <MiniTool key={`fav-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Star size={12} fill="currentColor" />} />
+            ))}
             {recent
               .filter((tool) => !favorites.includes(tool.id))
               .map((tool) => (

@@ -5,11 +5,13 @@ import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import { formatTime } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
+import { useOfferResult } from "../lib/currentFile";
 import { handOffTo } from "../lib/handoff";
 import { MicRecorder, recordingExtension } from "../lib/record";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import {
   VOICE_EFFECTS,
+  VoiceFxCancelled,
   clampIntensity,
   isVoiceEffectId,
   renderVoiceEffect,
@@ -89,15 +91,18 @@ export function VoiceTool() {
     if (!audio) return;
     const key = `${audio.url}|${effect}|${effect === "none" ? 0 : intensity}`;
     let cancelled = false;
-    // The delay debounces the slider and lets the spinner paint before the
-    // synchronous array DSP (pitch shift, vocoder) holds the thread.
+    // Aborting stops the array DSP's workers, so a render the visitor has
+    // already moved on from (a dragged slider, another card) stops using
+    // the CPU instead of finishing unseen.
+    const controller = new AbortController();
+    // The delay debounces the slider.
     const timer = window.setTimeout(() => {
-      renderVoiceEffect(audio.buffer, effect, intensity)
+      renderVoiceEffect(audio.buffer, effect, intensity, controller.signal)
         .then((buffer) => {
           if (!cancelled) setRendered({ key, buffer, error: null });
         })
         .catch((caught: unknown) => {
-          if (cancelled) return;
+          if (cancelled || caught instanceof VoiceFxCancelled) return;
           const reason = caught instanceof Error && caught.message ? ` ${caught.message}` : "";
           setRendered({ key, buffer: null, error: `לא הצלחנו להחיל את האפקט.${reason}` });
         });
@@ -105,6 +110,7 @@ export function VoiceTool() {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      controller.abort();
     };
   }, [audio, effect, intensity]);
 
@@ -126,6 +132,9 @@ export function VoiceTool() {
     const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, "")) || "voice";
     return new File([blob], `${base}-${effect}.wav`, { type: "audio/wav" });
   }, [audio, effect, result]);
+
+  // The changed voice is what goes on to the next tool (a ringtone, say).
+  useOfferResult(effect === "none" ? null : result, `${safeFilename(audio?.file.name.replace(/\.[^/.]+$/, "") ?? "") || "voice"}-${effect}.wav`, () => buildFile()!);
 
   const exportWav = () => {
     const file = buildFile();
@@ -318,7 +327,8 @@ export function VoiceTool() {
             onChange={(event) => setIntensity(Number(event.target.value))}
             aria-label="עוצמת האפקט"
           />
-          <small>{effect === "none" ? "בלי אפקט — שומעים את ההקלטה כמו שהיא." : "עדין משמאל, קיצוני מימין."}</small>
+          {/* The page runs right to left, and so does the slider: its minimum is on the right. */}
+          <small>{effect === "none" ? "בלי אפקט — שומעים את ההקלטה כמו שהיא." : "עדין מימין, קיצוני משמאל."}</small>
         </label>
       </div>
 

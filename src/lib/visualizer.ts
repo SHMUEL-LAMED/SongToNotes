@@ -758,6 +758,15 @@ function paintCover(ctx: CanvasRenderingContext2D, frame: SceneFrame, box: Box) 
   ctx.restore();
 }
 
+/**
+ * Fitted titles, remembered between frames. Fitting a long title measures it
+ * once per character it loses, and the live preview and the recording paint
+ * 30–60 frames a second, which made a long title cost more than the bars.
+ * The key includes the width of a sample string in the current face, so a
+ * fit measured before the web font arrived is not reused after it does.
+ */
+const fitCache = new Map<string, { text: string; size: number }>();
+
 /** Text drawn with the direction its script needs, so Hebrew punctuation lands where it should. */
 function paintText(
   ctx: CanvasRenderingContext2D,
@@ -772,16 +781,25 @@ function paintText(
 ) {
   if (!text.trim()) return;
   ctx.direction = isRtl(text) ? "rtl" : "ltr";
-  const fitted = fitText(
-    text,
-    (candidate, size) => {
-      ctx.font = `${weight} ${size}px ${CANVAS_FONT}`;
-      return ctx.measureText(candidate).width;
-    },
-    maxWidth,
-    maxSize,
-    Math.round(maxSize * 0.55),
-  );
+  ctx.font = `${weight} ${maxSize}px ${CANVAS_FONT}`;
+  const key = `${weight}|${maxSize}|${Math.round(maxWidth)}|${ctx.direction}|${ctx.measureText("אבגABC").width.toFixed(2)}|${text}`;
+  let fitted = fitCache.get(key);
+  if (!fitted) {
+    fitted = fitText(
+      text,
+      (candidate, size) => {
+        ctx.font = `${weight} ${size}px ${CANVAS_FONT}`;
+        return ctx.measureText(candidate).width;
+      },
+      maxWidth,
+      maxSize,
+      Math.round(maxSize * 0.55),
+    );
+    // A handful of entries covers title and artist at every size; typing
+    // makes a new key per keystroke, so the old ones are dropped wholesale.
+    if (fitCache.size > 48) fitCache.clear();
+    fitCache.set(key, fitted);
+  }
   ctx.font = `${weight} ${fitted.size}px ${CANVAS_FONT}`;
   ctx.textAlign = align;
   ctx.fillStyle = color;

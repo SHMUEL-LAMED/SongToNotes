@@ -159,19 +159,34 @@ export function MelodyTool() {
   // Looping is done by laying the tune end to end for a few minutes rather
   // than by the players' own loop, which restarts each player on its own
   // timer and would let the melody and the chords slide apart.
+  // The tempo the players were last loaded at, so a tempo change mid-play
+  // resumes from the same beat rather than the same second.
+  const loadedBpmRef = useRef(bpm);
   const loadPlayers = useCallback(() => {
     const lead = leadRef.current;
     const back = backRef.current;
     if (!lead || !back) return;
     const passes = loop ? Math.max(2, Math.min(64, Math.ceil(240 / length))) : 1;
+    // A change while it plays restarts both players from one position read
+    // off the lead's clock. Letting each reload from its own clock kept any
+    // gap between the two, and at a new tempo the old second is a different
+    // beat — dragging the tempo slider made the tune leap about.
+    const wasPlaying = lead.isPlaying;
+    // Turning the loop off in a later pass carries on within the tune rather than from the top.
+    const position = wasPlaying ? ((lead.currentTime * loadedBpmRef.current) / bpm) % (loop ? Infinity : length) : 0;
+    loadedBpmRef.current = bpm;
+    lead.stop(true);
+    back.stop(true);
     lead.setInstrument(instrument);
     lead.load(repeatNotes(leadNotes, passes, length), 0);
     back.setInstrument(backInstrument);
     back.setVolume(0.55);
     back.load(repeatNotes(backNotes, passes, length), 0);
+    if (!wasPlaying) return;
+    void lead.play(position);
     // Chords switched on mid-play join in where the melody is.
-    if (lead.isPlaying && !back.isPlaying && backNotes.length) void back.play(lead.currentTime);
-  }, [backInstrument, backNotes, instrument, leadNotes, length, loop]);
+    if (backNotes.length) void back.play(position);
+  }, [backInstrument, backNotes, bpm, instrument, leadNotes, length, loop]);
 
   const stop = useCallback(() => {
     leadRef.current?.stop(true);

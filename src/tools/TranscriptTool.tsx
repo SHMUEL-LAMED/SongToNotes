@@ -219,6 +219,8 @@ export function TranscriptTool({ initial = null }: Props) {
   const resultsRef = useRef<HTMLDivElement>(null);
   const runTokenRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  // The windows of the run under way, so a stop knows where to pick up.
+  const planRef = useRef<SampleWindow[] | null>(null);
   const peaks = useMemo(() => (audio ? buildPeaks(audio.buffer) : null), [audio]);
 
   useEffect(() => {
@@ -231,6 +233,17 @@ export function TranscriptTool({ initial = null }: Props) {
 
   // Editing the text is a new transcript to save.
   useEffect(() => resetSave(), [resetSave, text]);
+
+  // Leaving the page stops the upload under way and any AI request: without
+  // this a long recording kept going up, and being charged, in the background.
+  useEffect(
+    () => () => {
+      runTokenRef.current += 1;
+      abortRef.current?.abort();
+      aiAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const busy = stage !== null;
 
@@ -263,10 +276,12 @@ export function TranscriptTool({ initial = null }: Props) {
       const from = trim ? Math.floor(trim.start * SPEECH_RATE) : 0;
       const to = trim ? Math.ceil(trim.end * SPEECH_RATE) : samples.length;
       const windows = plan?.windows ?? splitIntoWindows(samples, SPEECH_RATE, WINDOW_SECONDS, 8, from, to);
+      planRef.current = windows;
       const startIndex = plan?.index ?? 0;
       const totalSeconds = windows.reduce((sum, item) => sum + (item.end - item.start), 0) / SPEECH_RATE;
       let doneSeconds = windows.slice(0, startIndex).reduce((sum, item) => sum + (item.end - item.start), 0) / SPEECH_RATE;
-      let collected: TranscriptSegment[] = plan ? (result?.segments ?? []) : [];
+      // Picking up after a stop keeps what the visitor corrected in the meantime.
+      let collected: TranscriptSegment[] = plan && result ? textToSegments(text, result.segments) : [];
       let modelId = result?.model ?? "server";
       let heardLanguage = language;
       let speed: number | null = null;
@@ -308,7 +323,9 @@ export function TranscriptTool({ initial = null }: Props) {
           const offset = window_.start / SPEECH_RATE;
           collected = [
             ...collected,
-            ...found.segments.map((segment) => ({
+            // The server's pieces are tidied like a saved work's: a missing end
+            // would otherwise print NaN in the subtitles, and a blank piece an empty line.
+            ...normalizeSegments(found.segments).map((segment) => ({
               start: segment.start + offset,
               end: segment.end === null ? null : segment.end + offset,
               text: segment.text,
@@ -344,19 +361,24 @@ export function TranscriptTool({ initial = null }: Props) {
         setFinished({ seconds: (Date.now() - runStartedAt) / 1000, model: modelId });
       }
     },
-    [audio, language, result, setError, stage, trim],
+    [audio, language, result, setError, stage, text, trim],
   );
 
-  const stop = () => {
+  /** Stops the run under way, keeping what it transcribed; nothing to pick up afterwards. */
+  const cancelRun = () => {
     runTokenRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
+    planRef.current = null;
     setStage(null);
-    if (stage) {
-      // The window under way is the one to come back to.
-      const windows = resume?.windows ?? null;
-      if (windows) setResume({ windows, index: stage.index });
-    }
+  };
+
+  const stop = () => {
+    const windows = planRef.current;
+    cancelRun();
+    // The window under way is the one to come back to. (The run itself was
+    // told to stop, so it returns without recording this.)
+    if (stage && windows) setResume({ windows, index: stage.index });
   };
 
   // Within a window, the upload is about half the wait; the listening the rest.
@@ -399,10 +421,15 @@ export function TranscriptTool({ initial = null }: Props) {
     return names.size;
   }, [segments]);
   const wordsPerMinute = result && result.duration > 30 ? Math.round(words / (result.duration / 60)) : null;
+  // A set, since the list asks about every segment on each tick of the player.
   const matching = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return null;
-    return segments.map((segment, index) => (segment.text.toLowerCase().includes(needle) ? index : -1)).filter((index) => index >= 0);
+    const found = new Set<number>();
+    segments.forEach((segment, index) => {
+      if (segment.text.toLowerCase().includes(needle)) found.add(index);
+    });
+    return found;
   }, [query, segments]);
   const currentSegment = segments.findIndex((segment, index) => playTime >= segment.start && (index === segments.length - 1 || playTime < segments[index + 1].start));
 
@@ -653,6 +680,9 @@ export function TranscriptTool({ initial = null }: Props) {
           progress={progress}
           maxBytes={maxBytes}
           onPick={(file) => {
+            // A run on the previous recording would go on uploading it, and
+            // its windows would then be "resumed" on this one.
+            cancelRun();
             setError(null);
             setNotice(null);
             setTrim(null);
@@ -660,10 +690,7 @@ export function TranscriptTool({ initial = null }: Props) {
             void load(file);
           }}
           onClear={() => {
-            runTokenRef.current += 1;
-            abortRef.current?.abort();
-            abortRef.current = null;
-            setStage(null);
+            cancelRun();
             setFinished(null);
             setResume(null);
             setTrim(null);
@@ -853,7 +880,7 @@ export function TranscriptTool({ initial = null }: Props) {
             <label className="transcript-search">
               <Search size={15} />
               <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="חיפוש בתמלול…" aria-label="חיפוש בתמלול" dir="auto" />
-              {matching && <small>{matching.length ? `${matching.length} משפטים` : "לא נמצא"}</small>}
+              {matching && <small>{matching.size ? `${matching.size} משפטים` : "לא נמצא"}</small>}
             </label>
             <button type="button" className="chip-toggle" onClick={() => void labelSpeakers()} disabled={busy || speakersBusy || !segments.length || !user}>
               <Users size={14} /> {speakersBusy ? "מזהה דוברים…" : speakers > 1 ? "זהה דוברים מחדש" : "זהה דוברים"}
@@ -880,7 +907,7 @@ export function TranscriptTool({ initial = null }: Props) {
 
           <ol className="transcript-segments" aria-label="משפטים עם חותמות זמן">
             {segments.map((segment, index) => {
-              if (matching && !matching.includes(index)) return null;
+              if (matching && !matching.has(index)) return null;
               const needle = query.trim();
               const at = needle ? segment.text.toLowerCase().indexOf(needle.toLowerCase()) : -1;
               return (

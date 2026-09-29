@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { PRESETS, STEPS, VOICES, barSeconds, countHits, emptyPattern, foldTail, normalizePattern, randomPattern, stepOffset } from "./drums";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { BeatPlayer, PRESETS, STEPS, VOICES, barSeconds, countHits, defaultMix, emptyPattern, foldTail, normalizePattern, randomPattern, stepOffset } from "./drums";
 
 describe("patterns", () => {
   it("starts empty, one row per voice", () => {
@@ -60,5 +60,80 @@ describe("loop files", () => {
 
   it("never clips past full scale when folding", () => {
     expect(foldTail(new Float32Array([0.9, 0, 0.9]), 2)[0]).toBe(1);
+  });
+});
+
+describe("BeatPlayer", () => {
+  class Param {
+    value = 1;
+    setValueAtTime() {}
+    linearRampToValueAtTime() {}
+    exponentialRampToValueAtTime() {}
+  }
+  class Node {
+    gain = new Param();
+    frequency = new Param();
+    Q = new Param();
+    threshold = new Param();
+    ratio = new Param();
+    type = "";
+    buffer: unknown = null;
+    connect(node: unknown) {
+      return node;
+    }
+    disconnect() {}
+    start() {}
+    stop() {}
+  }
+  const makeContext = () => ({
+    currentTime: 0,
+    sampleRate: 8000,
+    state: "suspended",
+    destination: new Node(),
+    createGain: () => new Node(),
+    createDynamicsCompressor: () => new Node(),
+    createBiquadFilter: () => new Node(),
+    createOscillator: () => new Node(),
+    createBufferSource: () => new Node(),
+    createBuffer: (_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) }),
+    resume: async () => {},
+    close: async () => {},
+  });
+  const stub = (context: ReturnType<typeof makeContext>) => {
+    const timers: (() => void)[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: function AudioContext() {
+        return context;
+      },
+      setInterval: (callback: () => void) => timers.push(callback),
+      clearInterval: () => {},
+      setTimeout: () => 0,
+    });
+    return timers;
+  };
+  afterEach(() => vi.unstubAllGlobals());
+  const settings = { pattern: emptyPattern(), mix: defaultMix(), bpm: 120, swing: 0, volume: 1 };
+
+  it("stays stopped when stopped while the audio was waking up", async () => {
+    stub(makeContext());
+    const player = new BeatPlayer(settings);
+    const starting = player.start();
+    player.stop();
+    expect(await starting).toBe(false);
+    expect(player.isPlaying).toBe(false);
+  });
+
+  it("keeps the playhead queue short even when nothing reads it", async () => {
+    const context = makeContext();
+    const timers = stub(context);
+    const player = new BeatPlayer(settings);
+    expect(await player.start()).toBe(true);
+    for (let second = 0; second < 600; second += 1) {
+      context.currentTime = second / 10;
+      timers.forEach((callback) => callback());
+    }
+    expect((player as unknown as { queue: unknown[] }).queue.length).toBeLessThanOrEqual(64);
+    expect(player.currentStep()).toBeGreaterThanOrEqual(0);
+    player.dispose();
   });
 });
