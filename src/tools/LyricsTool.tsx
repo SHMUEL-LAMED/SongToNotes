@@ -13,7 +13,7 @@ import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
 import { applyLineEdits, buildLines, linesToLrc, linesToText, positionAt, type LyricLine } from "../lib/lyrics";
 import { CANCELLED, transcribeWindow, type SpeechWord } from "../lib/speechApi";
-import { LANGUAGES, languageLabel, segmentsToSrt, splitIntoWindows, type TranscriptSegment } from "../lib/transcript";
+import { LANGUAGES, languageLabel, normalizeSegments, segmentsToSrt, splitIntoWindows, type TranscriptSegment } from "../lib/transcript";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
@@ -100,11 +100,14 @@ export function LyricsTool({ initial = null }: Props) {
           language,
           words: true,
           signal: controller.signal,
-          onUpload: (percent) => setStage({ index, count: windows.length, upload: percent }),
+          onUpload: (percent) => {
+            if (tokenRef.current === token) setStage({ index, count: windows.length, upload: percent });
+          },
         });
         if (tokenRef.current !== token) return;
         const offset = window_.start / RATE;
-        segments.push(...found.segments.map((segment) => ({ start: segment.start + offset, end: segment.end === null ? null : segment.end + offset, text: segment.text })));
+        // Tidied first: a piece without an end would otherwise time its line NaN.
+        segments.push(...normalizeSegments(found.segments).map((segment) => ({ start: segment.start + offset, end: segment.end === null ? null : segment.end + offset, text: segment.text })));
         words.push(...(found.words ?? []).map((word) => ({ ...word, start: word.start + offset, end: word.end + offset })));
       }
       const built = buildLines(segments, words);
@@ -249,6 +252,8 @@ export function LyricsTool({ initial = null }: Props) {
           isLoading={isLoading}
           progress={progress}
           onPick={(file) => {
+            // A run on the previous song would otherwise go on, and land its words on this one.
+            stop();
             setError(null);
             setNotice(null);
             setTrim(null);

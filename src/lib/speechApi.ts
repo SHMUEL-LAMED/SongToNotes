@@ -84,8 +84,15 @@ export async function transcribeWindow(
   sampleRate: number,
   { language, signal, onUpload, words = false }: Options,
 ): Promise<SpeechResult> {
-  const { data } = await (await getSupabase()).auth.getSession();
-  const token = data.session?.access_token;
+  let token: string | undefined;
+  try {
+    const { data } = await (await getSupabase()).auth.getSession();
+    token = data.session?.access_token;
+  } catch {
+    // The account library did not load (offline, a filtered connection): say
+    // so in words, rather than showing the browser's own English error.
+    throw new SpeechError("network", MESSAGES.network);
+  }
   if (!token) throw new SpeechError("signed_out", MESSAGES.signed_out);
   if (signal?.aborted) throw new SpeechError("cancelled", CANCELLED);
 
@@ -110,8 +117,11 @@ export async function transcribeWindow(
         onUpload(Math.round((event.loaded / event.total) * 100));
       }
     };
-    xhr.onerror = () => reject(new SpeechError("network", MESSAGES.network));
-    xhr.ontimeout = () => reject(new SpeechError("network", MESSAGES.network));
+    xhr.onerror = () => {
+      signal?.removeEventListener("abort", abort);
+      reject(new SpeechError("network", MESSAGES.network));
+    };
+    xhr.ontimeout = xhr.onerror;
     xhr.onload = () => {
       signal?.removeEventListener("abort", abort);
       const body = (xhr.response ?? null) as Partial<SpeechResult> & { error?: string; credits?: unknown } | null;

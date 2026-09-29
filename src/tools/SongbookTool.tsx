@@ -95,10 +95,17 @@ export function SongbookTool({ initial = null }: Props) {
     if (!scrolling || scrollMode !== "free") return;
     let frame = 0;
     let last = performance.now();
+    // The position is kept here, not read back from scrollTop: the browser
+    // rounds scrollTop to whole pixels, and at a slow crawl (half a pixel a
+    // frame) adding to it did nothing — the sheet stood still.
+    let position = sheetRef.current?.scrollTop ?? 0;
     const step = (now: number) => {
       const sheet = sheetRef.current;
       if (sheet) {
-        sheet.scrollTop += ((now - last) / 1000) * scrollSpeed;
+        // A hand on the sheet moves the crawl to where it left it.
+        if (Math.abs(sheet.scrollTop - position) > 2) position = sheet.scrollTop;
+        position += ((now - last) / 1000) * scrollSpeed;
+        sheet.scrollTop = position;
         if (sheet.scrollTop + sheet.clientHeight >= sheet.scrollHeight - 1) setScrolling(false);
       }
       last = now;
@@ -203,11 +210,30 @@ export function SongbookTool({ initial = null }: Props) {
     }
   };
 
+  // Read afresh each time the list opens, so a song saved a moment ago is in it.
   const loadSongs = async () => {
-    setShowSongs((value) => !value);
-    if (songs) return;
-    const all = await listWorks(user?.id ?? null).catch(() => []);
-    setSongs(all.filter((item) => item.kind === "song"));
+    const opening = !showSongs;
+    setShowSongs(opening);
+    if (!opening) return;
+    const all = await listWorks(user?.id ?? null).catch(() => null);
+    setSongs(all ? all.filter((item) => item.kind === "song") : (current) => current ?? []);
+  };
+
+  /** Into the editor: the sheet it scrolls is gone, so the scrolling stops. */
+  const edit = () => {
+    setScrolling(false);
+    setEditing(true);
+  };
+
+  /** Prints the sheet, not the editor: from the editor it switches to the sheet first. */
+  const print = () => {
+    setScrolling(false);
+    if (!editing) {
+      window.print();
+      return;
+    }
+    setEditing(false);
+    window.setTimeout(() => window.print(), 150);
   };
 
   const openSong = (song: SavedWork) => {
@@ -220,7 +246,7 @@ export function SongbookTool({ initial = null }: Props) {
     setShowSongs(false);
   };
 
-  const plain = songToText(shown);
+  const plain = useMemo(() => songToText(shown), [shown]);
   const buildFile = () => (body.trim() ? new File([`\uFEFF${title || "שיר"}\n\n${plain}`], `${safeFilename(title || "שיר")}.txt`, { type: "text/plain;charset=utf-8" }) : null);
 
   const copy = async () => {
@@ -284,7 +310,8 @@ export function SongbookTool({ initial = null }: Props) {
         }
         if (view === "edit" || view === "view") {
           if (view === "view" && !body.trim()) return { ok: false, message: "אין טקסט להציג" };
-          setEditing(view === "edit");
+          if (view === "edit") edit();
+          else setEditing(false);
           done.push(view === "edit" ? "מצב עריכה" : "מצב תצוגה");
         }
         return done.length ? { ok: true, message: done.join(", ") } : { ok: false, message: "לא צוין מה לשנות" };
@@ -317,8 +344,7 @@ export function SongbookTool({ initial = null }: Props) {
       },
       "songbook.print": () => {
         if (!body.trim()) return { ok: false, message: "השירון ריק" };
-        setEditing(false);
-        window.setTimeout(() => window.print(), 150);
+        print();
         return { ok: true, message: "חלון ההדפסה נפתח" };
       },
     },
@@ -340,7 +366,7 @@ export function SongbookTool({ initial = null }: Props) {
         <div className="songbook-toolbar">
           <input className="songbook-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="שם השיר" aria-label="שם השיר" dir="auto" />
           <div className="segmented-control" role="group" aria-label="תצוגה">
-            <button type="button" className={editing ? "active" : ""} aria-pressed={editing} onClick={() => setEditing(true)}>
+            <button type="button" className={editing ? "active" : ""} aria-pressed={editing} onClick={edit}>
               עריכה
             </button>
             <button type="button" className={!editing ? "active" : ""} aria-pressed={!editing} onClick={() => setEditing(false)} disabled={!body.trim()}>
@@ -565,7 +591,7 @@ export function SongbookTool({ initial = null }: Props) {
             </div>
           </div>
           <div className="download-buttons">
-            <button type="button" onClick={() => window.print()} disabled={!body.trim()}>
+            <button type="button" onClick={print} disabled={!body.trim()}>
               <Printer size={17} />
               <span>
                 הדפס<small>או שמור כ־PDF</small>

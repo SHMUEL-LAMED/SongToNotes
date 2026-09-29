@@ -26,6 +26,22 @@ describe("synced lyrics", () => {
     expect(edited[1].words).toHaveLength(3);
     expect(edited[1].words[0].start).toBe(2.5);
   });
+  it("gives rows added past the last line times of their own, after it", () => {
+    const lines = buildLines(segments, words);
+    const edited = applyLineEdits(lines, "שלום עולם\nמה נשמע\nשורה חדשה\nועוד אחת");
+    expect(edited.map((line) => line.start)).toEqual([0, 2.5, 4, 7]);
+    expect(positionAt(edited, 5).line).toBe(2);
+    expect(edited[3].words[0]).toEqual({ text: "ועוד", start: 7, end: 8.5 });
+  });
+  it("trims the recogniser's words and skips untimed ones", () => {
+    const lines = buildLines(segments, [
+      { word: " שלום", start: 0.1, end: 0.6 },
+      { word: "  ", start: 0.7, end: 0.8 },
+      { word: "עולם", start: Number.NaN, end: 1 },
+    ]);
+    expect(lines[0].words).toEqual([{ text: "שלום", start: 0.1, end: 0.6 }]);
+    expect(linesToLrc(lines, true)).toContain("[00:00.00]<00:00.10>שלום");
+  });
   it("writes LRC, plain and enhanced", () => {
     const lines = buildLines(segments, words);
     expect(linesToLrc(lines)).toContain("[00:00.00]שלום עולם");
