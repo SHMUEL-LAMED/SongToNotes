@@ -23,7 +23,6 @@ import type { ThemePreference } from "../lib/theme";
 import { CATEGORY_LABELS, CATEGORY_ORDER, TOOLS, findTool, type ToolDefinition } from "../lib/tools";
 import { CreditsPill } from "./CreditsPill";
 import { Logo } from "./Logo";
-import { LanguageMenu } from "./LanguageMenu";
 import { ThemeToggle } from "./ThemeToggle";
 
 type Props = PropsWithChildren<{
@@ -302,7 +301,6 @@ export function AppShell({
             <button type="button" className="icon-button shortcuts-button" onClick={onOpenShortcuts} aria-label="קיצורי מקלדת" title="קיצורי מקלדת (?)">
               <Keyboard size={17} />
             </button>
-            <LanguageMenu />
             <ThemeToggle preference={themePreference} onOpen={onOpenAppearance} />
             <button
               className={`account-button ${account ? "is-current" : ""}`}

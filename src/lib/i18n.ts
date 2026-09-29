@@ -21,8 +21,11 @@ export const LANGUAGES: { id: Lang; label: string; short: string; dir: "rtl" | "
   { id: "en", label: "English", short: "EN", dir: "ltr" },
 ];
 
-/** The languages whose dictionaries are complete enough to offer. */
-export const OFFERED: Lang[] = ["he", "en"];
+/**
+ * The languages offered. The site is Hebrew only for now: the switch is gone
+ * from the page, and a visitor who had picked English is back in Hebrew.
+ */
+export const OFFERED: Lang[] = ["he"];
 
 const LANG_KEY = "musictools.lang.v1";
 const HEBREW = /[֐-׿]/;
@@ -33,21 +36,11 @@ export function currentLang(): Lang {
     const stored = localStorage.getItem(LANG_KEY);
     // A visitor who had picked Yiddish, which is no longer offered, is back in Hebrew.
     if (stored === "en" && OFFERED.includes(stored)) return stored;
+    if (stored) localStorage.removeItem(LANG_KEY);
   } catch {
     // Hebrew, then.
   }
   return "he";
-}
-
-/** Switching reloads the page, so every string starts from its Hebrew source. */
-export function setLang(lang: Lang) {
-  try {
-    localStorage.setItem(LANG_KEY, lang);
-  } catch {
-    // Without storage the choice cannot outlive the reload.
-    return;
-  }
-  window.location.reload();
 }
 
 /** What the language model is asked to answer in, named in Hebrew for the prompt. */
