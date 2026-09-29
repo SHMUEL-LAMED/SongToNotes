@@ -210,13 +210,6 @@ export function AppShell({
             </section>
           ))}
         </nav>
-
-        <div className="sidebar-foot">
-          <p className="sidebar-note">
-            <LockKeyhole size={14} />
-            <span>רוב הכלים עובדים כולם בדפדפן, חינם. כלים שנעזרים בשרת משתמשים בקרדיטים — וכל יום מקבלים חדשים.</span>
-          </p>
-        </div>
       </aside>
       <div className="sidebar-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />
 
