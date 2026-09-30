@@ -6,9 +6,12 @@ export type SeparationProgress = {
   progress: number;
   message: string;
 };
+export type StemName = "vocals" | "drums" | "bass" | "other";
 export type SeparatedStems = {
   vocals: [Float32Array, Float32Array];
   instrumental: [Float32Array, Float32Array];
+  /** Every part the network gives, for the multi-track mixer. */
+  parts: Record<StemName, [Float32Array, Float32Array]>;
   sampleRate: number;
 };
 
@@ -526,6 +529,12 @@ export async function separateStems(
     return {
       vocals: [result.vocals.left, result.vocals.right],
       instrumental: sumInstrumental(result),
+      parts: {
+        vocals: [result.vocals.left, result.vocals.right],
+        drums: [result.drums.left, result.drums.right],
+        bass: [result.bass.left, result.bass.right],
+        other: [result.other.left, result.other.right],
+      },
       sampleRate: MODEL_SAMPLE_RATE,
     };
   } finally {

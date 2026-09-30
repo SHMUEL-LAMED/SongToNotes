@@ -2570,5 +2570,12 @@
  "הסרטון לא נפתח כאן": "The video didn't open here",
  "ברשת מסוננת (כמו נטפרי) ייתכן שהסרטון עוד לא אושר, ובדף שלו ב־YouTube אפשר לבקש לאשר אותו.": "On a filtered connection (such as NetFree) the video may not be approved yet; on its YouTube page you can ask for it to be approved.",
  "לצפייה ב־YouTube": "Watch on YouTube",
- "לנסות שוב": "Try again"
+ "לנסות שוב": "Try again",
+ "ההפרדה הושלמה כאן בדפדפן: 4 ערוצים.": "Separated here in the browser: 4 stems.",
+ "ההפרדה הושלמה כאן בדפדפן, בחינם: 4 ערוצים.": "Separated here in the browser, for free: 4 stems.",
+ "ההפרדה לא החזירה ערוצים.": "The separation returned no stems.",
+ "רץ כאן בדפדפן, בחינם: בפעם הראשונה יורדת רשת של כ־180MB, וההפרדה לוקחת כמה דקות.": "Runs here in the browser, for free: the first time a network of about 180MB downloads, and the separation takes a few minutes.",
+ "בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות.": "On the server, with the most accurate model. Takes two or three minutes.",
+ "שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו.": "Vocals, drums, bass and the rest — each on its own track.",
+ "הדפדפן הזה לא יודע לעבד שמע.": "This browser can't process audio."
 }

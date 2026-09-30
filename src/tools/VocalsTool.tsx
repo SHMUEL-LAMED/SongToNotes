@@ -11,6 +11,7 @@ import { ShareButton } from "../components/ShareButton";
 import { Transport } from "../components/Transport";
 import {
   describeSeparationError,
+  SeparationError,
   prefetchSeparationModel,
   separateStems,
   type SeparationProgress,
@@ -306,7 +307,11 @@ export function VocalsTool({ initial = null }: Props) {
     }
   }, [audio, context, keepAi, target]);
 
-  /** Pro mode: every stem the server can give, into faders. */
+  /**
+   * Pro mode: every stem, into faders. The server's model when it is set up
+   * and the visitor can use it; otherwise the same four-part network the
+   * simple mode uses, here in the browser — so the button always works.
+   */
   const runStems = useCallback(async () => {
     if (!audio) return;
     aiAbortRef.current?.abort();
@@ -315,27 +320,60 @@ export function VocalsTool({ initial = null }: Props) {
     setAiBusy(true);
     setAiProgress(0);
     setAiStatus("מכין הפרדה לערוצים…");
-    try {
-      const availability = await separationAvailability(controller.signal);
-      if (!availability.configured) {
-        setServerMissing(true);
-        setAiStatus("הפרדה לערוצים נפרדים דורשת את השרת, שעדיין לא הופעל. במצב פשוט אפשר להפריד בדפדפן.");
-        return;
-      }
-      const result = await separateOnServer(
-        audio.file,
-        decodeAudioFile,
-        (message, percent) => {
+    const inBrowser = async (): Promise<Record<string, AudioBuffer>> => {
+      if (!context) throw new SeparationError("הדפדפן הזה לא יודע לעבד שמע.");
+      const local = await separateStems(
+        audio.buffer,
+        (progress: SeparationProgress) => {
           if (controller.signal.aborted) return;
-          setAiStatus(message);
-          if (percent !== null) setAiProgress(percent);
+          setAiProgress(Math.round(progress.progress * 100));
+          setAiStatus(progress.message);
         },
+        undefined,
         controller.signal,
-        "stems",
       );
+      return Object.fromEntries(Object.entries(local.parts).map(([name, channels]) => [name, channelsToBuffer(context, channels, local.sampleRate)]));
+    };
+    try {
+      let separated: Record<string, AudioBuffer>;
+      let done: string;
+      const availability = user
+        ? await separationAvailability(controller.signal).catch(() => ({ configured: false }))
+        : { configured: false };
       if (controller.signal.aborted) return;
-      const names = Object.keys(result.stems).filter((name) => name !== "no_vocals");
-      if (!names.length) throw new AiError("provider_error", "השרת לא החזיר ערוצים.");
+      if (!availability.configured) {
+        // Only an answer from the server says it is off; a visitor who is
+        // signed out never asked, and the simple mode should still try it.
+        if (user) setServerMissing(true);
+        separated = await inBrowser();
+        done = "ההפרדה הושלמה כאן בדפדפן: 4 ערוצים.";
+      } else {
+        try {
+          const result = await separateOnServer(
+            audio.file,
+            decodeAudioFile,
+            (message, percent) => {
+              if (controller.signal.aborted) return;
+              setAiStatus(message);
+              if (percent !== null) setAiProgress(percent);
+            },
+            controller.signal,
+            "stems",
+          );
+          separated = result.stems;
+          done = `ההפרדה הושלמה: ${Object.keys(separated).filter((name) => name !== "no_vocals").length} ערוצים. נוצלו היום ${result.used} מתוך ${result.limit} שירים.`;
+        } catch (caught) {
+          // No key on the server after all, or no credits left: the browser does it for free.
+          if (!(caught instanceof AiError && (caught.code === "not_configured" || caught.code === "credits"))) throw caught;
+          if (caught.code === "credits") setOutOfCredits(true);
+          else setServerMissing(true);
+          separated = await inBrowser();
+          done = "ההפרדה הושלמה כאן בדפדפן, בחינם: 4 ערוצים.";
+        }
+      }
+      if (controller.signal.aborted) return;
+      const names = Object.keys(separated).filter((name) => name !== "no_vocals");
+      if (!names.length) throw new AiError("provider_error", "ההפרדה לא החזירה ערוצים.");
       const order = ["vocals", "drums", "bass", "guitar", "piano", "other"];
       names.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
       const saved = savedStemsRef.current;
@@ -345,7 +383,7 @@ export function VocalsTool({ initial = null }: Props) {
         tracks: names.map((name) => ({
           id: name,
           name: STEM_NAMES[name] ?? name,
-          buffer: result.stems[name],
+          buffer: separated[name],
           gain: saved?.[name]?.gain ?? 1,
           pan: saved?.[name]?.pan ?? 0,
           muted: saved?.[name]?.muted ?? false,
@@ -355,17 +393,17 @@ export function VocalsTool({ initial = null }: Props) {
         })),
       });
       setAiProgress(100);
-      setAiStatus(`ההפרדה הושלמה: ${names.length} ערוצים. נוצלו היום ${result.used} מתוך ${result.limit} שירים.`);
+      setAiStatus(done);
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setAiStatus(caught instanceof Error ? caught.message : "ההפרדה נכשלה.");
+      setAiStatus(caught instanceof AiError ? caught.message : describeSeparationError(caught));
     } finally {
       if (aiAbortRef.current === controller) {
         aiAbortRef.current = null;
         setAiBusy(false);
       }
     }
-  }, [audio]);
+  }, [audio, context, user]);
 
   /** Silences the stem mix, and with `drop`, forgets it: the song it came from is gone. */
   const stopStems = (drop = false) => {
@@ -779,7 +817,12 @@ export function VocalsTool({ initial = null }: Props) {
                         <h3>
                           <Sparkles size={16} /> הפרדה לערוצים נפרדים
                         </h3>
-                        <p>שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו, בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות.{!user ? " צריך להתחבר לחשבון." : ""}</p>
+                        <p>
+                          שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו.{" "}
+                          {serverMissing === true || !user
+                            ? "רץ כאן בדפדפן, בחינם: בפעם הראשונה יורדת רשת של כ־180MB, וההפרדה לוקחת כמה דקות."
+                            : "בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות."}
+                        </p>
                       </div>
                     </div>
                     <button className="primary-button compact" type="button" onClick={() => void runStems()} disabled={aiBusy}>
