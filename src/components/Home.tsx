@@ -13,7 +13,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { balanceOf, creditsLabel, referralLink } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
@@ -46,6 +46,39 @@ const FILTERS: { id: ToolCategory | "all" | "favorites"; label: string }[] = [
 /** The spectrum behind the hero: a fixed shape, not live audio. */
 const SPECTRUM = [22, 38, 30, 56, 44, 72, 60, 88, 70, 96, 82, 64, 90, 74, 52, 68, 46, 58, 36, 48, 28, 40, 24, 32];
 
+/** What the hero's headline turns a song into, one word at a time. */
+const WORDS = ["לתווים.", "לאקורדים.", "לקריוקי.", "לצלצול.", "ל־MIDI.", "לשירון."];
+
+/** Notes drifting up through the hero; fixed spots, so every visit looks the same. */
+const GLYPHS: { char: string; style: CSSProperties }[] = [
+  { char: "♪", style: { "--x": "8%", "--s": "26px", "--t": "13s", "--d": "-2s" } as CSSProperties },
+  { char: "♫", style: { "--x": "22%", "--s": "34px", "--t": "17s", "--d": "-9s" } as CSSProperties },
+  { char: "♩", style: { "--x": "41%", "--s": "22px", "--t": "15s", "--d": "-5s" } as CSSProperties },
+  { char: "♬", style: { "--x": "57%", "--s": "30px", "--t": "19s", "--d": "-12s" } as CSSProperties },
+  { char: "♪", style: { "--x": "73%", "--s": "20px", "--t": "14s", "--d": "-7s" } as CSSProperties },
+  { char: "𝄞", style: { "--x": "88%", "--s": "40px", "--t": "21s", "--d": "-15s" } as CSSProperties },
+];
+
+/** Steps through `count` values every `ms`; stays on the first for reduced motion. */
+function useRotatingIndex(count: number, ms: number) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => setIndex((value) => (value + 1) % count), ms);
+    return () => window.clearInterval(timer);
+  }, [count, ms]);
+  return index;
+}
+
+/** The card under the pointer lights up where the pointer is. */
+function trackSpotlight(event: PointerEvent<HTMLElement>) {
+  const card = (event.target as HTMLElement).closest<HTMLElement>(".tool-card");
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  card.style.setProperty("--mx", `${event.clientX - rect.left}px`);
+  card.style.setProperty("--my", `${event.clientY - rect.top}px`);
+}
+
 function greeting(now: Date) {
   const hour = now.getHours();
   if (hour < 5) return "לילה טוב";
@@ -63,6 +96,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
   const [filter, setFilter] = useState<ToolCategory | "all" | "favorites">("all");
   const [works, setWorks] = useState<SavedWork[]>([]);
   const [now] = useState(() => new Date());
+  const word = useRotatingIndex(WORDS.length, 2400);
 
   useEffect(() => {
     let alive = true;
@@ -97,26 +131,46 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
   return (
     <div className="home">
       <section className="hub-hero">
-        <div className="hero-spectrum" aria-hidden="true">
-          {SPECTRUM.map((height, index) => (
-            <i key={index} style={{ "--h": `${height}%`, "--d": `${index * -0.13}s` } as CSSProperties} />
+        <div className="hero-stage" aria-hidden="true">
+          <span className="hero-aurora is-a" />
+          <span className="hero-aurora is-b" />
+          <span className="hero-aurora is-c" />
+          <span className="hero-floor" />
+          <div className="hero-spectrum">
+            {SPECTRUM.map((height, index) => (
+              <i key={index} style={{ "--h": `${height}%`, "--d": `${index * -0.13}s` } as CSSProperties} />
+            ))}
+          </div>
+          {GLYPHS.map((glyph, index) => (
+            <span key={index} className="hero-glyph" style={glyph.style}>
+              {glyph.char}
+            </span>
           ))}
         </div>
 
         <div className="hero-copy">
           <span className="hero-kicker">
-            <Sparkles size={14} /> {firstName ? `${greeting(now)}, ${firstName}` : `${MENU_TOOLS.length} כלים · חינם · בלי הרשמה`}
+            <span className="hero-kicker-dot" />
+            {firstName ? `${greeting(now)}, ${firstName}` : "הסטודיו המוזיקלי שלך, בדפדפן"}
           </span>
           <h1>
-            הסטודיו המוזיקלי <span className="gradient-text">שלך, בדפדפן.</span>
+            <span className="sr-only">הפכו כל שיר לתווים, לאקורדים, לקריוקי, לצלצול ועוד</span>
+            <span aria-hidden="true" className="hero-line">
+              הפכו כל שיר
+            </span>
+            <span aria-hidden="true" className="hero-line hero-rotator">
+              <span key={word} className="hero-word">
+                {WORDS[word]}
+              </span>
+            </span>
           </h1>
           <p>
             תווים מכל שיר, קריוקי, אקורדים, צלצולים, מכונת תופים, טיונר ועוד — {MENU_TOOLS.length} כלים, ורובם רצים
             אצלך במכשיר, בלי להעלות את הקובץ.
           </p>
           <div className="hero-actions">
-            <button type="button" className="primary-button compact" onClick={() => onOpen("notes")}>
-              <Wand2 size={17} /> הפכו שיר לתווים
+            <button type="button" className="primary-button compact hero-cta" onClick={() => onOpen("notes")}>
+              <Wand2 size={18} /> הפכו שיר לתווים
             </button>
             <button type="button" className="secondary-button" onClick={scrollToCatalog}>
               לכל הכלים <ArrowLeft size={16} />
@@ -139,9 +193,26 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
         </div>
 
         <div className="hero-panel">
-          <QuickStart disabledTools={disabledTools} />
+          <span className="hero-orbit is-bpm" aria-hidden="true">
+            <span dir="ltr">
+              <b>♩</b> 120 BPM
+            </span>
+          </span>
+          <span className="hero-orbit is-chords" aria-hidden="true">
+            <span dir="ltr">Am · F · C · G</span>
+          </span>
+          <span className="hero-orbit is-tune" aria-hidden="true">
+            <span dir="ltr">
+              <b>A4</b> 440Hz
+            </span>
+          </span>
+          <div className="hero-panel-ring">
+            <QuickStart disabledTools={disabledTools} />
+          </div>
         </div>
       </section>
+
+      <ToolMarquee onOpen={onOpen} disabledTools={disabledTools} />
 
       <CreditsPromo onOpen={onOpen} />
 
@@ -211,6 +282,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
       <section className="home-section" aria-labelledby="flows-title">
         <div className="section-head">
           <div>
+            <span className="section-eyebrow">מסלולים</span>
             <h2 id="flows-title">מסלולי עבודה</h2>
             <p>כמה כלים ברצף למשימה אחת. כל שלב פותח את הכלי שלו.</p>
           </div>
@@ -252,6 +324,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
       <section className="home-section" id="catalog" aria-labelledby="catalog-title">
         <div className="section-head">
           <div>
+            <span className="section-eyebrow">הקטלוג</span>
             <h2 id="catalog-title">כל הכלים</h2>
             <p>סמנו ☆ כדי להצמיד כלי לתפריט ולראש הדף.</p>
           </div>
@@ -282,7 +355,7 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
           </div>
         </div>
 
-        <div className="tool-grid">
+        <div className="tool-grid" onPointerMove={trackSpotlight}>
           {visible.map((tool, index) => {
             const Icon = tool.icon;
             const off = disabledTools.includes(tool.id);
@@ -421,6 +494,48 @@ function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
           {user ? "לדף הקרדיטים" : "איך זה עובד"} <ArrowLeft size={15} />
         </button>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Two bands of tools sliding past under the hero. Each band is its list
+ * twice over so the loop has no seam; the copy is hidden from readers and
+ * the keyboard, which meet every tool once.
+ */
+function ToolMarquee({ onOpen, disabledTools }: { onOpen: (id: string) => void; disabledTools: string[] }) {
+  const tools = MENU_TOOLS.filter((tool) => !disabledTools.includes(tool.id));
+  const half = Math.ceil(tools.length / 2);
+  const rows = [tools.slice(0, half), tools.slice(half)].filter((row) => row.length > 0);
+  return (
+    <section className="tool-marquee" aria-label="הכלים באתר">
+      {rows.map((row, rowIndex) => (
+        <div key={rowIndex} className={`marquee-row ${rowIndex % 2 ? "is-reverse" : ""}`}>
+          <div className="marquee-track">
+            {[0, 1].map((copy) =>
+              row.map((tool) => {
+                const Icon = tool.icon;
+                return (
+                  <button
+                    key={`${copy}-${tool.id}`}
+                    type="button"
+                    className="marquee-chip"
+                    style={{ "--accent-hue": tool.hue } as CSSProperties}
+                    onClick={() => onOpen(tool.id)}
+                    aria-hidden={copy === 1 || undefined}
+                    tabIndex={copy === 1 ? -1 : undefined}
+                  >
+                    <span className="marquee-chip-icon">
+                      <Icon size={15} />
+                    </span>
+                    {tool.title}
+                  </button>
+                );
+              }),
+            )}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
