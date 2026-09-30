@@ -1,7 +1,8 @@
 /* ==========================================================================
    The home page
-   A hero with the quick start beside it, the visitor's own tools and work,
-   the guided routes, and the full catalogue.
+   A hero with the quick start beside it, and under it the night going on:
+   the visitor's own tools and work, the catalogue in three zones, the
+   credits, the guided routes and the promises, joined by beams of light.
    ========================================================================== */
 
 .home {
@@ -486,165 +487,8 @@
 .quick-action-go { flex: none; color: var(--text-muted); transition: transform 0.2s var(--ease); }
 .quick-action:hover .quick-action-go { transform: translateX(-3px); color: var(--accent-text); }
 
-/* ---- sections ---- */
+/* ---- the search field: the catalogue's, the drawer's and the personal area's ---- */
 
-.home-section { display: flex; flex-direction: column; gap: 18px; animation: rise 0.55s var(--ease) both; }
-.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-.section-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-  font-size: 12.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.section-eyebrow::before {
-  content: "";
-  width: 28px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--brand-gradient);
-}
-.section-head h2 { margin: 0; font-size: clamp(26px, 3.4vw, 40px); font-weight: 900; letter-spacing: -0.045em; line-height: 1.05; }
-.section-head p { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
-
-/* ---- the visitor's own tools ---- */
-
-.shelf {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 10px;
-}
-.mini-tool {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  text-align: start;
-  cursor: pointer;
-  box-shadow: var(--shadow-xs);
-  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-.mini-tool:hover { border-color: var(--accent-line); transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.mini-tool-icon {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: var(--on-accent);
-  background: var(--accent-grad);
-}
-.mini-tool-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.mini-tool-text b { font-size: 14.5px; }
-.mini-tool-text small { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-tool-mark { position: absolute; top: 8px; inset-inline-end: 10px; color: var(--text-muted); }
-.mini-tool-mark svg[fill="currentColor"] { color: var(--warning); }
-
-.recent-works { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.recent-work {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  overflow: hidden;
-  text-align: start;
-  cursor: pointer;
-  box-shadow: var(--shadow-xs);
-  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-.recent-work:hover { border-color: var(--accent-line); transform: translateY(-3px); box-shadow: var(--shadow-md); }
-.recent-work-text { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 14px; min-width: 0; }
-.recent-work-text b { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-work-text small { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ---- guided routes ---- */
-
-.flow-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-.flow-card {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background: radial-gradient(110% 120% at 100% 0%, var(--accent-tint), transparent 60%), var(--surface);
-  box-shadow: var(--shadow-xs);
-  animation: rise 0.5s var(--ease) both;
-  animation-delay: var(--reveal, 0ms);
-  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), border-color 0.3s var(--ease);
-}
-.flow-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--accent-grad);
-  opacity: 0.85;
-}
-.flow-card:hover { transform: translateY(-4px); border-color: var(--accent-line); box-shadow: var(--shadow-md), 0 18px 50px -20px var(--accent-ring); }
-.flow-card h3 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
-.flow-card > p { margin: 0; color: var(--text-muted); font-size: 13.5px; line-height: 1.6; }
-.flow-steps {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  counter-reset: step;
-}
-.flow-steps li { display: flex; align-items: center; gap: 6px; }
-.flow-steps li + li::before {
-  content: "";
-  width: 16px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(to left, var(--line-strong), var(--accent));
-}
-.flow-steps button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 11px 5px 6px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: var(--surface-solid);
-  cursor: pointer;
-  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease);
-}
-.flow-steps button:hover { border-color: var(--accent); transform: translateY(-1px); }
-.flow-step-icon {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--on-accent);
-  background: var(--accent-grad);
-}
-.flow-step-text { display: flex; flex-direction: column; line-height: 1.15; text-align: start; }
-.flow-step-text small { font-size: 10px; color: var(--text-muted); font-weight: 600; }
-.flow-step-text b { font-size: 12.5px; }
-
-/* ---- the catalogue ---- */
-
-.hub-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .hub-search {
   flex: 1 1 280px;
   display: flex;
@@ -664,121 +508,711 @@
 .hub-search input::-webkit-search-cancel-button { filter: grayscale(1); }
 .quick-search { height: 44px; }
 
-.hub-filters {
+/* ---- below the hero ----
+   The night stage flows on down the page: soft aurora light behind glass,
+   and a beam falling from each section onto the head of the next. The
+   light theme keeps the same forms, washed bright and airy — all but the
+   flagship's tile and the promises, which are pieces of the hero's night
+   in both themes. */
+
+.aura {
+  --glass: rgba(255, 255, 255, 0.56);
+  --glass-strong: rgba(255, 255, 255, 0.84);
+  --glass-line: rgba(52, 36, 110, 0.1);
+  --glass-rim: rgba(255, 255, 255, 0.95);
+  --glass-shadow: 0 1px 2px rgba(40, 28, 90, 0.04), 0 30px 60px -36px oklch(0.45 0.14 292 / 0.35);
+  --tile: rgba(255, 255, 255, 0.72);
+  --tile-shadow: 0 1px 2px rgba(40, 28, 90, 0.05), 0 12px 28px -18px oklch(0.45 0.14 292 / 0.3);
+  /* The page's muted grey, a shade stronger: the aurora's pools and the
+     zones' glows under the small print would take it below 4.5:1. */
+  --text-muted: #625f6d;
+  --beam-a: oklch(0.64 0.21 292);
+  --beam-b: oklch(0.68 0.21 345);
+  --pool: oklch(0.82 0.11 320 / 0.42);
+  --glow-1: oklch(0.83 0.11 292 / 0.42);
+  --glow-2: oklch(0.86 0.09 345 / 0.36);
+  --glow-3: oklch(0.88 0.08 200 / 0.4);
+  --glow-4: oklch(0.9 0.09 70 / 0.42);
+  /* The foot of the big headings: ink fading into the brand's violet, as the hero's figures fade to lilac. */
+  --head-fade: oklch(0.42 0.17 300);
+  --numeral: linear-gradient(100deg, var(--brand-3), var(--brand-2) 45%, var(--brand-1));
+  --flow-gap: clamp(88px, 10vw, 136px);
+
+  position: relative;
+  isolation: isolate;
   display: flex;
-  gap: 3px;
-  padding: 3px;
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--flow-gap);
+  min-width: 0;
+  padding-top: 24px;
 }
-.hub-filters button {
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: var(--text-muted);
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.18s var(--ease), background 0.18s var(--ease);
+:root[data-theme="dark"] .aura {
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-strong: rgba(24, 20, 34, 0.82);
+  --glass-line: rgba(255, 255, 255, 0.08);
+  --glass-rim: rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 34px 80px -40px rgba(0, 0, 0, 0.85);
+  --tile: rgba(255, 255, 255, 0.035);
+  --tile-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --text-muted: #8a889a;
+  --beam-a: oklch(0.72 0.2 292);
+  --beam-b: oklch(0.75 0.2 345);
+  --pool: oklch(0.58 0.22 320 / 0.2);
+  --glow-1: oklch(0.5 0.2 292 / 0.2);
+  --glow-2: oklch(0.52 0.2 345 / 0.13);
+  --glow-3: oklch(0.55 0.13 205 / 0.12);
+  --glow-4: oklch(0.62 0.15 60 / 0.11);
+  --head-fade: #b9b2d6;
 }
-.hub-filters button:hover { color: var(--text); }
-.hub-filters button.active { background: var(--surface-solid); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
+/* Worked out where each zone sets its hue: a custom property resolves var() where it is declared. */
+.aura-zone { --zone-glow: oklch(0.86 0.1 var(--accent-hue) / 0.5); }
+:root[data-theme="dark"] .aura-zone { --zone-glow: oklch(0.6 0.2 var(--accent-hue) / 0.2); }
 
-.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); grid-auto-flow: dense; gap: 14px; }
+/* The hero's night, carried below it: the stage's own surface tokens (as in .hub-hero). */
+.aura .tool-card.is-flagship,
+.aura-pledge {
+  --surface-sunken: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --glass-line: rgba(255, 255, 255, 0.1);
+  --glass-rim: rgba(255, 255, 255, 0.08);
+  --text: #f7f5ff;
+  --text-soft: #cdc8df;
+  --text-muted: #948fab;
+  --warning: oklch(0.83 0.14 80);
+  --stage: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0c0a14 58%, #06050a 100%);
+  color-scheme: dark;
+  color: var(--text);
+}
 
-.tool-card {
+/* The page's column, measured, so the promises can run to its edges (see .aura-pledge). */
+.page-content:has(> .home) { container-type: inline-size; }
+
+/* The aurora: gradients that fade out inside the column, so nothing spills past it. */
+.aura::before {
+  content: "";
+  position: absolute;
+  inset: -40px 0 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(50% 460px at 50% 0, var(--glow-1), transparent 72%),
+    radial-gradient(26% 560px at 24% 20%, var(--glow-2), transparent 72%),
+    radial-gradient(26% 640px at 76% 40%, var(--glow-3), transparent 72%),
+    radial-gradient(28% 560px at 26% 62%, var(--glow-4), transparent 72%),
+    radial-gradient(40% 520px at 60% 84%, var(--glow-1), transparent 72%);
+}
+
+/* Jumped to (the hero's "all tools"), a section stops clear of the sticky bar,
+   its label in sight: the page's scroll padding (base.css) plus this. */
+.aura-section { position: relative; display: flex; flex-direction: column; gap: 28px; min-width: 0; scroll-margin-top: 4px; }
+/* Under the dock the catalogue comes up closer: the tools are what most visitors are here for. */
+.aura-dock + .aura-section { --beam-gap: 64px; margin-top: calc(64px - var(--flow-gap)); }
+
+/* ---- a section's head, and the beam that falls onto it ---- */
+
+.aura-head {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px 18px 16px;
-  min-height: 236px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+/* A pool of light where the beam lands. */
+.aura-head::before {
+  content: "";
+  position: absolute;
+  top: -70px;
+  left: 50%;
+  z-index: -1;
+  width: min(620px, 100%);
+  height: 260px;
+  translate: -50% 0;
+  background: radial-gradient(closest-side, var(--pool), transparent);
+  pointer-events: none;
+}
+.aura-head h2 {
+  margin: 0;
+  padding-bottom: 0.06em;
+  font-size: clamp(34px, 4.8vw, 58px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+  background: linear-gradient(180deg, var(--text) 38%, var(--head-fade));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.aura-head p { margin: 0; max-width: 52ch; color: var(--text-muted); font-size: 15px; line-height: 1.6; }
+
+.aura-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 15px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-line);
+  background: var(--glass-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 5px color-mix(in oklab, var(--beam-b) 9%, transparent),
+    0 12px 32px -12px color-mix(in oklab, var(--beam-b) 70%, transparent);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+.aura-eyebrow-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--beam-a), var(--beam-b));
+}
+/* Its pulse, as a ring that grows and fades: a transform, not a repainted shadow. */
+.aura-eyebrow-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--beam-b);
+  opacity: 0;
+  animation: beam-dot 2.4s ease-out infinite;
+}
+@keyframes beam-dot {
+  from { transform: scale(1); opacity: 0.55; }
+  to { transform: scale(3.2); opacity: 0; }
+}
+
+/* Centred, so it is placed physically: the same in both directions. The
+   line is always there; a brighter one over it is what lights up. */
+.aura-beam {
+  --beam-h: calc(var(--beam-gap, var(--flow-gap)) - 16px);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 4px);
+  width: 2px;
+  height: var(--beam-h);
+  translate: -50% 0;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--beam-a) 40%, transparent) 50%,
+    color-mix(in oklab, var(--beam-b) 55%, transparent)
+  );
+  pointer-events: none;
+  view-timeline: --beam block;
+}
+.aura > .aura-section:first-child .aura-beam { --beam-h: 56px; }
+.aura-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, transparent, var(--beam-a) 45%, var(--beam-b));
+  box-shadow: 0 0 16px 1px color-mix(in oklab, var(--beam-b) 55%, transparent);
+  transform-origin: 50% 0;
+}
+/* A drop of light running down it. */
+.aura-beam::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 4px;
+  height: 34px;
+  margin-left: -2px;
+  border-radius: 4px;
+  background: linear-gradient(to bottom, transparent, #fff);
+  box-shadow: 0 0 12px 2px var(--beam-b);
+  opacity: 0;
+  animation: beam-fall 3.6s cubic-bezier(0.5, 0, 0.7, 1) infinite;
+}
+@keyframes beam-fall {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(calc(var(--beam-h) - 34px)); opacity: 0; }
+}
+/* Where scroll can drive an animation, the bright line draws itself down as the beam comes into view. */
+@supports (animation-timeline: view()) {
+  .aura-beam::before {
+    animation: beam-draw linear both;
+    animation-timeline: --beam;
+    animation-range: entry 0% cover 60%;
+  }
+  @keyframes beam-draw {
+    from { transform: scaleY(0); }
+    to { transform: none; }
+  }
+}
+
+/* Out of sight (useIdleOffscreen), the endless animations wait where they are. */
+[data-idle] .aura-beam::after,
+[data-idle] .aura-eyebrow-dot::after,
+[data-idle] .aura-flow-steps::after,
+[data-idle] .staff-note,
+[data-idle] .staff-playhead,
+[data-idle] .tool-card-chip { animation-play-state: paused; }
+
+/* ---- the dock: the visitor's own tools and work ---- */
+
+/* Laid out by its own width, not the screen's: beside the sidebar a wide
+   screen can leave it as narrow as a tablet's. */
+.aura-dock {
+  container: dock / inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-radius: 28px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+}
+.aura-dock.is-split { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.aura-dock-pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px 20px; }
+.aura-dock-pane + .aura-dock-pane { border-inline-start: 1px solid var(--glass-line); }
+/* Too narrow for the two side by side, the work goes under the tools. */
+@container dock (max-width: 980px) {
+  .aura-dock-pane { grid-column: 1 / -1; }
+  .aura-dock-pane + .aura-dock-pane { border-inline-start: 0; border-top: 1px solid var(--glass-line); }
+}
+/* One kind of content across the whole panel: its head beside it, rather than over a mostly empty slab. */
+@container dock (min-width: 860px) {
+  .aura-dock:not(.is-split) .aura-dock-pane { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 32px; }
+  .aura-dock:not(.is-split) .aura-dock-head { flex: 0 1 300px; flex-wrap: wrap; }
+  .aura-dock:not(.is-split) .aura-dock-pane > :not(.aura-dock-head) { flex: 1 1 420px; }
+}
+.aura-dock-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.aura-dock-head h2 { margin: 0; font-size: 19px; font-weight: 900; letter-spacing: -0.03em; }
+/* Focus lands on it when the history is cleared (see Dock). */
+.aura-dock-head h2:focus { outline-offset: 4px; }
+.aura-dock-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; text-wrap: pretty; }
+.aura-dock-head .ghost-button { flex: none; min-height: 36px; font-size: 12.5px; }
+
+/* The tool opened last: a card of its own, in its colour. */
+.aura-last {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  padding-inline-end: 14px;
+  border-radius: 22px;
+  border: 1px solid var(--accent-line);
+  background:
+    radial-gradient(90% 140% at 50% 0%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 70%),
+    var(--tile);
+  box-shadow: inset 0 1px 0 var(--glass-rim), 0 18px 40px -26px var(--accent);
+}
+.aura-last-icon {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 19px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 14%, transparent), var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.aura-last.is-off { border-color: var(--line-strong); box-shadow: inset 0 1px 0 var(--glass-rim); }
+.aura-last.is-off :is(.aura-last-icon, .aura-last-text) { opacity: 0.55; filter: grayscale(0.6); }
+.aura-last-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.aura-last-text small { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 11.5px; font-weight: 700; }
+.aura-last-text b { font-size: 19px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.2; }
+.aura-last-text span { overflow: hidden; color: var(--accent-text); font-size: 12.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.aura .aura-last-go { flex: none; min-height: 44px; border-radius: 14px; background: var(--accent-grad); }
+.aura .aura-last-go:disabled { background: var(--surface-sunken); box-shadow: none; color: var(--text-muted); cursor: not-allowed; }
+
+/* The dashed line between the shelves sits in the gap before the second, so
+   when that one wraps to a line of its own the line falls past the start
+   edge and is clipped away (sideways only: the icons' shadows stay whole). */
+.aura-dock-shelf { display: flex; flex-wrap: wrap; gap: 12px 32px; margin-inline: -12px; padding-inline: 12px; overflow-x: clip; }
+.aura-dock-group { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aura-dock-group + .aura-dock-group::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -16px;
+  border-inline-start: 1px dashed var(--glass-line);
+}
+.aura-dock-caption { display: inline-flex; align-items: center; gap: 5px; padding-inline: 6px; color: var(--text-muted); font-size: 11.5px; font-weight: 700; }
+.aura-dock-caption svg[fill="currentColor"] { color: var(--warning); }
+.aura-dock-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px; }
+.aura-app {
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 4px 6px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+}
+.aura-app:hover { background: var(--accent-tint); }
+.aura-app:disabled { opacity: 0.5; filter: grayscale(0.6); cursor: not-allowed; }
+.aura-app:disabled:hover { background: none; }
+.aura-app-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.3s var(--ease-spring);
+}
+.aura-app:hover:enabled .aura-app-icon { transform: translateY(-4px) scale(1.06); }
+.aura-app-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), border-color 0.3s var(--ease);
-  animation: rise 0.5s var(--ease) both;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+/* Two across at most, and one where two would cut the titles to a few
+   letters; a single work takes the whole row rather than half of it. */
+.aura-dock-works {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(230px, calc(50% - 4px))), 1fr));
+  gap: 8px;
+}
+.aura-work {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px;
+  padding-inline-end: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--glass-line);
+  background: var(--tile);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.aura-work:hover { border-color: var(--accent-line); transform: translateY(-2px); }
+.aura-work .work-thumb { flex: none; width: 76px; border-radius: 11px; }
+.aura-work-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.aura-work-text b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aura-work-text small { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- the catalogue: three zones of even tiles ---- */
+
+.aura-finder { display: flex; flex-direction: column; gap: 10px; }
+.aura-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 24px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+}
+.aura .aura-search { flex: 1 1 260px; height: 48px; border-radius: 17px; border-color: var(--glass-line); background: var(--tile); box-shadow: none; }
+/* The shared field's focus ring, which the line above would otherwise outweigh. */
+.aura .aura-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
+
+/* The filters wrap onto a second line rather than scroll, so every one stays in sight. */
+.aura-switch {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 18px;
+  background: var(--surface-sunken);
+}
+/* Placed from the pressed button's own offsets, so it needs no mirroring. */
+.aura-switch-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--w, 0);
+  height: var(--h, 0);
+  transform: translate(var(--x, 0), var(--y, 0));
+  border-radius: 14px;
+  background: linear-gradient(120deg, oklch(0.55 0.22 292), oklch(0.58 0.23 340));
+  box-shadow: 0 8px 22px -8px oklch(0.58 0.24 320 / 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  opacity: 0;
+}
+.aura-switch-thumb[data-ready] {
+  opacity: 1;
+  transition: transform 0.5s var(--ease-spring), width 0.4s var(--ease), height 0.4s var(--ease);
+}
+.aura-switch button {
+  position: relative;
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.25s var(--ease);
+}
+.aura-switch button:hover { color: var(--text); }
+.aura-switch button.active { color: #fff; font-weight: 700; }
+.aura-switch button:focus-visible { outline-offset: -2px; }
+.aura-switch-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease);
+}
+.aura-switch button.active .aura-switch-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+.aura-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-inline: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.aura-result::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--beam-a), var(--beam-b));
+}
+
+.aura-catalog { display: flex; flex-direction: column; gap: 18px; }
+
+.aura-zone {
+  position: relative;
+  container-type: inline-size;
+  padding: 20px;
+  border-radius: 32px;
+  border: 1px solid var(--glass-line);
+  background:
+    radial-gradient(70% 240px at 50% 0%, var(--zone-glow), transparent 75%),
+    var(--glass);
+  /* No backdrop blur: behind a zone is only the aurora, already soft, and
+     blurring a panel this tall costs every frame of the tiles' motion. */
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+}
+/* The zone's colour, lit along its top edge. */
+.aura-zone::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  inset-inline: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  pointer-events: none;
+}
+.aura-zone-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  margin-bottom: 16px;
+  padding-inline: 2px;
+}
+.aura-zone-orb {
+  grid-row: span 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 14%, transparent), 0 10px 30px -6px var(--accent);
+}
+.aura-zone-head h3 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.035em; line-height: 1.15; }
+.aura-zone-head p { grid-column: 2; margin: 2px 0 0; color: var(--text-muted); font-size: 13.5px; line-height: 1.5; }
+.aura-zone-count {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-tint);
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.aura-zone-count b { font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* Every tile the same size, placed in reading order — no packing, so what
+   the eye, the reader and the Tab key meet first is the same tile. Only the
+   flagship, first in its zone, takes a square of four. */
+.aura-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.tool-card.is-flagship { grid-column: span 2; grid-row: span 2; }
+
+.tool-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    "icon head"
+    "icon tag"
+    "icon desc";
+  column-gap: 14px;
+  align-content: start;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--glass-line);
+  background:
+    radial-gradient(120% 90% at 50% -20%, oklch(0.7 0.18 var(--accent-hue) / 0.11), transparent 62%),
+    var(--tile);
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--tile-shadow);
+  transition: transform 0.35s var(--ease), border-color 0.35s var(--ease), box-shadow 0.35s var(--ease);
+  /* Filled backwards only, through the stagger's delay: held after it, the
+     keyframes' end would outweigh the hover lift and a switched-off tile's dimming. */
+  animation: rise 0.5s var(--ease) backwards;
   animation-delay: var(--reveal, 0ms);
 }
-/* A light that follows the pointer (see trackSpotlight), and a rim lit where it is. */
+/* The light under the pointer, inside the tile it is over... */
 .tool-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(360px circle at var(--mx, 80%) var(--my, 0%), oklch(0.7 0.2 var(--accent-hue) / 0.16), transparent 45%),
-    radial-gradient(120% 80% at 100% 0%, var(--accent-tint), transparent 60%);
+  background: radial-gradient(380px circle at var(--mx, 50%) var(--my, 0%), oklch(0.72 0.2 var(--accent-hue) / 0.16), transparent 50%);
   opacity: 0;
   transition: opacity 0.3s var(--ease);
   pointer-events: none;
 }
+/* ...and on the rims of the tiles near it (see usePointerGlow). */
 .tool-card::after {
   content: "";
   position: absolute;
   inset: 0;
   padding: 1px;
   border-radius: inherit;
-  background: radial-gradient(240px circle at var(--mx, 80%) var(--my, 0%), var(--accent), transparent 60%);
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), var(--accent), transparent 70%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   opacity: 0;
-  transition: opacity 0.3s var(--ease);
+  transition: opacity 0.4s var(--ease);
   pointer-events: none;
 }
-.tool-card:hover::after { opacity: 1; }
-.tool-card:hover { transform: translateY(-5px); border-color: var(--accent-line); box-shadow: var(--shadow-md), 0 24px 60px -24px var(--accent-ring); }
+.tool-card[data-glow]::after,
 .tool-card:hover::before { opacity: 1; }
+.tool-card:hover { transform: translateY(-3px); border-color: var(--accent-line); box-shadow: inset 0 1px 0 var(--glass-rim), 0 26px 50px -26px var(--accent-ring); }
 .tool-card:focus-within { border-color: var(--accent); }
-.tool-card.is-featured {
-  border-color: var(--accent-line);
-  background:
-    radial-gradient(130% 90% at 100% 0%, var(--accent-soft), transparent 60%),
-    radial-gradient(90% 70% at 0% 100%, oklch(0.7 0.2 var(--accent-hue) / 0.12), transparent 60%),
-    var(--surface);
-}
-/* The flagship takes a double tile on wide screens. */
-@media (min-width: 900px) {
-  .tool-card.is-featured { grid-column: span 2; grid-row: span 2; padding: 28px; justify-content: flex-end; }
-  .tool-card.is-featured .tool-card-top { margin-bottom: auto; }
-  .tool-card.is-featured .tool-card-icon { width: 72px; height: 72px; border-radius: 22px; }
-  .tool-card.is-featured .tool-card-icon svg { width: 34px; height: 34px; }
-  .tool-card.is-featured h3 { font-size: clamp(28px, 3vw, 40px); font-weight: 900; letter-spacing: -0.04em; margin-top: 24px; }
-  .tool-card.is-featured .tool-card-tagline { font-size: 16px; }
-  .tool-card.is-featured .tool-card-desc { font-size: 15px; max-width: 46ch; -webkit-line-clamp: 4; }
-}
 
-.tool-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
 .tool-card-icon {
-  width: 48px;
-  height: 48px;
+  grid-area: icon;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 15px;
+  border-radius: 14px;
   color: var(--on-accent);
   background: var(--accent-grad);
   box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: transform 0.35s var(--ease-spring);
 }
 .tool-card:hover .tool-card-icon { transform: scale(1.08) rotate(-5deg); }
+/* Clear of the star, which sits in the corner above it. */
+.tool-card-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; padding-inline-end: 26px; }
+.tool-card-title { margin: 0; min-width: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+/* The title is the tile's one real button, stretched over the whole tile. */
+.tool-card-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.tool-card-open::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.tool-card-open:focus-visible { outline: none; }
+.tool-card-open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 22px; }
+.tool-card-open:disabled { cursor: not-allowed; }
+.tool-card-tagline {
+  grid-area: tag;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-card-desc {
+  grid-area: desc;
+  margin: 6px 0 0;
+  padding-inline-end: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+/* Above the title's stretched button, so it stays a button of its own. */
 .tool-card-star {
-  position: relative;
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
   z-index: 2;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  border: 1px solid transparent;
+  border-radius: 12px;
+  border: 0;
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.6;
   transition: opacity 0.18s var(--ease), color 0.18s var(--ease), background 0.18s var(--ease), transform 0.25s var(--ease-spring);
 }
 .tool-card:hover .tool-card-star,
@@ -787,91 +1221,546 @@
 .tool-card-star.is-on { opacity: 1; color: var(--warning); }
 .tool-card-star.is-on svg { fill: currentColor; }
 .tool-card-star:active { transform: scale(0.85); }
-
-.tool-card h3 { margin: 0; font-size: 18.5px; font-weight: 700; }
-/* The title is the card's one real button, stretched over the whole card. */
-.tool-card-open {
-  border: 0;
-  background: none;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.tool-card-open::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
-.tool-card-open:focus-visible { outline: none; }
-.tool-card-open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-lg); }
-.tool-card-open:disabled { cursor: not-allowed; }
-.tool-card-tagline { margin: 0; font-size: 13px; font-weight: 600; color: var(--accent-text); }
-.tool-card-desc {
-  margin: 4px 0 0;
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.tool-card-foot { margin-top: auto; padding-top: 12px; display: flex; align-items: center; gap: 8px; }
-.tool-card-category { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
 .tool-card-badge {
-  padding: 2px 8px;
+  flex: none;
+  padding: 1px 8px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
-  font-weight: 700;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-tint);
   color: var(--accent-text);
-  background: var(--accent-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.6;
 }
-.tool-card-badge.is-off { color: var(--text-muted); background: var(--surface-sunken); }
-.tool-card-arrow { margin-inline-start: auto; color: var(--text-muted); transition: transform 0.25s var(--ease), color 0.25s var(--ease); }
-.tool-card:hover .tool-card-arrow { transform: translateX(-4px); color: var(--accent-text); }
+.tool-card-badge.is-off { border-color: var(--line-strong); background: var(--surface-sunken); color: var(--text-muted); }
+.tool-card-arrow {
+  position: absolute;
+  bottom: 14px;
+  inset-inline-end: 14px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  transition: transform 0.25s var(--ease), color 0.25s var(--ease), opacity 0.25s var(--ease);
+}
+.tool-card:hover .tool-card-arrow { transform: translateX(-4px); color: var(--accent-text); opacity: 1; }
 .tool-card.is-off { opacity: 0.55; filter: grayscale(0.6); }
 .tool-card.is-off:hover { transform: none; }
 
-.hub-empty {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-muted);
-  border-radius: var(--radius-lg);
-  border: 1.5px dashed var(--line-strong);
+/* The flagship: a square of four cut from the hero's night — dark in both
+   themes, lit by its aurora, ringed in the brand's gradient — with the
+   stave it writes. */
+.aura .aura-grid .tool-card.is-flagship {
+  --accent: oklch(0.77 0.15 var(--accent-hue));
+  --accent-text: oklch(0.85 0.11 var(--accent-hue));
+  --accent-line: oklch(0.77 0.15 var(--accent-hue) / 0.35);
+  --accent-tint: oklch(0.77 0.15 var(--accent-hue) / 0.1);
+  --accent-ring: oklch(0.6 0.25 320 / 0.45);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas:
+    "icon art"
+    "head art"
+    "tag  art"
+    "desc art";
+  column-gap: clamp(16px, 3cqi, 36px);
+  padding: 24px 26px;
+  border: 1px solid transparent;
+  border-radius: 26px;
+  background:
+    radial-gradient(60% 80% at 85% 0%, oklch(0.6 0.27 292 / 0.55), transparent 70%) padding-box,
+    radial-gradient(55% 70% at 10% 100%, oklch(0.62 0.26 345 / 0.4), transparent 70%) padding-box,
+    radial-gradient(35% 45% at 45% 55%, oklch(0.75 0.18 60 / 0.16), transparent 70%) padding-box,
+    var(--stage) padding-box,
+    linear-gradient(135deg, oklch(0.7 0.21 292 / 0.9), oklch(0.7 0.22 345 / 0.5) 50%, oklch(0.8 0.16 55 / 0.8)) border-box;
+  box-shadow: 0 34px 80px -34px oklch(0.55 0.25 300 / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-
-/* ---- the promises ---- */
-
-.promise-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background: var(--line);
-  overflow: hidden;
-}
-.promise-grid > div {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 22px 20px;
-  background: var(--surface);
-}
-.promise-grid > div { transition: background 0.3s var(--ease); }
-.promise-grid > div:hover { background: radial-gradient(120% 100% at 100% 0%, oklch(0.7 0.2 330 / 0.08), transparent 70%), var(--surface); }
-.promise-grid svg {
-  box-sizing: content-box;
-  padding: 10px;
-  border-radius: 14px;
+.aura .aura-grid .tool-card.is-flagship:is(:hover, :focus-within) { border-color: transparent; }
+.aura .aura-grid .tool-card.is-flagship:hover { box-shadow: 0 40px 90px -30px oklch(0.55 0.25 320 / 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+.tool-card.is-flagship .tool-card-icon {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 18px;
+  border-radius: 20px;
   color: #fff;
   background: var(--brand-gradient);
-  box-shadow: 0 10px 26px -6px oklch(0.62 0.24 330 / 0.5);
+  box-shadow: 0 14px 34px oklch(0.6 0.2 330 / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.promise-grid h3 { margin: 6px 0 0; font-size: 15.5px; }
-.promise-grid p { margin: 0; color: var(--text-muted); font-size: 13.5px; line-height: 1.6; }
+.tool-card.is-flagship .tool-card-head { padding-inline-end: 0; }
+.tool-card.is-flagship .tool-card-title { font-size: clamp(30px, 3.6cqi, 42px); font-weight: 900; letter-spacing: -0.05em; line-height: 1.02; }
+.tool-card.is-flagship .tool-card-tagline {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--numeral);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tool-card.is-flagship .tool-card-desc { max-width: 44ch; margin-top: 8px; padding-inline-end: 0; color: var(--text-soft); font-size: 14px; -webkit-line-clamp: 3; }
+.tool-card.is-flagship .tool-card-star { top: 14px; inset-inline-end: 14px; }
+.tool-card.is-flagship .tool-card-arrow { bottom: 20px; inset-inline-end: 22px; }
 
-.home .site-footer { width: 100%; margin-top: 0; }
+.tool-card-art {
+  grid-area: art;
+  position: relative;
+  align-self: center;
+  padding-block: 46px;
+  pointer-events: none;
+}
+.tool-card-stave {
+  position: relative;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+/* The hero's orbiting readings, small. */
+.tool-card-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(22, 19, 32, 0.75);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: chip-bob 5s ease-in-out infinite;
+}
+.tool-card-chip b { color: var(--brand-3); font-weight: 800; }
+/* Placed physically, like the stave they float over. */
+.tool-card-chip.is-tempo { top: 4px; left: 14%; }
+.tool-card-chip.is-key { bottom: 4px; right: 10%; color: oklch(0.85 0.14 300); animation-delay: -2.5s; }
+@keyframes chip-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-6px) rotate(2deg); }
+}
+.tool-card-staff { display: block; width: 100%; height: auto; }
+.staff-line { stroke: color-mix(in oklab, var(--accent) 42%, transparent); stroke-width: 1; }
+.staff-line.is-bar { stroke-width: 1.5; }
+.staff-note { fill: var(--accent); stroke: var(--accent); stroke-width: 1.6; opacity: 0.45; animation: staff-note 3.6s ease-out infinite; animation-delay: var(--d); }
+@keyframes staff-note {
+  0% { opacity: 1; }
+  30%, 100% { opacity: 0.45; }
+}
+/* An element of the stave's full width, moved its own width along, so its
+   leading edge — the line — crosses the stave on the compositor. */
+.staff-playhead {
+  position: absolute;
+  inset-block: 8%;
+  left: 0;
+  width: 100%;
+  animation: staff-play 3.6s linear infinite;
+}
+.staff-playhead::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--brand-2);
+  box-shadow: 0 0 10px 1px var(--brand-2);
+}
+@keyframes staff-play { from { transform: translateX(0); } to { transform: translateX(100%); } }
+
+.hub-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 44px 20px;
+  border-radius: 28px;
+  border: 1.5px dashed var(--line-strong);
+  background: var(--glass);
+  color: var(--text-muted);
+  text-align: center;
+}
+.hub-empty p { margin: 0; text-wrap: balance; }
+.hub-empty .secondary-button { gap: 8px; }
+
+/* A zone too narrow for three tiles a row lays them out two across, the
+   flagship a row of its own; an odd tile out at the end takes the whole
+   last row rather than leave a hole beside it... */
+@container (max-width: 800px) {
+  .aura-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tool-card:last-child:nth-child(odd of :not(.is-flagship)) { grid-column: 1 / -1; }
+}
+/* ...and a phone's, compact: the mark above the words, the flagship's stave a band across it. */
+@container (max-width: 500px) {
+  .aura-grid { gap: 8px; }
+  .tool-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "icon" "head" "tag" "desc";
+    padding: 11px 11px 12px;
+    border-radius: 18px;
+  }
+  .tool-card-open:focus-visible::after { border-radius: 18px; }
+  .tool-card-icon { width: 34px; height: 34px; margin-bottom: 9px; border-radius: 11px; }
+  .tool-card-head { padding-inline-end: 0; }
+  .tool-card-title { font-size: 14.5px; line-height: 1.2; }
+  /* A short badge goes up beside the star, so it never costs the tile a
+     line; "switched off" is too long for that corner and stays under the title. */
+  .tool-card:not(.is-flagship, .is-off) .tool-card-badge { position: absolute; top: 18px; inset-inline-end: 44px; }
+  /* The tagline says what the tool is for, so it gets the two lines, and the description one. */
+  .tool-card-tagline {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 11.5px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+  .tool-card-desc { margin-top: 3px; padding-inline-end: 0; font-size: 11.5px; line-height: 1.45; -webkit-line-clamp: 1; }
+  .tool-card-star { top: 2px; inset-inline-end: 2px; width: 42px; height: 42px; }
+  .tool-card-arrow { display: none; }
+  .aura .aura-grid .tool-card.is-flagship {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "icon" "art" "head" "tag" "desc";
+    padding: 16px;
+    border-radius: 22px;
+  }
+  .tool-card.is-flagship .tool-card-icon { width: 50px; height: 50px; margin-bottom: 0; border-radius: 16px; }
+  .tool-card.is-flagship .tool-card-title { font-size: 30px; }
+  .tool-card.is-flagship .tool-card-tagline { margin-top: 4px; font-size: 13.5px; }
+  .tool-card.is-flagship .tool-card-desc { margin-top: 6px; font-size: 13px; -webkit-line-clamp: 2; }
+  .tool-card-art { margin-block: 4px 8px; padding-block: 0; }
+  .tool-card-chip { display: none; }
+}
+
+/* ---- credits, as a ticket between the tools and the routes ---- */
+
+.aura .credits-promo {
+  position: relative;
+  gap: 22px;
+  padding: 26px 30px;
+  border-radius: 30px;
+  border-color: oklch(0.78 0.13 70 / 0.4);
+  background:
+    radial-gradient(40% 160% at 50% 0%, oklch(0.9 0.1 75 / 0.55), transparent 70%),
+    var(--glass-strong);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--glass-rim), 0 34px 80px -44px oklch(0.7 0.17 60 / 0.7);
+}
+:root[data-theme="dark"] .aura .credits-promo {
+  background:
+    radial-gradient(40% 160% at 50% 0%, oklch(0.55 0.14 70 / 0.22), transparent 70%),
+    var(--glass-strong);
+}
+.aura .credits-promo .aura-beam { background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--beam-b) 70%, transparent) 45%, oklch(0.8 0.15 70)); }
+.aura .credits-promo-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 19px;
+  box-shadow: 0 0 0 6px oklch(0.8 0.15 70 / 0.14), 0 14px 34px -6px oklch(0.72 0.17 60 / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.aura .credits-promo-copy h2 { font-size: clamp(19px, 2.1vw, 24px); font-weight: 900; letter-spacing: -0.03em; text-wrap: balance; }
+.aura .credits-promo-copy p { font-size: 14px; }
+/* The perforation of a ticket, between what it says and what it does. */
+.aura .credits-promo-actions { align-self: stretch; align-items: center; padding-inline-start: 22px; border-inline-start: 1.5px dashed oklch(0.75 0.12 70 / 0.45); }
+
+/* ---- the routes: a grid of cards, each a job in a few steps ---- */
+
+/* Three across at most: the column is never wide enough for a fourth.
+   The cards of a row share its four tracks — cover, title, text, steps —
+   so their parts line up across it and their foot is one line. */
+.aura-flows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 16px;
+}
+.aura-flow {
+  --story-glow: oklch(0.86 0.1 var(--accent-hue) / 0.7);
+  position: relative;
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 8px;
+  min-width: 0;
+  padding: 16px 16px 12px;
+  border-radius: 26px;
+  border: 1px solid var(--glass-line);
+  background:
+    radial-gradient(120% 110px at 50% 0%, var(--story-glow), transparent 100%),
+    var(--glass-strong);
+  box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+  transition: transform 0.35s var(--ease), border-color 0.35s var(--ease);
+}
+:root[data-theme="dark"] .aura-flow { --story-glow: oklch(0.55 0.2 var(--accent-hue) / 0.3); }
+.aura-flow:hover { transform: translateY(-3px); border-color: var(--accent-line); }
+
+/* The cover: the route's number in the brand's gradient, and its tools' marks. */
+.aura-flow-cover {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid var(--glass-line);
+}
+.aura-flow-num {
+  padding-inline-end: 0.06em;
+  font-size: 62px;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.07em;
+  font-variant-numeric: tabular-nums;
+  background: var(--numeral);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 8px 22px oklch(0.65 0.25 330 / 0.35));
+}
+.aura-flow-collage {
+  display: grid;
+  grid-template-columns: repeat(2, 34px);
+  grid-auto-rows: 34px;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 20px;
+  border: 1px solid var(--glass-line);
+  background: var(--surface-sunken);
+  box-shadow: inset 0 1px 0 var(--glass-rim);
+  transform: rotate(-6deg);
+  transition: transform 0.45s var(--ease-spring);
+}
+.aura-flow:hover .aura-flow-collage { transform: rotate(0deg) scale(1.05); }
+.aura-flow-collage > span {
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 6px 14px -6px var(--accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.aura-flow-collage > .is-empty { border: 1px dashed var(--glass-line); background: none; box-shadow: none; }
+.aura-flow h3 { margin: 0; font-size: 23px; font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; }
+.aura-flow > p { margin: 0 0 4px; color: var(--text-soft); font-size: 13.5px; line-height: 1.6; }
+
+/* Its own height in the shared row, so the beam through its marks stops at the last. */
+.aura-flow-steps {
+  position: relative;
+  align-self: start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* The beam joining the steps' marks, and light running down it. */
+.aura-flow-steps::before,
+.aura-flow-steps::after {
+  content: "";
+  position: absolute;
+  top: 25px;
+  bottom: 25px;
+  inset-inline-start: 23px;
+  width: 2px;
+  margin-inline-start: -1px;
+  border-radius: 2px;
+}
+.aura-flow-steps::before { background: linear-gradient(to bottom, var(--accent), color-mix(in oklab, var(--accent) 25%, transparent)); opacity: 0.5; }
+.aura-flow-steps::after {
+  background: linear-gradient(to bottom, transparent, #fff 70%, var(--accent));
+  transform-origin: 50% 0;
+  animation: steps-flow 3.2s var(--ease) infinite;
+  animation-delay: calc(var(--i, 0) * -0.5s);
+}
+@keyframes steps-flow {
+  0% { transform: scaleY(0); opacity: 0.9; }
+  55% { transform: scaleY(1); opacity: 0.9; }
+  100% { transform: scaleY(1); opacity: 0; }
+}
+.aura-flow-steps li { position: relative; z-index: 1; }
+/* A band of the tool's colour sweeps in from the start edge, and the step's number turns into an arrow. */
+.aura-flow-steps button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  padding: 8px;
+  padding-inline-end: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+.aura-flow-steps button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to left, color-mix(in oklab, var(--accent) 34%, transparent), color-mix(in oklab, var(--accent) 10%, transparent));
+  transform: scaleX(0);
+  transform-origin: 100% 50%;
+  transition: transform 0.4s var(--ease);
+}
+.aura-flow-steps button:hover:enabled::before,
+.aura-flow-steps button:focus-visible::before { transform: none; }
+.aura-flow-steps button:focus-visible { outline-offset: -2px; }
+.aura-flow-steps button:disabled { cursor: not-allowed; }
+.aura-flow-steps button:disabled > * { opacity: 0.55; filter: grayscale(0.6); }
+.aura-step-mark {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 16%, transparent), 0 6px 16px -6px var(--accent);
+  font-size: 13.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.aura-step-mark > span { grid-area: 1 / 1; display: grid; place-items: center; transition: transform 0.3s var(--ease), opacity 0.2s var(--ease); }
+.aura-step-arrow { opacity: 0; transform: translateX(10px); }
+.aura-flow-steps button:hover:enabled .aura-step-num,
+.aura-flow-steps button:focus-visible .aura-step-num { opacity: 0; transform: translateX(-10px); }
+.aura-flow-steps button:hover:enabled .aura-step-arrow,
+.aura-flow-steps button:focus-visible .aura-step-arrow { opacity: 1; transform: none; }
+.aura-step-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.aura-step-text b { font-size: 14.5px; }
+.aura-step-text small { overflow: hidden; color: var(--text-muted); font-size: 11.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- the promises: a band of the hero's night, full width ---- */
+
+/* Out to the edges of the page's column at every width (50cqi is half of
+   it, 50% half of the home page's own), its words kept within the page's. */
+.aura-pledge {
+  --pledge-top: clamp(64px, 8vw, 104px);
+  --pledge-bleed: calc(50cqi - 50%);
+  container: pledge / inline-size;
+  isolation: isolate;
+  gap: clamp(40px, 5vw, 64px);
+  margin-inline: calc(-1 * var(--pledge-bleed));
+  padding: var(--pledge-top) calc(var(--pledge-bleed) + clamp(0px, 2.4vw, 36px)) clamp(52px, 6vw, 84px);
+}
+/* The night itself, behind, with the hero's grid floor running under it. */
+.aura-pledge-stage {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(38% 70% at 18% 0%, oklch(0.6 0.27 292 / 0.5), transparent 70%),
+    radial-gradient(38% 70% at 84% 100%, oklch(0.62 0.26 345 / 0.38), transparent 70%),
+    radial-gradient(28% 50% at 56% 40%, oklch(0.75 0.18 60 / 0.14), transparent 70%),
+    var(--stage);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+.aura-pledge-stage::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand-1), var(--brand-2), var(--brand-3), transparent);
+}
+/* Under the words, not through them: the floor runs in the band's foot. */
+.aura-pledge-stage::after {
+  content: "";
+  position: absolute;
+  inset-inline: -50%;
+  bottom: -14%;
+  height: 26%;
+  background-image:
+    linear-gradient(to right, oklch(0.75 0.2 320 / 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.75 0.2 320 / 0.3) 1px, transparent 1px);
+  background-size: 56px 56px;
+  transform: perspective(380px) rotateX(62deg);
+  transform-origin: 50% 0%;
+  mask-image: linear-gradient(to bottom, transparent, #000 45%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%, transparent);
+  opacity: 0.4;
+}
+.aura-pledge-head { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+/* The beam runs on through the band's top edge and lands on the quote mark. */
+.aura-pledge-head .aura-beam { --beam-h: calc(var(--flow-gap) + var(--pledge-top) - 24px); }
+.aura-pledge-mark {
+  height: 0.5em;
+  font-size: clamp(110px, 13vw, 170px);
+  font-weight: 900;
+  line-height: 0.82;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 12px 40px oklch(0.65 0.25 330 / 0.55));
+}
+.aura-pledge h2 {
+  max-width: 17ch;
+  margin: 0;
+  font-size: clamp(36px, 5.6vw, 72px);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+.aura-pledge-rest { color: var(--text-muted); }
+
+/* Each promise spans three shared rows — mark, title, text — so a title
+   that wraps to two lines does not push its text below its neighbours'. */
+.aura-pledge-list {
+  list-style: none;
+  margin: 0;
+  padding: 32px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+}
+.aura-pledge-list li { display: grid; grid-row: span 3; grid-template-rows: subgrid; align-content: start; row-gap: 10px; padding: 4px clamp(14px, 2vw, 26px); }
+.aura-pledge-list li + li { border-inline-start: 1px solid var(--line); }
+/* Two by two where four would squeeze the titles and text into narrow columns. */
+@container pledge (max-width: 960px) {
+  .aura-pledge-list { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px; }
+  .aura-pledge-list li:nth-child(odd) { border-inline-start: 0; }
+}
+.aura-pledge-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--brand-gradient);
+  box-shadow: 0 12px 28px -8px oklch(0.62 0.24 330 / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.aura-pledge-list h3 {
+  margin: 4px 0 0;
+  font-size: clamp(21px, 2.1vw, 27px);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.aura-pledge-list p { margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.65; }
+
+/* The line ends at the foot of the page. */
+.aura > .site-footer {
+  position: relative;
+  width: 100%;
+  margin-top: calc(40px - var(--flow-gap));
+  border-top: 0;
+}
 
 /* ---- what comes next, at the foot of a tool ---- */
 
@@ -991,6 +1880,11 @@
   .home { gap: 44px; }
 }
 
+@media (max-width: 760px) {
+  .aura .credits-promo { padding: 22px 20px; }
+  .aura .credits-promo-actions { padding-inline-start: 0; padding-top: 16px; border-inline-start: 0; border-top: 1.5px dashed oklch(0.75 0.12 70 / 0.45); }
+}
+
 @media (max-width: 560px) {
   .hub-hero { padding: 26px 16px 30px; border-radius: 28px; }
   .hero-actions { width: 100%; }
@@ -999,17 +1893,61 @@
   .tool-marquee { margin-top: -12px; }
   .quick-drop { min-height: 220px; }
   .quick-actions { grid-template-columns: 1fr; }
-  .flow-grid { grid-template-columns: 1fr; }
   .hero-stats dd { font-size: 23px; }
-  .tool-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .tool-card { min-height: 0; padding: 14px 13px 12px; }
-  .tool-card-desc,
-  .tool-card-category { display: none; }
-  .tool-card-icon { width: 42px; height: 42px; border-radius: 13px; }
-  .tool-card h3 { font-size: 15.5px; }
-  .tool-card-tagline { font-size: 12px; }
-  .hub-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
-  .hub-filters button { white-space: nowrap; }
+
+  .aura-section { gap: 22px; }
+  .aura-head p { font-size: 14px; }
+  .aura-dock { border-radius: 24px; }
+  .aura-dock-pane { padding: 16px 14px 14px; }
+  .aura-dock-head { flex-wrap: wrap; }
+  /* The shelves stacked, every tool in sight, four to a row. */
+  .aura-dock-shelf { flex-direction: column; gap: 10px; }
+  .aura-dock-group + .aura-dock-group { padding-top: 10px; border-top: 1px dashed var(--glass-line); }
+  .aura-dock-group + .aura-dock-group::before { display: none; }
+  .aura-dock-group ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .aura-app { width: auto; }
+  .aura-last { gap: 12px; padding: 10px; }
+  .aura-last-icon { width: 48px; height: 48px; border-radius: 16px; }
+  .aura-last-text b { font-size: 17px; }
+  .aura .aura-last-go { min-height: 40px; padding: 0 14px; }
+  .aura-dock-works { grid-template-columns: minmax(0, 1fr); }
+  /* The two latest here keep the tools within a scroll; "all works" has the rest. */
+  .aura-dock-works li:nth-child(n + 3) { display: none; }
+
+  .aura-controls { padding: 6px; border-radius: 22px; }
+  .aura .aura-search { flex-basis: 100%; }
+  .aura-switch { flex-basis: 100%; }
+  .aura-switch button { padding: 0 10px; font-size: 13px; }
+  .aura-zone { padding: 14px 12px 12px; border-radius: 26px; }
+  .aura-zone-head { column-gap: 11px; margin-bottom: 12px; }
+  .aura-zone-orb { width: 38px; height: 38px; border-radius: 13px; }
+  .aura-zone-head h3 { font-size: 19px; }
+  .aura-zone-head p { font-size: 12.5px; }
+  .aura-zone-count { padding: 4px 10px; font-size: 11.5px; }
+
+  /* The routes: a row running to the screen's edges that scrolls sideways
+     and snaps, the next card peeking in. The padding is room for shadows. */
+  .aura-flows {
+    display: flex;
+    gap: 12px;
+    margin: 0 calc(-1 * var(--gutter)) -20px;
+    padding: 4px var(--gutter) 24px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--gutter);
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .aura-flows::-webkit-scrollbar { display: none; }
+  .aura-flow { flex: 0 0 80%; scroll-snap-align: start; }
+  .aura-flow:hover { transform: none; }
+
+  .aura-pledge-stage::after { display: none; }
+  .aura-pledge-list { grid-template-columns: minmax(0, 1fr); row-gap: 0; padding-top: 6px; }
+  .aura-pledge-list li { grid-row: auto; grid-template-rows: none; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; row-gap: 4px; padding: 18px 0; }
+  .aura-pledge-list li + li { border-inline-start: 0; border-top: 1px solid var(--line); }
+  .aura-pledge-icon { grid-row: span 2; }
+  .aura-pledge-list h3 { margin: 0; font-size: 21px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1025,4 +1963,14 @@
   .hero-glyph { display: none; }
   .marquee-row { overflow-x: auto; }
   .marquee-track { animation: none; }
+
+  /* Below the hero nothing moves by itself or glides: states still change,
+     at once. Important, to outweigh the hover and scroll rules that start some of these. */
+  .aura *,
+  .aura *::before,
+  .aura *::after { animation: none !important; transition: none !important; }
+  .aura-beam::after,
+  .aura-eyebrow-dot::after,
+  .aura-flow-steps::after,
+  .staff-playhead { display: none; }
 }

@@ -6,7 +6,9 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+/* Scrolled to or tabbed to, nothing stops under the sticky top bar (or, on
+   a phone, the tab bar: see shell.css). */
+html { scroll-behavior: smooth; scroll-padding-block: calc(var(--topbar-h) + 16px) 16px; -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;

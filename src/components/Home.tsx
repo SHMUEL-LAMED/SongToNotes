@@ -5,26 +5,29 @@ import {
   Clock3,
   Copy,
   Gift,
-  Search,
   ShieldCheck,
   Sparkles,
   Star,
   WifiOff,
   Wand2,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { memo, useEffect, useId, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useAuth } from "../lib/auth";
 import { balanceOf, creditsLabel, referralLink } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
 import { markShared } from "../lib/siteShare";
 import { clearRecentTools, useFavorites, useRecentTools } from "../lib/prefs";
-import { CATEGORY_LABELS, MENU_TOOLS, findTool, type ToolCategory, type ToolDefinition } from "../lib/tools";
-import { WORKFLOWS } from "../lib/workflows";
+import { MENU_TOOLS, findTool, type ToolDefinition } from "../lib/tools";
+import { useIdleOffscreen } from "../lib/useIdleOffscreen";
 import { KIND_LABELS, KIND_TOOL, describeWork, listWorks, type SavedWork } from "../lib/works";
 import { QuickStart } from "./QuickStart";
 import { SiteFooter } from "./SiteFooter";
+import { ToolMosaic } from "./ToolMosaic";
 import { WorkThumb } from "./WorkThumb";
+import { WorkflowStories } from "./WorkflowStories";
 
 type Props = {
   onOpen: (id: string) => void;
@@ -34,14 +37,6 @@ type Props = {
   /** Opens "משוב והצעות". */
   onFeedback: () => void;
 };
-
-const FILTERS: { id: ToolCategory | "all" | "favorites"; label: string }[] = [
-  { id: "all", label: "הכול" },
-  { id: "create", label: CATEGORY_LABELS.create },
-  { id: "practice", label: CATEGORY_LABELS.practice },
-  { id: "analyze", label: CATEGORY_LABELS.analyze },
-  { id: "favorites", label: "המועדפים שלי" },
-];
 
 /** The spectrum behind the hero: a fixed shape, not live audio. */
 const SPECTRUM = [22, 38, 30, 56, 44, 72, 60, 88, 70, 96, 82, 64, 90, 74, 52, 68, 46, 58, 36, 48, 28, 40, 24, 32];
@@ -70,14 +65,20 @@ function useRotatingIndex(count: number, ms: number) {
   return index;
 }
 
-/** The card under the pointer lights up where the pointer is. */
-function trackSpotlight(event: PointerEvent<HTMLElement>) {
-  const card = (event.target as HTMLElement).closest<HTMLElement>(".tool-card");
-  if (!card) return;
-  const rect = card.getBoundingClientRect();
-  card.style.setProperty("--mx", `${event.clientX - rect.left}px`);
-  card.style.setProperty("--my", `${event.clientY - rect.top}px`);
-}
+/** The promises at the foot of the page, each a big statement with its small print under it (see Pledge). */
+const PROMISES: { icon: LucideIcon; title: string; text: string }[] = [
+  {
+    icon: ShieldCheck,
+    title: "פרטי מהיסוד",
+    text: "ברוב הכלים השמע מעובד בדפדפן ולא עולה לשום מקום. הכלים שנעזרים בשרת מסומנים ככאלה.",
+  },
+  { icon: WifiOff, title: "עובד גם בלי רשת", text: "אפשר להתקין את האתר כאפליקציה, ורוב הכלים ממשיכים לעבוד גם במצב טיסה." },
+  { icon: Cloud, title: "הכול נשמר, אם תרצו", text: "מתחברים עם Google, וכל מה שיצרתם מחכה באזור האישי — מכל מכשיר." },
+  { icon: Sparkles, title: "עוזר שעושה", text: "מבקשים בשפה חופשית, והעוזר פותח כלים, מכוון מטרונום, כותב לשירון ושומר." },
+];
+
+/** The default for `disabledTools`, one array for good, so the parts under the hero see the same prop every render. */
+const NO_TOOLS: string[] = [];
 
 function greeting(now: Date) {
   const hour = now.getHours();
@@ -88,12 +89,10 @@ function greeting(now: Date) {
   return "לילה טוב";
 }
 
-export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Props) {
+export function Home({ onOpen, onOpenWork, disabledTools = NO_TOOLS, onFeedback }: Props) {
   const { user, profile } = useAuth();
-  const { favorites, toggle, isFavorite } = useFavorites();
+  const { favorites } = useFavorites();
   const recentTools = useRecentTools();
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<ToolCategory | "all" | "favorites">("all");
   const [works, setWorks] = useState<SavedWork[]>([]);
   const [now] = useState(() => new Date());
   const word = useRotatingIndex(WORDS.length, 2400);
@@ -110,17 +109,9 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
     };
   }, [user]);
 
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return MENU_TOOLS.filter((tool) => {
-      if (filter === "favorites" && !favorites.includes(tool.id)) return false;
-      if (filter !== "all" && filter !== "favorites" && tool.category !== filter) return false;
-      if (!needle) return true;
-      return [tool.title, tool.tagline, tool.description, ...tool.tags].join(" ").toLowerCase().includes(needle);
-    });
-  }, [favorites, filter, query]);
-
   const recent = recentTools.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool)).slice(0, 6);
+  // The last tool opened gets a place of its own at the head of the dock; the rest line up after it.
+  const [lastTool, ...earlier] = recent;
   // Favourites whose tool was hidden since drop out; a list of only those
   // used to leave the "your tools" heading over an empty shelf.
   const favoriteTools = favorites.map(findTool).filter((tool): tool is ToolDefinition => Boolean(tool));
@@ -214,237 +205,77 @@ export function Home({ onOpen, onOpenWork, disabledTools = [], onFeedback }: Pro
 
       <ToolMarquee onOpen={onOpen} disabledTools={disabledTools} />
 
-      <CreditsPromo onOpen={onOpen} />
+      <div className="aura">
+        {(favoriteTools.length > 0 || recent.length > 0 || works.length > 0) && (
+          <Dock
+            lastTool={lastTool ?? null}
+            favoriteTools={favoriteTools}
+            recentTools={earlier.filter((tool) => !favorites.includes(tool.id))}
+            canClear={recent.length > 0}
+            works={works}
+            disabledTools={disabledTools}
+            onOpen={onOpen}
+            onOpenWork={onOpenWork}
+          />
+        )}
 
-      {(recent.length > 0 || favoriteTools.length > 0) && (
-        <section className="home-section" aria-labelledby="mine-title">
-          <div className="section-head">
-            <div>
-              <h2 id="mine-title">הכלים שלך</h2>
-              <p>המועדפים והכלים שפתחת לאחרונה, במרחק לחיצה.</p>
-            </div>
-            {recent.length > 0 && (
-              <button type="button" className="ghost-button" onClick={clearRecentTools}>
-                <X size={14} /> ניקוי ההיסטוריה
-              </button>
-            )}
-          </div>
-          <div className="shelf">
-            {favoriteTools.map((tool) => (
-              <MiniTool key={`fav-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Star size={12} fill="currentColor" />} />
-            ))}
-            {recent
-              .filter((tool) => !favorites.includes(tool.id))
-              .map((tool) => (
-                <MiniTool key={`recent-${tool.id}`} tool={tool} onOpen={onOpen} icon={<Clock3 size={12} />} />
-              ))}
-          </div>
-        </section>
-      )}
+        <ToolMosaic onOpen={onOpen} disabledTools={disabledTools} />
 
-      {works.length > 0 && (
-        <section className="home-section" aria-labelledby="works-title">
-          <div className="section-head">
-            <div>
-              <h2 id="works-title">להמשיך מאיפה שעצרת</h2>
-              <p>העבודות האחרונות ששמרת. כל אחת נפתחת בכלי שיצר אותה.</p>
-            </div>
-            <button type="button" className="ghost-button" onClick={() => onOpen("me")}>
-              לכל העבודות <ArrowLeft size={14} />
-            </button>
-          </div>
-          <div className="recent-works">
-            {works.map((work) => {
-              const tool = findTool(KIND_TOOL[work.kind]);
-              return (
-                <button
-                  key={work.id}
-                  type="button"
-                  className="recent-work"
-                  style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}
-                  onClick={() => onOpenWork(work)}
-                >
-                  <WorkThumb work={work} />
-                  <span className="recent-work-text">
-                    <b>{work.title}</b>
-                    <small>
-                      {KIND_LABELS[work.kind]}
-                      {describeWork(work) ? ` · ${describeWork(work)}` : ""}
-                    </small>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
+        <CreditsPromo onOpen={onOpen} />
 
-      <section className="home-section" aria-labelledby="flows-title">
-        <div className="section-head">
-          <div>
-            <span className="section-eyebrow">מסלולים</span>
-            <h2 id="flows-title">מסלולי עבודה</h2>
-            <p>כמה כלים ברצף למשימה אחת. כל שלב פותח את הכלי שלו.</p>
-          </div>
-        </div>
-        <div className="flow-grid">
-          {WORKFLOWS.map((flow, index) => (
-            <article
-              key={flow.id}
-              className="flow-card"
-              style={{ "--accent-hue": flow.hue, "--reveal": `${index * 50}ms` } as CSSProperties}
-            >
-              <h3>{flow.title}</h3>
-              <p>{flow.description}</p>
-              <ol className="flow-steps">
-                {/* A step whose tool is hidden drops out, and the rest are numbered without it. */}
-                {flow.steps.filter((step) => findTool(step.tool)).map((step, stepIndex) => {
-                  const tool = findTool(step.tool)!;
-                  const Icon = tool.icon;
-                  return (
-                    <li key={step.tool} style={{ "--accent-hue": tool.hue } as CSSProperties}>
-                      <button type="button" onClick={() => onOpen(tool.id)} title={tool.title}>
-                        <span className="flow-step-icon">
-                          <Icon size={16} />
-                        </span>
-                        <span className="flow-step-text">
-                          <small>שלב {stepIndex + 1}</small>
-                          <b>{step.label}</b>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </article>
-          ))}
-        </div>
-      </section>
+        <WorkflowStories onOpen={onOpen} disabledTools={disabledTools} />
 
-      <section className="home-section" id="catalog" aria-labelledby="catalog-title">
-        <div className="section-head">
-          <div>
-            <span className="section-eyebrow">הקטלוג</span>
-            <h2 id="catalog-title">כל הכלים</h2>
-            <p>סמנו ☆ כדי להצמיד כלי לתפריט ולראש הדף.</p>
-          </div>
-        </div>
-        <div className="hub-controls">
-          <label className="hub-search">
-            <Search size={17} />
-            <input
-              type="search"
-              placeholder="חיפוש: „קריוקי”, „טיונר”, „MIDI”…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="חיפוש כלי"
-            />
-          </label>
-          <div className="hub-filters" role="group" aria-label="סינון לפי קטגוריה">
-            {FILTERS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={filter === item.id ? "active" : ""}
-                onClick={() => setFilter(item.id)}
-                aria-pressed={filter === item.id}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <Pledge />
 
-        <div className="tool-grid" onPointerMove={trackSpotlight}>
-          {visible.map((tool, index) => {
-            const Icon = tool.icon;
-            const off = disabledTools.includes(tool.id);
-            const pinned = isFavorite(tool.id);
-            return (
-              <article
-                key={tool.id}
-                className={`tool-card ${tool.id === "notes" ? "is-featured" : ""} ${off ? "is-off" : ""}`}
-                style={{ "--accent-hue": tool.hue, "--reveal": `${Math.min(index, 12) * 35}ms` } as CSSProperties}
-              >
-                <div className="tool-card-top">
-                  <span className="tool-card-icon">
-                    <Icon size={24} />
-                  </span>
-                  <button
-                    type="button"
-                    className={`tool-card-star ${pinned ? "is-on" : ""}`}
-                    onClick={() => toggle(tool.id)}
-                    aria-pressed={pinned}
-                    aria-label={pinned ? `הסרת ${tool.title} מהמועדפים` : `הוספת ${tool.title} למועדפים`}
-                  >
-                    <Star size={16} />
-                  </button>
-                </div>
-                <h3>
-                  <button type="button" className="tool-card-open" disabled={off} onClick={() => onOpen(tool.id)}>
-                    {tool.title}
-                  </button>
-                </h3>
-                <p className="tool-card-tagline">{tool.tagline}</p>
-                <p className="tool-card-desc">{tool.description}</p>
-                <div className="tool-card-foot">
-                  <span className="tool-card-category">{CATEGORY_LABELS[tool.category]}</span>
-                  {off ? (
-                    <span className="tool-card-badge is-off">מכובה זמנית</span>
-                  ) : tool.badge ? (
-                    <span className="tool-card-badge">{tool.badge}</span>
-                  ) : null}
-                  <ArrowLeft size={16} className="tool-card-arrow" aria-hidden="true" />
-                </div>
-              </article>
-            );
-          })}
-          {visible.length === 0 && (
-            <p className="hub-empty">
-              {filter === "favorites" && !query ? "עוד לא סימנת מועדפים. לחיצה על הכוכב בכרטיס של כלי מצמידה אותו." : `לא נמצא כלי שמתאים ל„${query}”. נסו מילה אחרת.`}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="home-section">
-        <div className="promise-grid">
-          <div>
-            <ShieldCheck size={20} />
-            <h3>פרטי מהיסוד</h3>
-            <p>ברוב הכלים השמע מעובד בדפדפן ולא עולה לשום מקום. הכלים שנעזרים בשרת מסומנים ככאלה.</p>
-          </div>
-          <div>
-            <WifiOff size={20} />
-            <h3>עובד גם בלי רשת</h3>
-            <p>אפשר להתקין את האתר כאפליקציה, ורוב הכלים ממשיכים לעבוד גם במצב טיסה.</p>
-          </div>
-          <div>
-            <Cloud size={20} />
-            <h3>הכול נשמר, אם תרצו</h3>
-            <p>מתחברים עם Google, וכל מה שיצרתם מחכה באזור האישי — מכל מכשיר.</p>
-          </div>
-          <div>
-            <Sparkles size={20} />
-            <h3>עוזר שעושה</h3>
-            <p>מבקשים בשפה חופשית, והעוזר פותח כלים, מכוון מטרונום, כותב לשירון ושומר.</p>
-          </div>
-        </div>
-      </section>
-
-      <SiteFooter onOpen={onOpen} onFeedback={onFeedback} />
+        <SiteFooter onOpen={onOpen} onFeedback={onFeedback} />
+      </div>
     </div>
   );
 }
 
 /**
+ * The promises as a band of the hero's night across the page: the one that
+ * matters most as a pull quote, then all four in a row. Memoised, like the
+ * rest under the hero, so the hero's rotating word renders only the hero.
+ */
+const Pledge = memo(function Pledge() {
+  const idle = useIdleOffscreen<HTMLElement>();
+  return (
+    <section className="aura-section aura-pledge" aria-labelledby="promises-title" ref={idle}>
+      <span className="aura-pledge-stage" aria-hidden="true" />
+      <header className="aura-pledge-head">
+        <span className="aura-beam" aria-hidden="true" />
+        <span className="aura-pledge-mark" aria-hidden="true">
+          ”
+        </span>
+        <h2 id="promises-title">
+          <span>ברוב הכלים,</span> <span className="aura-pledge-rest">השיר שלך לא יוצא מהמכשיר.</span>
+        </h2>
+      </header>
+      <ul className="aura-pledge-list">
+        {PROMISES.map(({ icon: Icon, title, text }) => (
+          <li key={title}>
+            <span className="aura-pledge-icon" aria-hidden="true">
+              <Icon size={20} />
+            </span>
+            <h3>{title}</h3>
+            <p>{text}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+});
+
+/**
  * Credits in one line on the home page: for a visitor, what signing in gives;
  * for an account, the balance and the private link, one tap from the clipboard.
  */
-function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
+const CreditsPromo = memo(function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
   const { user } = useAuth();
   const { rules, status } = useCredits();
   const [copied, setCopied] = useState(false);
+  const idle = useIdleOffscreen<HTMLElement>();
 
   useEffect(() => {
     if (!copied) return;
@@ -467,7 +298,8 @@ function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
   };
 
   return (
-    <section className="credits-promo" aria-labelledby="credits-promo-title">
+    <section className="credits-promo" aria-labelledby="credits-promo-title" ref={idle}>
+      <span className="aura-beam" aria-hidden="true" />
       <span className="credits-promo-icon" aria-hidden="true">
         <Gift size={22} />
       </span>
@@ -496,7 +328,7 @@ function CreditsPromo({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
     </section>
   );
-}
+});
 
 /**
  * Two bands of tools sliding past under the hero. Each band is its list
@@ -540,18 +372,186 @@ function ToolMarquee({ onOpen, disabledTools }: { onOpen: (id: string) => void; 
   );
 }
 
-function MiniTool({ tool, onOpen, icon }: { tool: ToolDefinition; onOpen: (id: string) => void; icon: ReactNode }) {
+type DockProps = {
+  /** The tool opened last, shown large at the head of the dock. */
+  lastTool: ToolDefinition | null;
+  favoriteTools: ToolDefinition[];
+  /** The ones opened before it, less the favourites already on the shelf. */
+  recentTools: ToolDefinition[];
+  canClear: boolean;
+  works: SavedWork[];
+  /** Tools the admin area switched off: still on the shelves, dimmed, but not openable. */
+  disabledTools: string[];
+  onOpen: (id: string) => void;
+  onOpenWork: (work: SavedWork) => void;
+};
+
+/** The visitor's own corner: their tools on one side, the work they saved on the other, in one glass panel. */
+function Dock({ lastTool, favoriteTools, recentTools, canClear, works, disabledTools, onOpen, onOpenWork }: DockProps) {
+  const hasShelf = favoriteTools.length > 0 || recentTools.length > 0;
+  const hasTools = Boolean(lastTool) || hasShelf;
+
+  // The button goes with the history it clears: focus moves to what is left
+  // of the dock, or, when nothing is, on to the catalogue's search.
+  const clear = (event: MouseEvent<HTMLButtonElement>) => {
+    const hadFocus = document.activeElement === event.currentTarget;
+    flushSync(clearRecentTools);
+    if (!hadFocus) return;
+    const next = document.getElementById("mine-title") ?? document.getElementById("works-title") ?? document.querySelector<HTMLElement>(".aura-search input");
+    next?.focus();
+  };
+
+  return (
+    <div className={`aura-dock ${hasTools && works.length > 0 ? "is-split" : ""}`}>
+      {hasTools && (
+        <section className="aura-dock-pane" aria-labelledby="mine-title">
+          <div className="aura-dock-head">
+            <div>
+              <h2 id="mine-title" tabIndex={-1}>
+                הכלים שלך
+              </h2>
+              <p>המועדפים והכלים שפתחת לאחרונה, במרחק לחיצה.</p>
+            </div>
+            {canClear && (
+              <button type="button" className="ghost-button" onClick={clear}>
+                <X size={14} /> ניקוי ההיסטוריה
+              </button>
+            )}
+          </div>
+          {lastTool && <LastOpened tool={lastTool} off={disabledTools.includes(lastTool.id)} onOpen={onOpen} />}
+          {hasShelf && (
+            <div className="aura-dock-shelf">
+              <DockGroup
+                label="המועדפים שלי"
+                icon={<Star size={12} fill="currentColor" />}
+                tools={favoriteTools}
+                disabledTools={disabledTools}
+                onOpen={onOpen}
+              />
+              <DockGroup label="נפתחו לאחרונה" icon={<Clock3 size={12} />} tools={recentTools} disabledTools={disabledTools} onOpen={onOpen} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {works.length > 0 && (
+        <section className="aura-dock-pane" aria-labelledby="works-title">
+          <div className="aura-dock-head">
+            <div>
+              <h2 id="works-title" tabIndex={-1}>
+                להמשיך מאיפה שעצרת
+              </h2>
+              <p>העבודות האחרונות ששמרת. כל אחת נפתחת בכלי שיצר אותה.</p>
+            </div>
+            <button type="button" className="ghost-button" onClick={() => onOpen("me")}>
+              לכל העבודות <ArrowLeft size={14} />
+            </button>
+          </div>
+          <ul className="aura-dock-works">
+            {works.map((work) => {
+              const tool = findTool(KIND_TOOL[work.kind]);
+              return (
+                <li key={work.id}>
+                  <button
+                    type="button"
+                    className="aura-work"
+                    style={{ "--accent-hue": tool?.hue ?? 292 } as CSSProperties}
+                    onClick={() => onOpenWork(work)}
+                  >
+                    <WorkThumb work={work} />
+                    <span className="aura-work-text">
+                      <b>{work.title}</b>
+                      <small>
+                        {KIND_LABELS[work.kind]}
+                        {describeWork(work) ? ` · ${describeWork(work)}` : ""}
+                      </small>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/** The tool opened last, one tap from where the visitor left it — unless it has been switched off since. */
+function LastOpened({ tool, off, onOpen }: { tool: ToolDefinition; off: boolean; onOpen: (id: string) => void }) {
   const Icon = tool.icon;
   return (
-    <button type="button" className="mini-tool" style={{ "--accent-hue": tool.hue } as CSSProperties} onClick={() => onOpen(tool.id)}>
-      <span className="mini-tool-icon">
-        <Icon size={18} />
+    <div className={`aura-last${off ? " is-off" : ""}`} style={{ "--accent-hue": tool.hue } as CSSProperties}>
+      <span className="aura-last-icon" aria-hidden="true">
+        <Icon size={26} />
       </span>
-      <span className="mini-tool-text">
+      <span className="aura-last-text">
+        <small>
+          <Clock3 size={12} aria-hidden="true" />
+          נפתח לאחרונה
+        </small>
         <b>{tool.title}</b>
-        <small>{tool.tagline}</small>
+        <span>{tool.tagline}</span>
       </span>
-      <span className="mini-tool-mark">{icon}</span>
-    </button>
+      {off ? (
+        <button type="button" className="primary-button compact aura-last-go" disabled>
+          מכובה זמנית
+        </button>
+      ) : (
+        <button type="button" className="primary-button compact aura-last-go" onClick={() => onOpen(tool.id)} aria-label={`לפתוח שוב את ${tool.title}`}>
+          לפתוח שוב <ArrowLeft size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** One shelf of the dock — the favourites or the recently opened — named in words, not only by its mark. */
+function DockGroup({
+  label,
+  icon,
+  tools,
+  disabledTools,
+  onOpen,
+}: {
+  label: string;
+  icon: ReactNode;
+  tools: ToolDefinition[];
+  disabledTools: string[];
+  onOpen: (id: string) => void;
+}) {
+  const id = useId();
+  if (tools.length === 0) return null;
+  return (
+    <div className="aura-dock-group">
+      <span className="aura-dock-caption" id={id}>
+        {icon}
+        {label}
+      </span>
+      <ul aria-labelledby={id}>
+        {tools.map((tool) => {
+          const Icon = tool.icon;
+          const off = disabledTools.includes(tool.id);
+          return (
+            <li key={tool.id}>
+              <button
+                type="button"
+                className="aura-app"
+                style={{ "--accent-hue": tool.hue } as CSSProperties}
+                onClick={() => onOpen(tool.id)}
+                disabled={off}
+                title={off ? "מכובה זמנית" : tool.tagline}
+              >
+                <span className="aura-app-icon">
+                  <Icon size={21} />
+                </span>
+                <span className="aura-app-name">{tool.title}</span>
+                {off && <span className="sr-only">מכובה זמנית</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
