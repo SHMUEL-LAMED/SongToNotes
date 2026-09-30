@@ -15,6 +15,19 @@
 :root[dir="ltr"] .tool-card:hover .tool-card-arrow { transform: translateX(4px) scaleX(-1); }
 :root[dir="ltr"] .next-step:hover .next-step-go { transform: translateX(3px) scaleX(-1); }
 
+/* The routes' steps: the band sweeps in from the left now, and the number leaves the other way. */
+:root[dir="ltr"] .aura-flow-steps button::before {
+  background: linear-gradient(to right, color-mix(in oklab, var(--accent) 34%, transparent), color-mix(in oklab, var(--accent) 10%, transparent));
+  transform-origin: 0 50%;
+}
+:root[dir="ltr"] .aura-step-arrow { transform: translateX(-10px); }
+:root[dir="ltr"] .aura-flow-steps button:hover:enabled .aura-step-num,
+:root[dir="ltr"] .aura-flow-steps button:focus-visible .aura-step-num { transform: translateX(10px); }
+:root[dir="ltr"] .aura-flow-steps button:hover:enabled .aura-step-arrow,
+:root[dir="ltr"] .aura-flow-steps button:focus-visible .aura-step-arrow { transform: none; }
+/* An English quotation opens with the mark turned the other way up. */
+:root[dir="ltr"] .aura-pledge-mark { rotate: 180deg; }
+
 /* The phone menu hides off the start edge, which is now the left. */
 @media (max-width: 960px) {
   :root[dir="ltr"] .sidebar { transform: translateX(-105%); }
