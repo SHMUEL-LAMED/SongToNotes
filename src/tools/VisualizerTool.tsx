@@ -1,3 +1,4 @@
+import { finalizeRecording } from "../lib/remux";
 import {
   AudioWaveform,
   Clapperboard,
@@ -403,7 +404,7 @@ class VisualizerEngine {
         this.events.onRecordError?.("ההקלטה יצאה ריקה. נסו שוב, ורצוי להשאיר את הלשונית גלויה עד הסוף.");
         return;
       }
-      this.events.onRecordDone?.(blob, type);
+      void finalizeRecording(blob, type).then((file) => this.events.onRecordDone?.(file, type));
     };
     recorder.onerror = () => {
       session.cancelled = true;
