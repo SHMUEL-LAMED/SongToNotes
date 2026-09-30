@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   aspectSize,
   videoPlacement,
+  containFit,
+  coverBox,
   bassLevel,
   binLevels,
   chooseRecordingType,
@@ -339,5 +341,30 @@ describe("videoPlacement", () => {
     expect(box.x).toBeCloseTo((1080 - box.width) / 2);
     expect(box.y).toBeCloseTo((1920 - box.height) / 2);
     expect(box.width / box.height).toBeCloseTo(16 / 9);
+  });
+});
+
+describe("coverBox", () => {
+  it("keeps a video's shape in the window, wider than the square slot", () => {
+    const layout = sceneLayout("portrait", "bars", true);
+    const box = coverBox("portrait", layout, "window", 1920, 1080)!;
+    expect(box.width / box.height).toBeCloseTo(16 / 9);
+    expect(box.width).toBeGreaterThan(layout.cover!.width);
+    expect(box.x).toBeCloseTo((1080 - box.width) / 2);
+  });
+
+  it("gives a whole video the room above the title, clear of the visual", () => {
+    for (const aspect of ["portrait", "square"] as const) {
+      const layout = sceneLayout(aspect, "bars", true);
+      const box = coverBox(aspect, layout, "stage", 1920, 1080)!;
+      expect(box.y + box.height).toBeLessThan(layout.titleY - layout.titleSize);
+      expect(box.y + box.height).toBeLessThan(layout.area.y);
+    }
+  });
+
+  it("crops into the square slot by default", () => {
+    const layout = sceneLayout("square", "bars", true);
+    expect(coverBox("square", layout, undefined, 1920, 1080)).toEqual(layout.cover);
+    expect(containFit(200, 100, { x: 0, y: 0, width: 100, height: 100 })).toEqual({ x: 0, y: 25, width: 100, height: 50 });
   });
 });

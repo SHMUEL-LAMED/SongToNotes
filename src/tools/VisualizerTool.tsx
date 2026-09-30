@@ -33,6 +33,7 @@ import {
   describeLength,
   drawScene,
   paintVideoBackdrop,
+  videoPlacement,
   NO_EFFECTS,
   PRESETS,
   VIDEO_FITS,
@@ -233,11 +234,19 @@ class VisualizerEngine {
     const live = scene.sourceVideo?.readyState && scene.sourceVideo.readyState >= 2 ? scene.sourceVideo : null;
     const frame = this.offlineFrame ?? (live ? { image: live, width: live.videoWidth, height: live.videoHeight } : null);
     let cover = scene.cover;
+    let coverShape: "square" | "window" | "stage" = "square";
     if (frame) {
       this.videoFrame ??= document.createElement("canvas");
       this.videoScratch ??= document.createElement("canvas");
       if (this.videoFrame.width !== width) this.videoFrame.width = width;
       if (this.videoFrame.height !== height) this.videoFrame.height = height;
+      // Where the picture goes: filling the frame, or in the cover's place
+      // (a window of its own shape, or the whole column above the title, so
+      // the visual below never draws over it). The circle keeps a video shown
+      // whole behind it, its disc being the cover's place, and so does the
+      // wide frame, whose slot beside the text is too small for it.
+      const fills = scene.videoFit === "fill" || (scene.videoFit === "auto" && videoPlacement(frame.width, frame.height, width, height).fill);
+      const inSlot = !fills && (scene.videoFit === "cover" || (scene.style !== "circle" && scene.aspect !== "landscape"));
       paintVideoBackdrop(
         this.videoFrame.getContext("2d")!,
         frame.image,
@@ -247,12 +256,14 @@ class VisualizerEngine {
         height,
         scene.hue,
         this.videoScratch,
-        scene.videoFit,
+        fills ? "fill" : inSlot ? "cover" : "fit",
         scene.videoDim,
       );
       backgroundImage = this.videoFrame;
-      // In the window, the video plays where the cover goes.
-      if (scene.videoFit === "cover") cover = frame;
+      if (inSlot) {
+        cover = frame;
+        coverShape = scene.videoFit === "cover" ? "window" : "stage";
+      }
     }
     drawScene(ctx, {
       aspect: scene.aspect,
@@ -261,6 +272,7 @@ class VisualizerEngine {
       background: scene.sourceVideo || this.offlineFrame ? "image" : scene.background,
       backgroundImage,
       cover,
+      coverShape,
       title: scene.title,
       artist: scene.artist,
       levels: this.levels,
@@ -1100,12 +1112,12 @@ export function VisualizerTool() {
                     </div>
                     <small>
                       {videoFit === "cover"
-                        ? "הווידאו מתנגן בחלון במקום העטיפה, מעל האור המטושטש שלו."
+                        ? "הווידאו מתנגן בחלון בצורה שלו, במקום העטיפה."
                         : videoFit === "fill"
                           ? "הווידאו ממלא את כל המסגרת, והשוליים נחתכים."
                           : videoFit === "fit"
-                            ? "הווידאו מוצג שלם, מעל עותק מטושטש שלו."
-                            : "ממלא את המסגרת כשהצורה דומה, ואחרת מוצג שלם."}
+                            ? "הווידאו מוצג שלם מעל שם השיר, והאפקט מתחתיו."
+                            : "ממלא את המסגרת כשהצורה דומה, ואחרת מוצג שלם מעל שם השיר."}
                     </small>
                     <label className="visualizer-dim">
                       <span>
