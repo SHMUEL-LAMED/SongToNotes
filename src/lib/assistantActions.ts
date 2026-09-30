@@ -181,7 +181,7 @@ export const ACTIONS: ActionSpec[] = [
   define("melody", "write", "melody.piano", "המנגינה לפסנתר", "שולח את המנגינה לפסנתר הווירטואלי ללימוד."),
 
   // ---- song visualizer ----
-  define("visualizer", "write", "visualizer.set", "עיצוב הסרטון", "סגנון (bars|wave|circle|particles), צבע (0..360), כותרת, אמן ויחס מסך (square|portrait|landscape).", ["style?:bars|wave|circle|particles", "hue?:number", "title?", "artist?", "aspect?:square|portrait|landscape"]),
+  define("visualizer", "write", "visualizer.set", "עיצוב הסרטון", "סגנון (bars|wave|circle|particles|spectrum|rings), צבע (0..360), כותרת, אמן ויחס מסך (square|portrait|landscape).", ["style?:bars|wave|circle|particles|spectrum|rings", "hue?:number", "title?", "artist?", "aspect?:square|portrait|landscape"]),
   define("visualizer", "write", "visualizer.preview", "תצוגה מקדימה", "מנגן או עוצר את התצוגה המקדימה.", ["command:play|stop"]),
   define("visualizer", "write", "visualizer.render", "יצירת הסרטון", "מקליט את הסרטון מהקטע שנבחר (לוקח כאורך הקטע)."),
 

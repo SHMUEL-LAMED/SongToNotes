@@ -160,3 +160,44 @@ input.visualizer-hue[type="range"]::-webkit-slider-thumb { margin-top: -7px; }
   .visualizer-canvas { max-height: 60vh; }
   .visualizer-aspects button small { font-size: 10px; }
 }
+
+/* ---- ready-made looks ---- */
+
+.visualizer-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.visualizer-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.visualizer-preset:hover { transform: translateY(-2px); border-color: var(--accent-line); }
+.visualizer-preset.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.visualizer-preset b { font-size: 12.5px; font-weight: 700; }
+.visualizer-preset small { font-size: 10.5px; color: var(--text-muted); }
+/* Every thumbnail stands on the same height, so their shapes read at a glance. */
+.visualizer-preset-thumb {
+  display: block;
+  height: 64px;
+  width: auto;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.visualizer-preset-thumb.is-square { aspect-ratio: 1; }
+.visualizer-preset-thumb.is-portrait { aspect-ratio: 9 / 16; }
+.visualizer-preset-thumb.is-landscape { aspect-ratio: 16 / 9; height: 42px; margin-block: 11px; }
+
+.visualizer-dim { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.visualizer-dim span { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-soft); }
+.visualizer-dim b { font-variant-numeric: tabular-nums; }
