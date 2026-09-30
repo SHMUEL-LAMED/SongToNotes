@@ -912,3 +912,49 @@
 .songbook-gloss-sound { color: var(--accent-text); }
 .songbook-gloss-meaning { color: var(--text-muted); font-style: italic; }
 .songbook-gloss-actions { margin-top: 12px; }
+
+/* ---- vocals, pro mode: the key and the quick picks ---- */
+
+.stem-extras {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+.stem-key,
+.stem-picks {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.stem-key { display: flex; flex-direction: column; gap: 8px; }
+.stem-key > span { font-size: 13.5px; color: var(--text-soft); }
+.stem-key > span b { color: var(--accent-text); }
+.stem-key-row { display: flex; align-items: center; gap: 8px; }
+.stem-key-row input { flex: 1; min-width: 0; }
+.stem-key small { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.stem-picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stem-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.stem-pick svg { flex: none; color: var(--accent-text); }
+.stem-pick span { display: flex; flex-direction: column; min-width: 0; }
+.stem-pick b { font-size: 14px; }
+.stem-pick small { font-size: 12px; color: var(--text-muted); }
+.stem-pick:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-tint); transform: translateY(-1px); }
+.stem-pick:disabled { opacity: 0.6; cursor: progress; }
+@media (max-width: 760px) {
+  .stem-extras { grid-template-columns: 1fr; }
+}

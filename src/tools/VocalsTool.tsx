@@ -16,7 +16,7 @@ import {
   separateStems,
   type SeparationProgress,
 } from "../lib/stemSeparation";
-import { channelsToBuffer } from "../lib/dsp";
+import { changeSpeedAndPitch, channelsToBuffer } from "../lib/dsp";
 import { downloadFile, safeFilename } from "../lib/export";
 import { useOfferResult } from "../lib/currentFile";
 import type { SeparateTarget } from "../lib/separate";
@@ -30,6 +30,27 @@ import type { SavedWork } from "../lib/works";
 
 const STEM_NAMES: Record<string, string> = { vocals: "שירה", drums: "תופים", bass: "בס", other: "שאר הכלים", guitar: "גיטרה", piano: "פסנתר", no_vocals: "ליווי" };
 const STEM_HUES: Record<string, number> = { vocals: 340, drums: 20, bass: 260, other: 200, guitar: 45, piano: 120 };
+
+/**
+ * The parts people ask for most, one tap each: which stems go into the file.
+ * A part the separation did not give (guitar and piano come only from the
+ * server) is simply left out; a pick with none of its parts is not offered.
+ */
+const STEM_PICKS: { id: string; label: string; note: string; stems: string[] }[] = [
+  { id: "backing", label: "ליווי מלא", note: "בלי שירה", stems: ["drums", "bass", "other", "guitar", "piano"] },
+  { id: "chords", label: "בס ואקורדים", note: "בלי שירה ותופים", stems: ["bass", "other", "guitar", "piano"] },
+  { id: "vocals", label: "רק שירה", note: "אקפלה", stems: ["vocals"] },
+  { id: "drums", label: "רק תופים", note: "לתרגול קצב", stems: ["drums"] },
+];
+
+/** How far the key can be moved, in semitones, either way. */
+const MAX_SHIFT = 6;
+
+function shiftLabel(semitones: number) {
+  if (semitones === 0) return "הטון המקורי";
+  const size = Math.abs(semitones) === 1 ? "חצי טון" : Math.abs(semitones) === 2 ? "טון" : `־${Math.abs(semitones) / 2} טונים`;
+  return `${semitones > 0 ? "גבוה" : "נמוך"} ב${size}`;
+}
 
 function sharedContext() {
   const Context =
@@ -108,6 +129,11 @@ export function VocalsTool({ initial = null }: Props) {
   const [serverMissing, setServerMissing] = useState<boolean | null>(null);
   // Simple: the voice or the backing track. Pro: every part the model finds,
   // each on its own fader, mixed live and rendered together.
+  // A saved mix that was moved keeps its key, so saving it again keeps it too.
+  const [semitones, setSemitones] = useState(() => {
+    const saved = initial?.payload.semitones;
+    return typeof saved === "number" ? Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, Math.round(saved))) : 0;
+  });
   const [mode, setMode] = useState<"simple" | "pro">(initial?.payload.mode === "pro" ? "pro" : "simple");
   const [stems, setStems] = useState<{ key: string; tracks: MixTrack[] } | null>(null);
   const [stemsPlaying, setStemsPlaying] = useState(false);
@@ -415,23 +441,46 @@ export function VocalsTool({ initial = null }: Props) {
   const updateStem = (id: string, patch: Partial<MixTrack>) =>
     setStems((current) => (current ? { ...current, tracks: current.tracks.map((track) => (track.id === id ? { ...track, ...patch } : track)) } : current));
 
-  const stemFile = (track: MixTrack) => {
-    const channels = Array.from({ length: track.buffer.numberOfChannels }, (_, index) => track.buffer.getChannelData(index));
+  /**
+   * A buffer as a WAV file, moved by the chosen number of semitones. The
+   * tempo stays; the stretch and resample of the speed tool do the moving.
+   */
+  const wavFile = (buffer: AudioBuffer, name: string) => {
+    const channels = semitones
+      ? changeSpeedAndPitch(buffer, 1, semitones)
+      : Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index));
     const base = safeFilename((audio?.file.name ?? "song").replace(/\.[^/.]+$/, ""));
-    return new File([encodeWav({ channels, sampleRate: track.buffer.sampleRate })], `${base}-${track.id}.wav`, { type: "audio/wav" });
+    const key = semitones ? `${semitones > 0 ? "+" : ""}${semitones}st` : "";
+    return new File([encodeWav({ channels, sampleRate: buffer.sampleRate })], `${[base, name, key].filter(Boolean).join("-")}.wav`, { type: "audio/wav" });
+  };
+
+  const stemFile = (track: MixTrack) => wavFile(track.buffer, track.id);
+
+  /**
+   * Renders a file off the page's own work: the key change is heavy enough
+   * to hold the page for a moment, so the button shows it is working first.
+   */
+  const rendering = async <T,>(work: () => Promise<T> | T): Promise<T> => {
+    setStemsRendering(true);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    try {
+      return await work();
+    } finally {
+      setStemsRendering(false);
+    }
   };
 
   const renderStemMix = async () => {
     if (!stems || !audio) return null;
-    setStemsRendering(true);
-    try {
-      const rendered = await renderMix(stems.tracks);
-      const channels = [rendered.getChannelData(0), rendered.getChannelData(1)];
-      const base = safeFilename(audio.file.name.replace(/\.[^/.]+$/, ""));
-      return new File([encodeWav({ channels, sampleRate: rendered.sampleRate })], `${base}-mix.wav`, { type: "audio/wav" });
-    } finally {
-      setStemsRendering(false);
-    }
+    return rendering(async () => wavFile(await renderMix(stems.tracks), "mix"));
+  };
+
+  /** One of the quick picks: those stems only, as they stand in the mix but none muted. */
+  const renderPick = async (pick: (typeof STEM_PICKS)[number]) => {
+    if (!stems) return null;
+    const tracks = stems.tracks.filter((track) => pick.stems.includes(track.id)).map((track) => ({ ...track, muted: false, solo: false }));
+    if (!tracks.length) return null;
+    return rendering(async () => wavFile(await renderMix(tracks), pick.id));
   };
 
   const saveStems = async () => {
@@ -442,8 +491,8 @@ export function VocalsTool({ initial = null }: Props) {
         kind: "vocals",
         title: `${audio.file.name.replace(/\.[^/.]+$/, "")} — מיקס ערוצים`,
         sourceName: audio.file.name,
-        summary: { target: "mix", usedAi: true, mode: "pro", stems: stems.tracks.length, duration: mixDuration(stems.tracks) },
-        payload: { mode: "pro", usedAi: true, tracks: stems.tracks.map((track) => ({ id: track.id, gain: track.gain, pan: track.pan, muted: track.muted, solo: track.solo })) },
+        summary: { target: "mix", usedAi: true, mode: "pro", stems: stems.tracks.length, duration: mixDuration(stems.tracks), semitones },
+        payload: { mode: "pro", usedAi: true, semitones, tracks: stems.tracks.map((track) => ({ id: track.id, gain: track.gain, pan: track.pan, muted: track.muted, solo: track.solo })) },
       },
       file,
     );
@@ -659,7 +708,7 @@ export function VocalsTool({ initial = null }: Props) {
       },
       "vocals.toMixer": () => {
         if (!stemsReady || !stems) return { ok: false, message: "אין ערוצים; vocals.stems מפריד" };
-        void handOffTo("mixer", stems.tracks.map(stemFile), "הערוצים מהסרת השירה");
+        void rendering(() => stems.tracks.map(stemFile)).then((files) => handOffTo("mixer", files, "הערוצים מהסרת השירה"));
         return { ok: true, message: "הערוצים נשלחו למיקסר" };
       },
     },
@@ -859,7 +908,7 @@ export function VocalsTool({ initial = null }: Props) {
                               <button type="button" className={`mixer-toggle ${track.solo ? "active" : ""}`} onClick={() => updateStem(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`סולו ${track.name}`} title="סולו">
                                 <Headphones size={15} />
                               </button>
-                              <button type="button" className="link-button" onClick={() => { const file = stemFile(track); downloadFile(file, file.name, "audio/wav"); }}>
+                              <button type="button" className="link-button" disabled={stemsRendering} onClick={() => void rendering(() => stemFile(track)).then((file) => downloadFile(file, file.name, "audio/wav"))}>
                                 <Download size={14} /> WAV
                               </button>
                             </div>
@@ -897,6 +946,54 @@ export function VocalsTool({ initial = null }: Props) {
                       </button>
                       <small className="ai-status">{aiStatus}</small>
                     </div>
+                    <div className="stem-extras">
+                      <div className="stem-key">
+                        <span id="stem-key-label">
+                          שינוי טון: <b>{shiftLabel(semitones)}</b>
+                        </span>
+                        <div className="stem-key-row">
+                          <button type="button" className="icon-button" onClick={() => setSemitones((value) => Math.max(-MAX_SHIFT, value - 1))} disabled={semitones <= -MAX_SHIFT} aria-label="חצי טון למטה">
+                            −
+                          </button>
+                          <input
+                            type="range"
+                            min={-MAX_SHIFT}
+                            max={MAX_SHIFT}
+                            step={1}
+                            value={semitones}
+                            onChange={(event) => setSemitones(Number(event.target.value))}
+                            aria-labelledby="stem-key-label"
+                            aria-valuetext={shiftLabel(semitones)}
+                          />
+                          <button type="button" className="icon-button" onClick={() => setSemitones((value) => Math.min(MAX_SHIFT, value + 1))} disabled={semitones >= MAX_SHIFT} aria-label="חצי טון למעלה">
+                            +
+                          </button>
+                          {semitones !== 0 && (
+                            <button type="button" className="link-button" onClick={() => setSemitones(0)}>
+                              איפוס
+                            </button>
+                          )}
+                        </div>
+                        <small>כל קובץ שמורידים כאן יוצא בטון שבחרת, באותו קצב. הנגינה כאן נשארת בטון המקורי.</small>
+                      </div>
+                      <div className="stem-picks" role="group" aria-label="הורדה מהירה">
+                        {STEM_PICKS.filter((pick) => stems.tracks.some((track) => pick.stems.includes(track.id))).map((pick) => (
+                          <button
+                            key={pick.id}
+                            type="button"
+                            className="stem-pick"
+                            disabled={stemsRendering}
+                            onClick={() => void renderPick(pick).then((file) => file && downloadFile(file, file.name, "audio/wav"))}
+                          >
+                            <Download size={16} />
+                            <span>
+                              <b>{pick.label}</b>
+                              <small>{pick.note}</small>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="downloads-card">
                       <div>
                         <span className="download-icon">
@@ -904,7 +1001,7 @@ export function VocalsTool({ initial = null }: Props) {
                         </span>
                         <div>
                           <h3>המיקס שלך</h3>
-                          <p>הערוצים שהשארת, בעוצמות שבחרת — כקובץ WAV אחד, או כל ערוץ בנפרד למעלה.</p>
+                          <p>הערוצים שהשארת, בעוצמות שבחרת{semitones ? `, ${shiftLabel(semitones)}` : ""} — כקובץ WAV אחד, או כל ערוץ בנפרד למעלה.</p>
                         </div>
                       </div>
                       <div className="download-buttons">
@@ -915,7 +1012,7 @@ export function VocalsTool({ initial = null }: Props) {
                             <small>WAV</small>
                           </span>
                         </button>
-                        <button type="button" onClick={() => void handOffTo("mixer", stems.tracks.map(stemFile), "הערוצים מהסרת השירה")}>
+                        <button type="button" disabled={stemsRendering} onClick={() => void rendering(() => stems.tracks.map(stemFile)).then((files) => handOffTo("mixer", files, "הערוצים מהסרת השירה"))}>
                           <Layers size={17} />
                           <span>
                             למיקסר<small>עם לולאה והזזות</small>
