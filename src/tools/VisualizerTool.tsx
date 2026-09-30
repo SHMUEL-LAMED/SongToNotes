@@ -32,6 +32,7 @@ import {
   defaultRegion,
   describeLength,
   drawScene,
+  paintVideoBackdrop,
   isAspect,
   isStyle,
   logBinRanges,
@@ -138,6 +139,7 @@ class VisualizerEngine {
   private particles: Particle[] = createParticles(PARTICLE_COUNT, this.random);
   private background: { source: SizedImage; aspect: VisualizerAspect; canvas: HTMLCanvasElement } | null = null;
   private videoFrame: HTMLCanvasElement | null = null;
+  private videoScratch: HTMLCanvasElement | null = null;
   private lastFrame = 0;
   private lastTick = 0;
   /**
@@ -149,7 +151,7 @@ class VisualizerEngine {
    */
   private generation = 0;
   private exporting = false;
-  private offlineFrame: CanvasImageSource | null = null;
+  offlineFrame: { image: CanvasImageSource; width: number; height: number } | null = null;
 
   get busy(): Session["kind"] | null {
     return this.exporting ? "record" : this.session?.kind ?? null;
@@ -204,21 +206,17 @@ class VisualizerEngine {
       }
       backgroundImage = this.background!.canvas;
     }
-    if (scene.sourceVideo?.readyState && scene.sourceVideo.readyState >= 2) {
-      const video = scene.sourceVideo;
+    // The recorder hands in decoded frames; the preview reads the playing video.
+    const live = scene.sourceVideo?.readyState && scene.sourceVideo.readyState >= 2 ? scene.sourceVideo : null;
+    const frame = this.offlineFrame ?? (live ? { image: live, width: live.videoWidth, height: live.videoHeight } : null);
+    if (frame) {
       this.videoFrame ??= document.createElement("canvas");
+      this.videoScratch ??= document.createElement("canvas");
       if (this.videoFrame.width !== width) this.videoFrame.width = width;
       if (this.videoFrame.height !== height) this.videoFrame.height = height;
-      const videoContext = this.videoFrame.getContext("2d")!;
-      videoContext.fillStyle = "#000";
-      videoContext.fillRect(0, 0, width, height);
-      const scale = Math.min(width / video.videoWidth, height / video.videoHeight);
-      const w = video.videoWidth * scale;
-      const h = video.videoHeight * scale;
-      videoContext.drawImage(video, (width - w) / 2, (height - h) / 2, w, h);
+      paintVideoBackdrop(this.videoFrame.getContext("2d")!, frame.image, frame.width, frame.height, width, height, scene.hue, this.videoScratch);
       backgroundImage = this.videoFrame;
     }
-    if (this.offlineFrame) backgroundImage = this.offlineFrame;
     drawScene(ctx, {
       aspect: scene.aspect,
       style: scene.style,
@@ -425,8 +423,23 @@ class VisualizerEngine {
         input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
         const track = await input.getPrimaryVideoTrack();
         if (!track || !(await track.canDecode())) throw new Error("לא ניתן לפענח את הסרטון הזה. נסו MP4 או WebM.");
-        const sink = new CanvasSink(track, { ...size, fit: "contain", poolSize: 2 });
-        frames = sink.canvasesAtTimestamps(Array.from({ length: count }, (_, index) => region.start + index / VIDEO_FPS));
+        // Frames at the video's own shape (no bars baked in), no larger than
+        // the output: the renderer places and grades them.
+        const shrink = Math.min(1, size.width / track.displayWidth, size.height / track.displayHeight);
+        const sink = new CanvasSink(track, {
+          width: Math.max(2, Math.round(track.displayWidth * shrink)),
+          height: Math.max(2, Math.round(track.displayHeight * shrink)),
+          fit: "fill",
+          poolSize: 2,
+        });
+        // Recorded clips often start their first frame a little after zero
+        // and end a little before the sound does; asking outside that span
+        // returns nothing, so the times are held inside it.
+        const first = await track.getFirstTimestamp();
+        const last = Math.max(first, (await track.computeDuration()) - 1 / VIDEO_FPS);
+        frames = sink.canvasesAtTimestamps(
+          Array.from({ length: count }, (_, index) => Math.min(last, Math.max(first, region.start + index / VIDEO_FPS))),
+        );
       }
       await output.start();
       // Interleave short audio chunks with frames to bound encoder/muxer buffering.
@@ -437,9 +450,15 @@ class VisualizerEngine {
         if (!active()) return false;
         const time = index / VIDEO_FPS;
         if (frames) {
+          // A gap in the video holds the last picture; only a section with
+          // no picture at all is an error.
           const frame = await frames.next();
-          if (!frame.value) throw new Error("לא נמצאה תמונת וידאו בקטע שנבחר.");
-          renderer.offlineFrame = frame.value.canvas;
+          if (frame.value) {
+            const { canvas: image } = frame.value;
+            renderer.offlineFrame = { image, width: image.width, height: image.height };
+          } else if (!renderer.offlineFrame) {
+            throw new Error("לא נמצאה תמונת וידאו בקטע שנבחר.");
+          }
         }
         renderer.drawStill(buffer, region.start + time, time);
         await videoSource.add(time, Math.min(1 / VIDEO_FPS, length - time));

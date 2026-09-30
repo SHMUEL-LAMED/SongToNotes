@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aspectSize,
+  videoPlacement,
   bassLevel,
   binLevels,
   chooseRecordingType,
@@ -319,5 +320,24 @@ describe("particles", () => {
 
   it("are reproducible from a seed", () => {
     expect(createParticles(5, seededRandom(42))).toEqual(createParticles(5, seededRandom(42)));
+  });
+});
+
+describe("videoPlacement", () => {
+  it("fills the frame when the video's shape nearly matches it", () => {
+    const { fill, box } = videoPlacement(1920, 1080, 1920, 1080);
+    expect(fill).toBe(true);
+    expect(box).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
+    // 4:3 in a 16:9 frame: a thin crop, no bars.
+    expect(videoPlacement(1440, 1080, 1920, 1080).fill).toBe(true);
+  });
+
+  it("shows a video of another shape whole, centred and inset", () => {
+    const { fill, box } = videoPlacement(1920, 1080, 1080, 1920);
+    expect(fill).toBe(false);
+    expect(box.width).toBeCloseTo(1080 * 0.9);
+    expect(box.x).toBeCloseTo((1080 - box.width) / 2);
+    expect(box.y).toBeCloseTo((1920 - box.height) / 2);
+    expect(box.width / box.height).toBeCloseTo(16 / 9);
   });
 });
