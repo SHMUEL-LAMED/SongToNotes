@@ -23,3 +23,4 @@
 
 :root[dir="ltr"] .account-drawer { animation-name: drawer-in-ltr; }
 @keyframes drawer-in-ltr { from { transform: translateX(100%); } to { transform: none; } }
+:root[dir="ltr"] .marquee-chip { direction: ltr; }
