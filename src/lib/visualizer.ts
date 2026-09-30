@@ -877,6 +877,94 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: SceneFrame) {
 }
 
 /**
+ * Where an uploaded video sits in the frame. When its shape nearly matches
+ * the frame's it fills it, a thin crop being kinder than bars; otherwise it
+ * is shown whole, a little in from the edges, over a blurred copy of itself.
+ */
+export function videoPlacement(sourceWidth: number, sourceHeight: number, width: number, height: number): { fill: boolean; box: Box } {
+  const sw = Math.max(1, sourceWidth);
+  const sh = Math.max(1, sourceHeight);
+  const whole = Math.min(width / sw, height / sh);
+  if ((sw * whole * sh * whole) / (width * height) >= 0.72) {
+    return { fill: true, box: coverFit(sw, sh, { x: 0, y: 0, width, height }) };
+  }
+  const scale = Math.min((width * 0.9) / sw, (height * 0.9) / sh);
+  const w = sw * scale;
+  const h = sh * scale;
+  return { fill: false, box: { x: (width - w) / 2, y: (height - h) / 2, width: w, height: h } };
+}
+
+/**
+ * Paints one video frame as the scene's backdrop, graded into the clip:
+ * placed by `videoPlacement`, the room around it filled with its own blurred
+ * light, tinted towards the clip's hue, and darkened at the top and bottom so
+ * the visual and the titles drawn over it always read. `scratch` is a small
+ * reusable canvas for the blur; it is resized here.
+ */
+export function paintVideoBackdrop(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  hue: number,
+  scratch: HTMLCanvasElement,
+) {
+  const { fill, box } = videoPlacement(sourceWidth, sourceHeight, width, height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  if (fill) {
+    ctx.drawImage(source, box.x, box.y, box.width, box.height);
+  } else {
+    // The blur: the frame shrunk to a few dozen pixels and stretched back.
+    scratch.width = 32;
+    scratch.height = Math.max(2, Math.round((32 * height) / width));
+    const small = scratch.getContext("2d");
+    if (small) {
+      const around = coverFit(sourceWidth, sourceHeight, { x: 0, y: 0, width: scratch.width, height: scratch.height });
+      small.drawImage(source, around.x, around.y, around.width, around.height);
+      ctx.drawImage(scratch, 0, 0, width, height);
+    }
+    ctx.fillStyle = "rgba(6, 6, 12, 0.5)";
+    ctx.fillRect(0, 0, width, height);
+    const radius = Math.min(box.width, box.height) * 0.045;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+    ctx.shadowBlur = Math.round(width * 0.05);
+    ctx.shadowOffsetY = Math.round(width * 0.012);
+    roundedRect(ctx, box, radius);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.save();
+    roundedRect(ctx, box, radius);
+    ctx.clip();
+    ctx.drawImage(source, box.x, box.y, box.width, box.height);
+    ctx.restore();
+    // A hairline of the clip's colour round the picture.
+    roundedRect(ctx, box, radius);
+    ctx.lineWidth = Math.max(2, width * 0.0025);
+    ctx.strokeStyle = `hsla(${normaliseHue(hue)}, 90%, 72%, 0.45)`;
+    ctx.stroke();
+  }
+  // The grade: a wash of the clip's hue, then the scrims.
+  ctx.fillStyle = `hsla(${normaliseHue(hue)}, 70%, 45%, 0.12)`;
+  ctx.fillRect(0, 0, width, height);
+  const top = ctx.createLinearGradient(0, 0, 0, height * 0.3);
+  top.addColorStop(0, "rgba(4, 4, 10, 0.6)");
+  top.addColorStop(1, "rgba(4, 4, 10, 0)");
+  ctx.fillStyle = top;
+  ctx.fillRect(0, 0, width, height * 0.3);
+  const bottom = ctx.createLinearGradient(0, height * 0.5, 0, height);
+  bottom.addColorStop(0, "rgba(4, 4, 10, 0)");
+  bottom.addColorStop(1, "rgba(4, 4, 10, 0.78)");
+  ctx.fillStyle = bottom;
+  ctx.fillRect(0, height * 0.5, width, height * 0.5);
+  ctx.restore();
+}
+
+/**
  * Pre-renders the uploaded background: scaled to cover the frame, blurred by
  * shrinking it hard and stretching it back (the same look as a CSS blur, and
  * unlike `ctx.filter` it works in Safari), then darkened so white text on
