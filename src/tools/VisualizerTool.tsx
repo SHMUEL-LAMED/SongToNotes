@@ -33,6 +33,9 @@ import {
   describeLength,
   drawScene,
   paintVideoBackdrop,
+  NO_EFFECTS,
+  PRESETS,
+  VIDEO_FITS,
   isAspect,
   isStyle,
   logBinRanges,
@@ -46,6 +49,9 @@ import {
   DEFAULT_REGION_SECONDS,
   MAX_REGION_SECONDS,
   type BinRange,
+  type VideoFit,
+  type VisualizerEffects,
+  type VisualizerPreset,
   type Particle,
   type RecordingType,
   type Region,
@@ -70,6 +76,19 @@ const STYLE_LABELS: Record<VisualizerStyle, string> = {
   wave: "גל",
   circle: "עיגול",
   particles: "חלקיקים",
+  spectrum: "ספקטרום",
+  rings: "טבעות",
+};
+const VIDEO_FIT_LABELS: Record<VideoFit, string> = {
+  auto: "אוטומטי",
+  fill: "ממלא",
+  fit: "שלם",
+  cover: "בחלון",
+};
+const EFFECT_LABELS: Record<keyof VisualizerEffects, string> = {
+  pulse: "דופק בקצב",
+  vignette: "וינייטה",
+  grain: "גרעין קולנועי",
 };
 const ASPECT_LABELS: Record<VisualizerAspect, { label: string; note: string }> = {
   square: { label: "ריבוע", note: "1:1 · פוסט" },
@@ -90,6 +109,10 @@ type Scene = {
   backgroundImage: SizedImage | null;
   cover: SizedImage | null;
   sourceVideo: HTMLVideoElement | null;
+  videoFit: VideoFit;
+  /** 0..1: how much darker the video is drawn. */
+  videoDim: number;
+  effects: VisualizerEffects;
   title: string;
   artist: string;
 };
@@ -209,13 +232,27 @@ class VisualizerEngine {
     // The recorder hands in decoded frames; the preview reads the playing video.
     const live = scene.sourceVideo?.readyState && scene.sourceVideo.readyState >= 2 ? scene.sourceVideo : null;
     const frame = this.offlineFrame ?? (live ? { image: live, width: live.videoWidth, height: live.videoHeight } : null);
+    let cover = scene.cover;
     if (frame) {
       this.videoFrame ??= document.createElement("canvas");
       this.videoScratch ??= document.createElement("canvas");
       if (this.videoFrame.width !== width) this.videoFrame.width = width;
       if (this.videoFrame.height !== height) this.videoFrame.height = height;
-      paintVideoBackdrop(this.videoFrame.getContext("2d")!, frame.image, frame.width, frame.height, width, height, scene.hue, this.videoScratch);
+      paintVideoBackdrop(
+        this.videoFrame.getContext("2d")!,
+        frame.image,
+        frame.width,
+        frame.height,
+        width,
+        height,
+        scene.hue,
+        this.videoScratch,
+        scene.videoFit,
+        scene.videoDim,
+      );
       backgroundImage = this.videoFrame;
+      // In the window, the video plays where the cover goes.
+      if (scene.videoFit === "cover") cover = frame;
     }
     drawScene(ctx, {
       aspect: scene.aspect,
@@ -223,7 +260,7 @@ class VisualizerEngine {
       hue: scene.hue,
       background: scene.sourceVideo || this.offlineFrame ? "image" : scene.background,
       backgroundImage,
-      cover: scene.cover,
+      cover,
       title: scene.title,
       artist: scene.artist,
       levels: this.levels,
@@ -231,6 +268,7 @@ class VisualizerEngine {
       bass,
       time,
       particles,
+      effects: scene.effects,
     });
   }
 
@@ -532,6 +570,62 @@ function loadImage(file: File): Promise<SizedImage> {
   });
 }
 
+function sameEffects(a: VisualizerEffects, b: VisualizerEffects) {
+  return a.pulse === b.pulse && a.vignette === b.vignette && a.grain === b.grain;
+}
+
+/** A plausible spectrum for a still: strong bass tapering into the treble, with a little texture. */
+function sampleLevel(t: number) {
+  return Math.max(0.06, Math.min(1, 0.92 * Math.exp(-t * 2.4) + 0.18 * Math.sin(t * 19) ** 2));
+}
+
+/**
+ * A small still of a template, drawn once with the same painter as the video
+ * and a made-up spectrum, so the choice shows what it will look like.
+ */
+function PresetThumb({ preset }: { preset: VisualizerPreset }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const thumb = ref.current;
+    if (!thumb) return;
+    const { width, height } = aspectSize(preset.aspect);
+    const full = document.createElement("canvas");
+    full.width = width;
+    full.height = height;
+    const ctx = full.getContext("2d");
+    if (!ctx) return;
+    const count = barCount(preset.style, preset.aspect);
+    const levels = Float32Array.from({ length: count }, (_, index) => sampleLevel(index / count));
+    const wave = Float32Array.from({ length: 512 }, (_, index) => Math.sin((index / 512) * Math.PI * 10) * 0.6 * Math.sin((index / 512) * Math.PI));
+    const random = seededRandom(3);
+    let particles = createParticles(PARTICLE_COUNT, random);
+    for (let step = 0; step < 60; step += 1) particles = stepParticles(particles, 1 / 30, 0.6, random);
+    drawScene(ctx, {
+      aspect: preset.aspect,
+      style: preset.style,
+      hue: preset.hue,
+      background: preset.background,
+      backgroundImage: null,
+      cover: null,
+      title: preset.label,
+      artist: "",
+      levels,
+      wave,
+      bass: 0.6,
+      time: 1.2,
+      particles,
+      effects: preset.effects,
+    });
+    thumb.width = Math.round(width / 8);
+    thumb.height = Math.round(height / 8);
+    const thumbCtx = thumb.getContext("2d");
+    if (!thumbCtx) return;
+    thumbCtx.imageSmoothingQuality = "high";
+    thumbCtx.drawImage(full, 0, 0, thumb.width, thumb.height);
+  }, [preset]);
+  return <canvas ref={ref} className={`visualizer-preset-thumb is-${preset.aspect}`} aria-hidden="true" />;
+}
+
 function canRecordVideo() {
   return typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined";
 }
@@ -557,6 +651,9 @@ export function VisualizerTool() {
   const [backgroundImage, setBackgroundImage] = useState<SizedImage | null>(null);
   const [cover, setCover] = useState<SizedImage | null>(null);
   const [sourceVideo, setSourceVideo] = useState<HTMLVideoElement | null>(null);
+  const [videoFit, setVideoFit] = useState<VideoFit>("auto");
+  const [videoDim, setVideoDim] = useState(0.15);
+  const [effects, setEffects] = useState<VisualizerEffects>(NO_EFFECTS);
   const [mediaReady, setMediaReady] = useState(false);
   const [mediaNote, setMediaNote] = useState("");
   const [title, setTitle] = useState("");
@@ -596,8 +693,8 @@ export function VisualizerTool() {
   const size = aspectSize(aspect);
 
   const scene = useMemo<Scene>(
-    () => ({ aspect, style, hue, background, backgroundImage, cover, sourceVideo, title, artist }),
-    [aspect, style, hue, background, backgroundImage, cover, sourceVideo, title, artist],
+    () => ({ aspect, style, hue, background, backgroundImage, cover, sourceVideo, videoFit, videoDim, effects, title, artist }),
+    [aspect, style, hue, background, backgroundImage, cover, sourceVideo, videoFit, videoDim, effects, title, artist],
   );
 
   useEffect(() => {
@@ -806,7 +903,7 @@ export function VisualizerTool() {
       }.`,
     handlers: {
       "visualizer.set": ({ style: nextStyle, hue: nextHue, title: nextTitle, artist: nextArtist, aspect: nextAspect }) => {
-        if (nextStyle !== undefined && !isStyle(nextStyle)) return { ok: false, message: "style הוא bars, wave, circle או particles" };
+        if (nextStyle !== undefined && !isStyle(nextStyle)) return { ok: false, message: "style הוא bars, wave, circle, particles, spectrum או rings" };
         if (nextAspect !== undefined && !isAspect(nextAspect)) return { ok: false, message: "aspect הוא square, portrait או landscape" };
         if (nextAspect !== undefined && recording && nextAspect !== aspect) return { ok: false, message: "אי אפשר לשנות את יחס המסך במהלך יצירת הקובץ" };
         if (nextHue !== undefined && !Number.isFinite(Number(nextHue))) return { ok: false, message: "hue הוא מספר בין 0 ל־360" };
@@ -952,6 +1049,81 @@ export function VisualizerTool() {
 
               <div className="settings-panel visualizer-settings" inert={recording || !mediaReady}>
                 <div className="setting-field">
+                  <span id="visualizer-presets">תבניות מוכנות</span>
+                  <div className="visualizer-presets" role="group" aria-labelledby="visualizer-presets">
+                    {PRESETS.map((preset) => {
+                      const on =
+                        preset.aspect === aspect &&
+                        preset.style === style &&
+                        preset.hue === hue &&
+                        preset.background === background &&
+                        sameEffects(preset.effects, effects);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={`visualizer-preset ${on ? "active" : ""}`}
+                          aria-pressed={on}
+                          onClick={() => {
+                            setAspect(preset.aspect);
+                            setStyle(preset.style);
+                            setHue(preset.hue);
+                            setBackground(preset.background);
+                            setEffects(preset.effects);
+                          }}
+                        >
+                          <PresetThumb preset={preset} />
+                          <b>{preset.label}</b>
+                          <small>{preset.note}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <small>התבנית קובעת סגנון, גודל, צבע ואפקטים. השיר, השם והתמונות נשארים.</small>
+                </div>
+
+                {sourceVideo && (
+                  <div className="setting-field">
+                    <span id="visualizer-video">הווידאו</span>
+                    <div className="segmented-control" role="group" aria-labelledby="visualizer-video">
+                      {VIDEO_FITS.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className={videoFit === option ? "active" : ""}
+                          aria-pressed={videoFit === option}
+                          onClick={() => setVideoFit(option)}
+                        >
+                          {VIDEO_FIT_LABELS[option]}
+                        </button>
+                      ))}
+                    </div>
+                    <small>
+                      {videoFit === "cover"
+                        ? "הווידאו מתנגן בחלון במקום העטיפה, מעל האור המטושטש שלו."
+                        : videoFit === "fill"
+                          ? "הווידאו ממלא את כל המסגרת, והשוליים נחתכים."
+                          : videoFit === "fit"
+                            ? "הווידאו מוצג שלם, מעל עותק מטושטש שלו."
+                            : "ממלא את המסגרת כשהצורה דומה, ואחרת מוצג שלם."}
+                    </small>
+                    <label className="visualizer-dim">
+                      <span>
+                        עמעום <b>{Math.round(videoDim * 100)}%</b>
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={Math.round(videoDim * 100)}
+                        onChange={(event) => setVideoDim(Number(event.target.value) / 100)}
+                        aria-label="עמעום הווידאו"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <div className="setting-field">
                   <span id="visualizer-style">סגנון</span>
                   <div className="segmented-control wrap" role="group" aria-labelledby="visualizer-style">
                     {STYLES.map((option) => (
@@ -1043,6 +1215,23 @@ export function VisualizerTool() {
                       <small>{backgroundImage ? "התמונה מטושטשת ומוחשכת כדי שהטקסט ייקרא." : "עד שתיבחר תמונה, הרקע נצבע לפי הגוון."}</small>
                     </div>
                   )}
+                </div>
+
+                <div className="setting-field">
+                  <span id="visualizer-effects">אפקטים</span>
+                  <div className="segmented-control wrap" role="group" aria-labelledby="visualizer-effects">
+                    {(Object.keys(EFFECT_LABELS) as Array<keyof VisualizerEffects>).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={effects[key] ? "active" : ""}
+                        aria-pressed={effects[key]}
+                        onClick={() => setEffects((current) => ({ ...current, [key]: !current[key] }))}
+                      >
+                        {EFFECT_LABELS[key]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <label className="setting-field">

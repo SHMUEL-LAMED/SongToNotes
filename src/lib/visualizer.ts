@@ -9,13 +9,54 @@ import { safeFilename } from "./export";
  * maths can be tested without a browser.
  */
 
-export type VisualizerStyle = "bars" | "wave" | "circle" | "particles";
+export type VisualizerStyle = "bars" | "wave" | "circle" | "particles" | "spectrum" | "rings";
 export type VisualizerAspect = "square" | "portrait" | "landscape";
 export type VisualizerBackground = "gradient" | "dark" | "image";
 
-export const STYLES: VisualizerStyle[] = ["bars", "wave", "circle", "particles"];
+export const STYLES: VisualizerStyle[] = ["bars", "wave", "circle", "particles", "spectrum", "rings"];
 export const ASPECTS: VisualizerAspect[] = ["square", "portrait", "landscape"];
 export const BACKGROUNDS: VisualizerBackground[] = ["gradient", "dark", "image"];
+
+/**
+ * Where an uploaded video goes: `auto` fills the frame when the shapes
+ * nearly match and shows it whole otherwise, `fill` always fills (cropping),
+ * `fit` always shows it whole, and `cover` plays it in the cover's place,
+ * over its own blurred light.
+ */
+export type VideoFit = "auto" | "fill" | "fit" | "cover";
+export const VIDEO_FITS: VideoFit[] = ["auto", "fill", "fit", "cover"];
+
+/** Finishing touches over the whole frame. */
+export type VisualizerEffects = {
+  /** The visual swells a little with the bass. */
+  pulse: boolean;
+  /** Darkened corners. */
+  vignette: boolean;
+  /** A fine moving film grain. */
+  grain: boolean;
+};
+export const NO_EFFECTS: VisualizerEffects = { pulse: false, vignette: false, grain: false };
+
+/** A ready-made look: everything but the song, its words and its pictures. */
+export type VisualizerPreset = {
+  id: string;
+  label: string;
+  note: string;
+  aspect: VisualizerAspect;
+  style: VisualizerStyle;
+  hue: number;
+  background: "gradient" | "dark";
+  effects: VisualizerEffects;
+};
+
+export const PRESETS: VisualizerPreset[] = [
+  { id: "neon-story", label: "סטורי ניאון", note: "אינסטגרם · טיקטוק", aspect: "portrait", style: "bars", hue: 300, background: "dark", effects: { pulse: true, vignette: true, grain: false } },
+  { id: "vinyl", label: "תקליט", note: "פוסט", aspect: "square", style: "circle", hue: 28, background: "gradient", effects: { pulse: false, vignette: true, grain: true } },
+  { id: "youtube", label: "יוטיוב", note: "16:9", aspect: "landscape", style: "wave", hue: 200, background: "gradient", effects: { pulse: false, vignette: true, grain: false } },
+  { id: "dream", label: "חלומי", note: "סטורי", aspect: "portrait", style: "particles", hue: 265, background: "gradient", effects: { pulse: true, vignette: false, grain: true } },
+  { id: "spectrum", label: "ספקטרום", note: "פוסט", aspect: "square", style: "spectrum", hue: 160, background: "dark", effects: { pulse: false, vignette: true, grain: false } },
+  { id: "pulse", label: "דופק", note: "סטורי", aspect: "portrait", style: "rings", hue: 340, background: "dark", effects: { pulse: true, vignette: true, grain: true } },
+];
 
 /** The longest clip a video is recorded from. Recording runs in real time, so this is also the longest wait. */
 export const MAX_REGION_SECONDS = 180;
@@ -39,6 +80,9 @@ export function aspectSize(aspect: VisualizerAspect): { width: number; height: n
 
 export function isStyle(value: unknown): value is VisualizerStyle {
   return typeof value === "string" && (STYLES as string[]).includes(value);
+}
+export function isVideoFit(value: unknown): value is VideoFit {
+  return typeof value === "string" && (VIDEO_FITS as string[]).includes(value);
 }
 export function isAspect(value: unknown): value is VisualizerAspect {
   return typeof value === "string" && (ASPECTS as string[]).includes(value);
@@ -205,6 +249,7 @@ export function magnitudesToBytes(
 export function barCount(style: VisualizerStyle, aspect: VisualizerAspect): number {
   if (style === "bars") return aspect === "landscape" ? 56 : 36;
   if (style === "circle") return 60;
+  if (style === "spectrum") return aspect === "landscape" ? 64 : 48;
   return 32;
 }
 
@@ -531,6 +576,7 @@ export type SceneFrame = {
   /** Seconds since playback started; turns the disc and drifts the glow. */
   time: number;
   particles: Particle[];
+  effects?: VisualizerEffects;
 };
 
 export const CANVAS_FONT = '"Rubik Variable", Rubik, Heebo, "Segoe UI", system-ui, "Arial Hebrew", sans-serif';
@@ -736,6 +782,156 @@ function paintParticles(ctx: CanvasRenderingContext2D, frame: SceneFrame, area: 
   ctx.globalCompositeOperation = previous;
 }
 
+/**
+ * A mirrored mountain of the spectrum: the bands joined by one smooth line,
+ * the area under it filled in the ramp's colours, with a glowing crest and a
+ * faint reflection below.
+ */
+function paintSpectrum(ctx: CanvasRenderingContext2D, frame: SceneFrame, area: Box) {
+  const count = frame.levels.length;
+  if (count < 2) return;
+  const centreX = area.x + area.width / 2;
+  const baseline = area.y + area.height * 0.62;
+  const up = area.height * 0.58;
+  // Points from the left edge to the right, the bass meeting in the middle.
+  const points: Array<[number, number]> = [];
+  for (let index = count - 1; index >= 0; index -= 1) points.push([centreX - ((index + 0.5) / count) * (area.width / 2), frame.levels[index]]);
+  for (let index = 0; index < count; index += 1) points.push([centreX + ((index + 0.5) / count) * (area.width / 2), frame.levels[index]]);
+  const trace = (scale: number, direction: 1 | -1) => {
+    ctx.beginPath();
+    ctx.moveTo(area.x, baseline);
+    let [px, pl] = [area.x, 0];
+    for (const [x, level] of points) {
+      const y = baseline - direction * level * scale;
+      const midX = (px + x) / 2;
+      ctx.quadraticCurveTo(px, baseline - direction * pl * scale, midX, (baseline - direction * pl * scale + y) / 2);
+      [px, pl] = [x, level];
+    }
+    ctx.lineTo(area.x + area.width, baseline);
+  };
+  const fill = ctx.createLinearGradient(0, baseline - up, 0, baseline);
+  fill.addColorStop(0, rampColor(frame.hue, 0.9, 0.85));
+  fill.addColorStop(1, rampColor(frame.hue, 0.1, 0.15));
+  trace(up, 1);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  const previous = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = "lighter";
+  for (const [lineWidth, alpha] of [[16, 0.12], [6, 0.4], [2.5, 1]] as const) {
+    trace(up, 1);
+    ctx.lineWidth = lineWidth + frame.bass * lineWidth * 0.5;
+    ctx.strokeStyle = rampColor(frame.hue, 0.6, alpha);
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = previous;
+  trace(up * 0.35, -1);
+  ctx.closePath();
+  ctx.fillStyle = rampColor(frame.hue, 0.3, 0.14);
+  ctx.fill();
+}
+
+/**
+ * Rings that breathe with the music: each takes a slice of the spectrum,
+ * bass inside and treble out, and swells by its level; a dashed orbit turns
+ * slowly and the core flares on the bass.
+ */
+function paintRings(ctx: CanvasRenderingContext2D, frame: SceneFrame, area: Box) {
+  const x = area.x + area.width / 2;
+  const y = area.y + area.height / 2;
+  const reach = Math.min(area.width, area.height) / 2;
+  const rings = 6;
+  const count = frame.levels.length;
+  const previous = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = "lighter";
+  const core = reach * (0.14 + frame.bass * 0.1);
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, core * 2.6);
+  glow.addColorStop(0, rampColor(frame.hue, 0.5, 0.9));
+  glow.addColorStop(0.35, rampColor(frame.hue, 0.2, 0.35));
+  glow.addColorStop(1, rampColor(frame.hue, 0, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, core * 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  for (let ring = 0; ring < rings; ring += 1) {
+    const from = Math.floor((ring / rings) * count);
+    const to = Math.max(from + 1, Math.floor(((ring + 1) / rings) * count));
+    let level = 0;
+    for (let band = from; band < to; band += 1) level += frame.levels[band] ?? 0;
+    level /= to - from;
+    const t = ring / (rings - 1);
+    const radius = reach * (0.26 + t * 0.62) + level * reach * 0.12;
+    ctx.lineWidth = Math.max(2, reach * (0.028 - t * 0.016) * (0.6 + level));
+    ctx.strokeStyle = rampColor(frame.hue, t, 0.25 + level * 0.7);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = previous;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(frame.time * 0.25);
+  ctx.setLineDash([reach * 0.02, reach * 0.05]);
+  ctx.lineWidth = Math.max(2, reach * 0.008);
+  ctx.strokeStyle = rampColor(frame.hue, 0.7, 0.55);
+  ctx.beginPath();
+  ctx.arc(0, 0, reach * 0.97, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+let grainTile: HTMLCanvasElement | null = null;
+
+/** A tile of fixed noise, made once; each frame shows it at another offset. */
+function grain(): HTMLCanvasElement | null {
+  if (grainTile || typeof document === "undefined") return grainTile;
+  const tile = document.createElement("canvas");
+  tile.width = 256;
+  tile.height = 256;
+  const tileCtx = tile.getContext("2d");
+  if (!tileCtx) return null;
+  const pixels = tileCtx.createImageData(256, 256);
+  const random = seededRandom(7);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const value = Math.round(random() * 255);
+    pixels.data[index] = value;
+    pixels.data[index + 1] = value;
+    pixels.data[index + 2] = value;
+    pixels.data[index + 3] = 255;
+  }
+  tileCtx.putImageData(pixels, 0, 0);
+  grainTile = tile;
+  return tile;
+}
+
+function paintFinish(ctx: CanvasRenderingContext2D, frame: SceneFrame, width: number, height: number) {
+  const effects = frame.effects;
+  if (effects?.vignette) {
+    const vignette = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.35, width / 2, height / 2, Math.hypot(width, height) / 2);
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.62)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+  }
+  const tile = effects?.grain ? grain() : null;
+  if (tile) {
+    // The offset steps with time, not at random, so a frame is the same in
+    // the preview and in the file.
+    const step = Math.floor(frame.time * 24);
+    const pattern = ctx.createPattern(tile, "repeat");
+    if (pattern) {
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.globalCompositeOperation = "overlay";
+      ctx.translate(-((step * 97) % 256), -((step * 61) % 256));
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, width + 256, height + 256);
+      ctx.restore();
+    }
+  }
+}
+
 function paintCover(ctx: CanvasRenderingContext2D, frame: SceneFrame, box: Box) {
   if (!frame.cover) return;
   const pulse = 1 + frame.bass * 0.025;
@@ -852,10 +1048,23 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: SceneFrame) {
   ctx.globalCompositeOperation = "source-over";
   paintBackground(ctx, frame, width, height);
 
+  // The pulse scales the visual about its own centre; the text stays still.
+  ctx.save();
+  if (frame.effects?.pulse) {
+    const cx = frame.style === "circle" ? layout.disc.x : layout.area.x + layout.area.width / 2;
+    const cy = frame.style === "circle" ? layout.disc.y : layout.area.y + layout.area.height / 2;
+    const zoom = 1 + frame.bass * 0.07;
+    ctx.translate(cx, cy);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cx, -cy);
+  }
   if (frame.style === "bars") paintBars(ctx, frame, layout.area);
   else if (frame.style === "wave") paintWave(ctx, frame, layout.area);
   else if (frame.style === "circle") paintCircle(ctx, frame, layout);
+  else if (frame.style === "spectrum") paintSpectrum(ctx, frame, layout.area);
+  else if (frame.style === "rings") paintRings(ctx, frame, layout.area);
   else paintParticles(ctx, frame, layout.area);
+  ctx.restore();
 
   if (layout.cover) paintCover(ctx, frame, layout.cover);
 
@@ -872,6 +1081,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: SceneFrame) {
   ctx.shadowBlur = 0;
   ctx.shadowColor = "transparent";
 
+  paintFinish(ctx, frame, width, height);
   paintWatermark(ctx, width, layout);
   ctx.restore();
 }
@@ -881,11 +1091,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: SceneFrame) {
  * the frame's it fills it, a thin crop being kinder than bars; otherwise it
  * is shown whole, a little in from the edges, over a blurred copy of itself.
  */
-export function videoPlacement(sourceWidth: number, sourceHeight: number, width: number, height: number): { fill: boolean; box: Box } {
+export function videoPlacement(
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  fit: VideoFit = "auto",
+): { fill: boolean; box: Box } {
   const sw = Math.max(1, sourceWidth);
   const sh = Math.max(1, sourceHeight);
   const whole = Math.min(width / sw, height / sh);
-  if ((sw * whole * sh * whole) / (width * height) >= 0.72) {
+  const nearlyMatches = (sw * whole * sh * whole) / (width * height) >= 0.72;
+  if (fit === "fill" || (fit === "auto" && nearlyMatches)) {
     return { fill: true, box: coverFit(sw, sh, { x: 0, y: 0, width, height }) };
   }
   const scale = Math.min((width * 0.9) / sw, (height * 0.9) / sh);
@@ -899,7 +1116,9 @@ export function videoPlacement(sourceWidth: number, sourceHeight: number, width:
  * placed by `videoPlacement`, the room around it filled with its own blurred
  * light, tinted towards the clip's hue, and darkened at the top and bottom so
  * the visual and the titles drawn over it always read. `scratch` is a small
- * reusable canvas for the blur; it is resized here.
+ * reusable canvas for the blur; it is resized here. With `cover` the frame
+ * gets only the blurred light, the picture itself going in the cover's place;
+ * `dim` (0..1) darkens it further.
  */
 export function paintVideoBackdrop(
   ctx: CanvasRenderingContext2D,
@@ -910,12 +1129,14 @@ export function paintVideoBackdrop(
   height: number,
   hue: number,
   scratch: HTMLCanvasElement,
+  fit: VideoFit = "auto",
+  dim = 0,
 ) {
-  const { fill, box } = videoPlacement(sourceWidth, sourceHeight, width, height);
+  const { fill, box } = videoPlacement(sourceWidth, sourceHeight, width, height, fit === "cover" ? "fit" : fit);
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  if (fill) {
+  if (fill && fit !== "cover") {
     ctx.drawImage(source, box.x, box.y, box.width, box.height);
   } else {
     // The blur: the frame shrunk to a few dozen pixels and stretched back.
@@ -929,6 +1150,8 @@ export function paintVideoBackdrop(
     }
     ctx.fillStyle = "rgba(6, 6, 12, 0.5)";
     ctx.fillRect(0, 0, width, height);
+  }
+  if (!fill && fit !== "cover") {
     const radius = Math.min(box.width, box.height) * 0.045;
     ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
     ctx.shadowBlur = Math.round(width * 0.05);
@@ -948,9 +1171,13 @@ export function paintVideoBackdrop(
     ctx.strokeStyle = `hsla(${normaliseHue(hue)}, 90%, 72%, 0.45)`;
     ctx.stroke();
   }
-  // The grade: a wash of the clip's hue, then the scrims.
+  // The grade: a wash of the clip's hue, the chosen dimming, then the scrims.
   ctx.fillStyle = `hsla(${normaliseHue(hue)}, 70%, 45%, 0.12)`;
   ctx.fillRect(0, 0, width, height);
+  if (dim > 0) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, dim * 0.8).toFixed(3)})`;
+    ctx.fillRect(0, 0, width, height);
+  }
   const top = ctx.createLinearGradient(0, 0, 0, height * 0.3);
   top.addColorStop(0, "rgba(4, 4, 10, 0.6)");
   top.addColorStop(1, "rgba(4, 4, 10, 0)");
