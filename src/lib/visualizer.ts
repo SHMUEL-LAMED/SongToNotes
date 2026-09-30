@@ -577,6 +577,13 @@ export type SceneFrame = {
   time: number;
   particles: Particle[];
   effects?: VisualizerEffects;
+  /**
+   * How the cover's slot takes its picture: `square` crops it into the slot,
+   * `window` keeps the picture's own shape in about the slot's size (a video
+   * in the cover's place), and `stage` gives it all the room above the title
+   * (a video shown whole).
+   */
+  coverShape?: "square" | "window" | "stage";
 };
 
 export const CANVAS_FONT = '"Rubik Variable", Rubik, Heebo, "Segoe UI", system-ui, "Arial Hebrew", sans-serif';
@@ -932,6 +939,34 @@ function paintFinish(ctx: CanvasRenderingContext2D, frame: SceneFrame, width: nu
   }
 }
 
+/** Fits a `sourceWidth`×`sourceHeight` picture inside `box` whole, centred. */
+export function containFit(sourceWidth: number, sourceHeight: number, box: Box): Box {
+  const scale = Math.min(box.width / Math.max(1, sourceWidth), box.height / Math.max(1, sourceHeight));
+  const width = sourceWidth * scale;
+  const height = sourceHeight * scale;
+  return { x: box.x + (box.width - width) / 2, y: box.y + (box.height - height) / 2, width, height };
+}
+
+/**
+ * The cover's box for a shape (see `SceneFrame.coverShape`). A window may be
+ * half again as wide as the square slot, so a wide video is not a letterbox
+ * strip; a stage takes the column above the title. The wide frame keeps its
+ * slot beside the text either way.
+ */
+export function coverBox(aspect: VisualizerAspect, layout: SceneLayout, shape: SceneFrame["coverShape"], sourceWidth: number, sourceHeight: number): Box | null {
+  const slot = layout.cover;
+  if (!slot || !shape || shape === "square") return slot;
+  if (aspect === "landscape") return containFit(sourceWidth, sourceHeight, slot);
+  const { width } = aspectSize(aspect);
+  if (shape === "stage") {
+    const top = aspect === "portrait" ? 140 : 50;
+    const bottom = layout.titleY - layout.titleSize * 1.3;
+    return containFit(sourceWidth, sourceHeight, { x: 80, y: top, width: width - 160, height: bottom - top });
+  }
+  const wide = Math.min(width - 160, slot.width * 1.5);
+  return containFit(sourceWidth, sourceHeight, { x: (width - wide) / 2, y: slot.y, width: wide, height: slot.height });
+}
+
 function paintCover(ctx: CanvasRenderingContext2D, frame: SceneFrame, box: Box) {
   if (!frame.cover) return;
   const pulse = 1 + frame.bass * 0.025;
@@ -943,11 +978,12 @@ function paintCover(ctx: CanvasRenderingContext2D, frame: SceneFrame, box: Box) 
   ctx.shadowBlur = 50;
   ctx.shadowOffsetY = 20;
   ctx.fillStyle = "#000";
-  roundedRect(ctx, scaled, 36);
+  const radius = Math.min(36, Math.min(width, height) * 0.06);
+  roundedRect(ctx, scaled, radius);
   ctx.fill();
   ctx.restore();
   ctx.save();
-  roundedRect(ctx, scaled, 36);
+  roundedRect(ctx, scaled, radius);
   ctx.clip();
   const fit = coverFit(frame.cover.width, frame.cover.height, scaled);
   ctx.drawImage(frame.cover.image, fit.x, fit.y, fit.width, fit.height);
@@ -1066,7 +1102,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, frame: SceneFrame) {
   else paintParticles(ctx, frame, layout.area);
   ctx.restore();
 
-  if (layout.cover) paintCover(ctx, frame, layout.cover);
+  const cover = frame.cover ? coverBox(frame.aspect, layout, frame.coverShape, frame.cover.width, frame.cover.height) : null;
+  if (cover) paintCover(ctx, frame, cover);
 
   ctx.textBaseline = "alphabetic";
   ctx.shadowColor = "rgba(0,0,0,0.35)";

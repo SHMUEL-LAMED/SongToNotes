@@ -206,6 +206,10 @@ export function Home({ onOpen, onOpenWork, disabledTools = NO_TOOLS, onFeedback 
       <ToolMarquee onOpen={onOpen} disabledTools={disabledTools} />
 
       <div className="aura">
+        {/* Right under the marquee, where it stood before the redesign: the
+            daily credits are what a new visitor most needs to hear about. */}
+        <CreditsPromo onOpen={onOpen} />
+
         {(favoriteTools.length > 0 || recent.length > 0 || works.length > 0) && (
           <Dock
             lastTool={lastTool ?? null}
@@ -220,8 +224,6 @@ export function Home({ onOpen, onOpenWork, disabledTools = NO_TOOLS, onFeedback 
         )}
 
         <ToolMosaic onOpen={onOpen} disabledTools={disabledTools} />
-
-        <CreditsPromo onOpen={onOpen} />
 
         <WorkflowStories onOpen={onOpen} disabledTools={disabledTools} />
 
