@@ -1,9 +1,8 @@
-import { finalizeRecording } from "../lib/remux";
+import { loadArtwork, readVisualizerMedia, seekVideo, waitForVideo } from "../lib/visualizerMedia";
 import {
   AudioWaveform,
   Clapperboard,
   Download,
-  EyeOff,
   ImagePlus,
   Play,
   Sparkles,
@@ -11,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, formatBytes, useAudioFile } from "../components/AudioPicker";
 import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
@@ -28,9 +27,7 @@ import {
   bassLevel,
   binLevels,
   blurredBackground,
-  chooseRecordingType,
   clampRegion,
-  containerMime,
   createParticles,
   defaultRegion,
   describeLength,
@@ -91,6 +88,7 @@ type Scene = {
   background: VisualizerBackground;
   backgroundImage: SizedImage | null;
   cover: SizedImage | null;
+  sourceVideo: HTMLVideoElement | null;
   title: string;
   artist: string;
 };
@@ -106,23 +104,21 @@ type EngineEvents = {
 type Session = {
   kind: "preview" | "record";
   source: AudioBufferSourceNode;
+  video: HTMLVideoElement | null;
+  offset: number;
   gain: GainNode;
   analyser: AnalyserNode;
   startedAt: number;
   length: number;
   raf: number;
   cancelled: boolean;
-  recorder?: MediaRecorder;
-  type?: RecordingType;
-  chunks: Blob[];
-  tracks: MediaStreamTrack[];
 };
 
 let sharedFft: Fft | null = null;
 
 /**
  * Everything that has to outlive a render: the audio graph, the animation
- * loop, the recorder and the per-frame buffers. Keeping it in one plain
+ * loop, the encoder and the per-frame buffers. Keeping it in one plain
  * object (held in state, never recreated) means the 60 fps loop never goes
  * through React, and React only hears about progress ten times a second.
  */
@@ -141,6 +137,7 @@ class VisualizerEngine {
   private random = seededRandom(11);
   private particles: Particle[] = createParticles(PARTICLE_COUNT, this.random);
   private background: { source: SizedImage; aspect: VisualizerAspect; canvas: HTMLCanvasElement } | null = null;
+  private videoFrame: HTMLCanvasElement | null = null;
   private lastFrame = 0;
   private lastTick = 0;
   /**
@@ -151,9 +148,11 @@ class VisualizerEngine {
    * left an orphaned source playing that no button could stop.
    */
   private generation = 0;
+  private exporting = false;
+  private offlineFrame: CanvasImageSource | null = null;
 
   get busy(): Session["kind"] | null {
-    return this.session?.kind ?? null;
+    return this.exporting ? "record" : this.session?.kind ?? null;
   }
 
   setScene(scene: Scene) {
@@ -193,7 +192,7 @@ class VisualizerEngine {
     if (canvas.height !== height) canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    let backgroundImage: HTMLCanvasElement | null = null;
+    let backgroundImage: CanvasImageSource | null = null;
     if (scene.background === "image" && scene.backgroundImage) {
       const cached = this.background;
       if (!cached || cached.source !== scene.backgroundImage || cached.aspect !== scene.aspect) {
@@ -205,11 +204,26 @@ class VisualizerEngine {
       }
       backgroundImage = this.background!.canvas;
     }
+    if (scene.sourceVideo?.readyState && scene.sourceVideo.readyState >= 2) {
+      const video = scene.sourceVideo;
+      this.videoFrame ??= document.createElement("canvas");
+      if (this.videoFrame.width !== width) this.videoFrame.width = width;
+      if (this.videoFrame.height !== height) this.videoFrame.height = height;
+      const videoContext = this.videoFrame.getContext("2d")!;
+      videoContext.fillStyle = "#000";
+      videoContext.fillRect(0, 0, width, height);
+      const scale = Math.min(width / video.videoWidth, height / video.videoHeight);
+      const w = video.videoWidth * scale;
+      const h = video.videoHeight * scale;
+      videoContext.drawImage(video, (width - w) / 2, (height - h) / 2, w, h);
+      backgroundImage = this.videoFrame;
+    }
+    if (this.offlineFrame) backgroundImage = this.offlineFrame;
     drawScene(ctx, {
       aspect: scene.aspect,
       style: scene.style,
       hue: scene.hue,
-      background: scene.background,
+      background: scene.sourceVideo || this.offlineFrame ? "image" : scene.background,
       backgroundImage,
       cover: scene.cover,
       title: scene.title,
@@ -227,7 +241,7 @@ class VisualizerEngine {
    * into the region, computed directly, so the design can be judged on a
    * frame that looks like the song rather than on flat bars.
    */
-  drawStill(buffer: AudioBuffer | null, at: number) {
+  drawStill(buffer: AudioBuffer | null, at: number, exportTime?: number) {
     if (this.session || !this.scene) return;
     const ranges = this.bands(buffer?.sampleRate ?? 44_100);
     this.wave.fill(0);
@@ -250,7 +264,11 @@ class VisualizerEngine {
     binLevels(this.frequency, ranges, this.levels);
     // A fixed seed: the still frame's particles sit in the same places every
     // time a setting changes, instead of reshuffling on each keystroke.
-    this.paint(bassLevel(this.levels), 0, createParticles(PARTICLE_COUNT, seededRandom(5)));
+    const bass = bassLevel(this.levels);
+    if (exportTime !== undefined) {
+      stepParticles(this.particles, 1 / VIDEO_FPS, bass, this.random);
+      this.paint(bass, exportTime, this.particles);
+    } else this.paint(bass, 0, createParticles(PARTICLE_COUNT, seededRandom(5)));
   }
 
   private async ensureContext() {
@@ -268,9 +286,17 @@ class VisualizerEngine {
     kind: Session["kind"],
     buffer: AudioBuffer,
     region: Region,
-    destination?: MediaStreamAudioDestinationNode,
   ): Promise<Session> {
+    const generation = this.generation;
     const context = await this.ensureContext();
+    if (generation !== this.generation) throw new Error("הפעולה בוטלה.");
+    const video = this.scene?.sourceVideo;
+    if (video) {
+      await seekVideo(video, region.start);
+      if (generation !== this.generation) throw new Error("הפעולה בוטלה.");
+      await video.play();
+      if (generation !== this.generation) { video.pause(); throw new Error("הפעולה בוטלה."); }
+    }
     const source = context.createBufferSource();
     source.buffer = buffer;
     const gain = context.createGain();
@@ -282,21 +308,20 @@ class VisualizerEngine {
     source.connect(gain);
     gain.connect(analyser);
     analyser.connect(context.destination);
-    if (destination) gain.connect(destination);
     const length = region.end - region.start;
-    // A short lead-in gives the recorder time to take its first frame before
-    // the music starts, and the fades stop the cut from clicking at either end.
-    const startedAt = context.currentTime + (kind === "record" ? 0.12 : 0.02);
+    // A short lead-in and fades prevent clicks during preview playback.
+    const startedAt = context.currentTime + 0.02;
     const fade = Math.min(0.04, length / 4);
     gain.gain.setValueAtTime(0, startedAt);
     gain.gain.linearRampToValueAtTime(1, startedAt + fade);
     gain.gain.setValueAtTime(1, startedAt + length - fade);
     gain.gain.linearRampToValueAtTime(0, startedAt + length);
     source.start(startedAt, region.start, length);
-    return { kind, source, gain, analyser, startedAt, length, raf: 0, cancelled: false, chunks: [], tracks: [] };
+    return { kind, source, video: video ?? null, offset: region.start, gain, analyser, startedAt, length, raf: 0, cancelled: false };
   }
 
   private close(session: Session) {
+    session.video?.pause();
     cancelAnimationFrame(session.raf);
     session.source.onended = null;
     try {
@@ -307,7 +332,6 @@ class VisualizerEngine {
     session.source.disconnect();
     session.gain.disconnect();
     session.analyser.disconnect();
-    session.tracks.forEach((track) => track.stop());
     if (this.session === session) this.session = null;
   }
 
@@ -321,6 +345,9 @@ class VisualizerEngine {
       const dt = Math.min(0.1, Math.max(0.001, (now - this.lastFrame) / 1000));
       this.lastFrame = now;
       const elapsed = Math.max(0, Math.min(session.length, this.context.currentTime - session.startedAt));
+      if (session.video && !session.video.seeking && Math.abs(session.video.currentTime - session.offset - elapsed) > 0.18) {
+        session.video.currentTime = session.offset + elapsed;
+      }
       const ranges = this.bands(this.context.sampleRate);
       session.analyser.getByteFrequencyData(this.frequency);
       session.analyser.getFloatTimeDomainData(this.wave);
@@ -357,113 +384,104 @@ class VisualizerEngine {
     return true;
   }
 
-  /**
-   * Records the canvas and the region's sound together in real time. The
-   * canvas stream carries whatever the loop paints; the audio reaches the
-   * recorder through a stream destination tapped off the same gain the
-   * speakers hear, so picture and sound come from one clock.
-   */
-  async startRecording(buffer: AudioBuffer, region: Region, type: RecordingType): Promise<boolean> {
+  /** Encodes explicit frames and PCM audio; no screen capture or wall-clock recording. */
+  async startRecording(buffer: AudioBuffer, region: Region, file: File): Promise<boolean> {
     this.stop();
     const generation = ++this.generation;
-    const canvas = this.canvas;
-    if (!canvas) throw new Error("התצוגה עוד לא מוכנה.");
-    const context = await this.ensureContext();
-    if (generation !== this.generation) return false;
-    const destination = context.createMediaStreamDestination();
-    const canvasStream = canvas.captureStream(VIDEO_FPS);
-    const stream = new MediaStream([...canvasStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
-    let recorder: MediaRecorder;
+    this.exporting = true;
+    const scene = this.scene!;
+    const events = this.events;
+    const renderer = new VisualizerEngine();
+    renderer.setScene({ ...scene, sourceVideo: null });
+    const canvas = document.createElement("canvas");
+    const size = aspectSize(scene.aspect);
+    canvas.width = size.width;
+    canvas.height = size.height;
+    renderer.attachCanvas(canvas);
+    const { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource, AudioBufferSource,
+      canEncodeVideo, canEncodeAudio, Input, BlobSource, ALL_FORMATS, CanvasSink } = await import("mediabunny");
+    const active = () => generation === this.generation;
+    const audioOptions = { sampleRate: buffer.sampleRate, numberOfChannels: buffer.numberOfChannels, bitrate: 192_000 };
+    const videoOptions = { ...size, bitrate: VIDEO_BITRATE, frameRate: VIDEO_FPS };
+    const mp4 = await canEncodeVideo("avc", videoOptions) && await canEncodeAudio("aac", audioOptions);
+    if (!active()) return false;
+    if (!mp4 && !(await canEncodeVideo("vp9", videoOptions) && await canEncodeAudio("opus", audioOptions))) {
+      this.exporting = false;
+      throw new Error("הדפדפן אינו תומך ביצירת קובץ וידאו ישירה. נסו Chrome או Edge עדכני.");
+    }
+    const type: RecordingType = mp4 ? { mimeType: "video/mp4", extension: "mp4" } : { mimeType: "video/webm", extension: "webm" };
+    const output = new Output({ format: mp4 ? new Mp4OutputFormat({ fastStart: "in-memory" }) : new WebMOutputFormat(), target: new BufferTarget() });
+    const videoSource = new CanvasSource(canvas, { codec: mp4 ? "avc" : "vp9", bitrate: VIDEO_BITRATE });
+    const audioSource = new AudioBufferSource({ codec: mp4 ? "aac" : "opus", bitrate: 192_000 });
+    output.addVideoTrack(videoSource, { frameRate: VIDEO_FPS });
+    output.addAudioTrack(audioSource);
+    let input: InstanceType<typeof Input> | null = null;
+    let frames: AsyncGenerator<Awaited<ReturnType<InstanceType<typeof CanvasSink>["getCanvas"]>>> | null = null;
+    let completed = false;
     try {
-      recorder = new MediaRecorder(stream, {
-        mimeType: type.mimeType,
-        videoBitsPerSecond: VIDEO_BITRATE,
-        audioBitsPerSecond: 192_000,
-      });
-    } catch {
-      stream.getTracks().forEach((track) => track.stop());
-      throw new Error("הדפדפן לא הצליח להתחיל הקלטת וידאו.");
-    }
-    const session = await this.openSession("record", buffer, region, destination);
-    session.recorder = recorder;
-    session.type = type;
-    session.tracks = [...stream.getTracks(), ...canvasStream.getTracks(), ...destination.stream.getTracks()];
-    if (generation !== this.generation) {
-      this.close(session);
-      return false;
-    }
-    this.session = session;
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) session.chunks.push(event.data);
-    };
-    recorder.onstop = () => {
-      this.close(session);
-      if (session.cancelled) return;
-      const blob = new Blob(session.chunks, { type: containerMime(type.mimeType) });
-      if (blob.size < 1024) {
-        this.events.onRecordError?.("ההקלטה יצאה ריקה. נסו שוב, ורצוי להשאיר את הלשונית גלויה עד הסוף.");
-        return;
+      const length = region.end - region.start;
+      const count = Math.ceil(length * VIDEO_FPS);
+      if (scene.sourceVideo) {
+        input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+        const track = await input.getPrimaryVideoTrack();
+        if (!track || !(await track.canDecode())) throw new Error("לא ניתן לפענח את הסרטון הזה. נסו MP4 או WebM.");
+        const sink = new CanvasSink(track, { ...size, fit: "contain", poolSize: 2 });
+        frames = sink.canvasesAtTimestamps(Array.from({ length: count }, (_, index) => region.start + index / VIDEO_FPS));
       }
-      void finalizeRecording(blob, type).then((file) => this.events.onRecordDone?.(file, type));
-    };
-    recorder.onerror = () => {
-      session.cancelled = true;
-      if (recorder.state !== "inactive") recorder.stop();
-      this.close(session);
-      this.events.onRecordError?.("ההקלטה נכשלה באמצע. נסו שוב.");
-    };
-    session.source.onended = () => {
-      if (session.cancelled || this.session !== session) return;
-      // A beat of tail after the music, so the last frames and the last of
-      // the audio are flushed into the file before it is closed.
-      window.setTimeout(() => {
-        if (recorder.state !== "inactive") recorder.stop();
-      }, 300);
-    };
-    // Chunks every second keep the memory spread out and mean a crash near
-    // the end still has something to show for it in the recorder.
-    try {
-      recorder.start(1000);
-    } catch {
-      // Without this the music went on playing, and the loop painting, after
-      // the page had already said the recording failed.
-      session.cancelled = true;
-      this.close(session);
-      throw new Error("הדפדפן לא הצליח להתחיל הקלטת וידאו.");
+      await output.start();
+      // Interleave short audio chunks with frames to bound encoder/muxer buffering.
+      const firstSample = Math.round(region.start * buffer.sampleRate);
+      const endSample = Math.min(buffer.length, Math.round(region.end * buffer.sampleRate));
+      let audioSample = firstSample;
+      for (let index = 0; index < count; index += 1) {
+        if (!active()) return false;
+        const time = index / VIDEO_FPS;
+        if (frames) {
+          const frame = await frames.next();
+          if (!frame.value) throw new Error("לא נמצאה תמונת וידאו בקטע שנבחר.");
+          renderer.offlineFrame = frame.value.canvas;
+        }
+        renderer.drawStill(buffer, region.start + time, time);
+        await videoSource.add(time, Math.min(1 / VIDEO_FPS, length - time));
+        const audioEnd = Math.min(endSample, firstSample + Math.round(Math.min(length, time + 1 / VIDEO_FPS) * buffer.sampleRate));
+        if (audioEnd > audioSample) {
+          const chunk = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length: audioEnd - audioSample, sampleRate: buffer.sampleRate });
+          for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+            chunk.copyToChannel(buffer.getChannelData(channel).subarray(audioSample, audioEnd), channel);
+          }
+          await audioSource.add(chunk);
+          audioSample = audioEnd;
+        }
+        if (index % 10 === 0) {
+          if (active()) events.onTick?.(time);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+      if (!active()) return false;
+      await output.finalize();
+      completed = true;
+      if (!active()) return false;
+      const bytes = output.target.buffer;
+      if (!bytes) throw new Error("יצירת קובץ הווידאו נכשלה.");
+      events.onRecordDone?.(new Blob([bytes], { type: type.mimeType }), type);
+      return true;
+    } finally {
+      if (!completed) await output.cancel();
+      await frames?.return(undefined);
+      input?.dispose();
+      renderer.dispose();
+      if (active()) this.exporting = false;
     }
-    this.startLoop(session);
-    return true;
-  }
-
-  /** Pauses picture and sound together, so a hidden tab leaves no frozen stretch in the video. */
-  pauseRecording() {
-    const session = this.session;
-    if (session?.kind !== "record" || session.recorder?.state !== "recording") return false;
-    session.recorder.pause();
-    void this.context?.suspend();
-    return true;
-  }
-
-  async resumeRecording() {
-    const session = this.session;
-    if (session?.kind !== "record" || !this.context) return;
-    await this.context.resume();
-    if (session.recorder?.state === "paused") session.recorder.resume();
   }
 
   /** Stops the preview, or abandons a recording without producing a file. */
   stop() {
     this.generation += 1;
+    this.exporting = false;
     const session = this.session;
     if (!session) return;
     session.cancelled = true;
-    if (session.recorder && session.recorder.state !== "inactive") {
-      // onstop runs close(); the cancelled flag stops it producing a file.
-      session.recorder.stop();
-      this.close(session);
-    } else {
-      this.close(session);
-    }
+    this.close(session);
     // A context left suspended by a hidden-tab pause would silence the next preview.
     if (this.context?.state === "suspended") void this.context.resume();
   }
@@ -496,12 +514,7 @@ function loadImage(file: File): Promise<SizedImage> {
 }
 
 function canRecordVideo() {
-  return (
-    typeof MediaRecorder !== "undefined" &&
-    typeof HTMLCanvasElement !== "undefined" &&
-    "captureStream" in HTMLCanvasElement.prototype &&
-    chooseRecordingType((type) => MediaRecorder.isTypeSupported(type)) !== null
-  );
+  return typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined";
 }
 
 type Result = { blob: Blob; url: string; name: string; type: RecordingType };
@@ -509,12 +522,12 @@ type Result = { blob: Blob; url: string; name: string; type: RecordingType };
 /**
  * Turns a song into a video for social media: a region of the song drives
  * bars, a waveform, a ring or a particle cloud on a canvas, with the title,
- * the artist and a cover, and the canvas plus the sound are recorded in the
- * browser into an MP4 or WebM file.
+ * the artist and a cover. Frames and audio are encoded directly to MP4 or WebM.
  */
 export function VisualizerTool() {
   const { audio, error, setError, isLoading, progress, load, clear, maxBytes } = useAudioFile();
   const [engine] = useState(() => new VisualizerEngine());
+  const renderToken = useRef(0);
   const [canRecord] = useState(canRecordVideo);
   const [seenUrl, setSeenUrl] = useState<string | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -524,13 +537,14 @@ export function VisualizerTool() {
   const [background, setBackground] = useState<VisualizerBackground>("gradient");
   const [backgroundImage, setBackgroundImage] = useState<SizedImage | null>(null);
   const [cover, setCover] = useState<SizedImage | null>(null);
+  const [sourceVideo, setSourceVideo] = useState<HTMLVideoElement | null>(null);
+  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaNote, setMediaNote] = useState("");
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [recording, setRecording] = useState(false);
-  const [hiddenPause, setHiddenPause] = useState(false);
-  const [wasHidden, setWasHidden] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -541,6 +555,13 @@ export function VisualizerTool() {
   // a frame drawn with the old song's region.
   if (audio && audio.url !== seenUrl) {
     setSeenUrl(audio.url);
+    setCover(null);
+    setBackgroundImage(null);
+    setBackground("gradient");
+    setArtist("");
+    setSourceVideo(null);
+    setMediaReady(false);
+    setMediaNote("");
     setRegion(defaultRegion(audio.buffer.duration));
     setTitle(titleFromFilename(audio.file.name));
     setResult(null);
@@ -556,13 +577,54 @@ export function VisualizerTool() {
   const size = aspectSize(aspect);
 
   const scene = useMemo<Scene>(
-    () => ({ aspect, style, hue, background, backgroundImage, cover, title, artist }),
-    [aspect, style, hue, background, backgroundImage, cover, title, artist],
+    () => ({ aspect, style, hue, background, backgroundImage, cover, sourceVideo, title, artist }),
+    [aspect, style, hue, background, backgroundImage, cover, sourceVideo, title, artist],
   );
 
   useEffect(() => {
     engine.setScene(scene);
   }, [engine, scene]);
+
+  useEffect(() => {
+    if (!audio) return;
+    let alive = true;
+    let video: HTMLVideoElement | null = null;
+    void (async () => {
+      try {
+        const media = await readVisualizerMedia(audio.file);
+        if (!alive) return;
+        if (media.hasVideo) {
+          video = document.createElement("video");
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = "auto";
+          await waitForVideo(video, "loadeddata", () => { video!.src = audio.url; });
+          if (!alive) return;
+          setSourceVideo(video);
+          setMediaNote("הסרטון המקורי משמש כרקע, עם פס הקול שלו.");
+        } else if (media.cover) {
+          const artwork = await loadArtwork(media.cover);
+          if (!alive) return;
+          setCover(artwork);
+          setBackgroundImage(artwork);
+          setBackground("image");
+          setMediaNote("העטיפה חולצה מקובץ השמע ומשמשת לעיצוב התמונה והסרטון.");
+        } else {
+          setMediaNote("בקובץ אין עטיפה מוטמעת. אפשר לבחור תמונה ידנית.");
+        }
+        if (media.title) setTitle(media.title);
+        if (media.artist) setArtist(media.artist);
+      } catch (caught) {
+        if (alive) setMediaNote(caught instanceof Error ? caught.message : "לא נמצאה עטיפה. אפשר לבחור תמונה ידנית.");
+      } finally {
+        if (alive) setMediaReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+      if (video) { video.pause(); video.removeAttribute("src"); video.load(); }
+    };
+  }, [audio]);
 
   // The canvas font is the site's; the still frame is painted again once it
   // has loaded, or the first frame would be set in the fallback face.
@@ -578,8 +640,15 @@ export function VisualizerTool() {
 
   const stillAt = activeRegion ? activeRegion.start + Math.min(2, regionLength / 2) : 0;
   useEffect(() => {
-    if (!playing && !recording) engine.drawStill(audio?.buffer ?? null, stillAt);
-  }, [engine, scene, audio, stillAt, playing, recording, fontsReady]);
+    if (playing || recording) return;
+    let alive = true;
+    if (sourceVideo) {
+      void seekVideo(sourceVideo, stillAt).then(() => {
+        if (alive) engine.drawStill(audio?.buffer ?? null, stillAt);
+      }).catch((caught) => { if (alive) setRenderError(String(caught)); });
+    } else engine.drawStill(audio?.buffer ?? null, stillAt);
+    return () => { alive = false; };
+  }, [engine, scene, audio, stillAt, playing, recording, fontsReady, sourceVideo]);
 
   useEffect(() => {
     engine.setEvents({
@@ -590,7 +659,6 @@ export function VisualizerTool() {
       },
       onRecordDone: (blob, type) => {
         setRecording(false);
-        setHiddenPause(false);
         setElapsed(0);
         setResult((previous) => {
           if (previous) URL.revokeObjectURL(previous.url);
@@ -604,7 +672,6 @@ export function VisualizerTool() {
       },
       onRecordError: (message) => {
         setRecording(false);
-        setHiddenPause(false);
         setElapsed(0);
         setRenderError(message);
       },
@@ -621,27 +688,8 @@ export function VisualizerTool() {
     [result],
   );
 
-  // Browsers stop painting a hidden tab, so a recording that carried on
-  // would get a frozen picture over running music. Instead both halt
-  // together and pick up where they were when the tab is back.
-  useEffect(() => {
-    if (!recording) return;
-    const onVisibility = () => {
-      if (document.hidden) {
-        if (engine.pauseRecording()) {
-          setHiddenPause(true);
-          setWasHidden(true);
-        }
-      } else {
-        void engine.resumeRecording().then(() => setHiddenPause(false));
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [engine, recording]);
-
   const play = async () => {
-    if (!audio || !activeRegion || recording) return false;
+    if (!audio || !activeRegion || recording || !mediaReady) return false;
     setRenderError(null);
     try {
       if (!(await engine.startPreview(audio.buffer, activeRegion))) return false;
@@ -649,6 +697,7 @@ export function VisualizerTool() {
       setElapsed(0);
       return true;
     } catch {
+      engine.stop();
       setRenderError("לא הצלחנו לנגן את הקטע בדפדפן הזה.");
       return false;
     }
@@ -661,33 +710,36 @@ export function VisualizerTool() {
   };
 
   const startRender = async () => {
-    if (!audio || !activeRegion || recording) return false;
-    const type = canRecord ? chooseRecordingType((candidate) => MediaRecorder.isTypeSupported(candidate)) : null;
-    if (!type) {
-      setRenderError("הדפדפן הזה לא יודע להקליט וידאו. אפשר לנסות ב־Chrome, Edge, Firefox או Safari עדכני.");
+    if (!audio || !activeRegion || recording || !mediaReady) return false;
+    if (!canRecord) {
+      setRenderError("הדפדפן אינו תומך בייצוא וידאו ישיר. נסו Chrome או Edge עדכני.");
       return false;
     }
     setRenderError(null);
-    setWasHidden(false);
-    setHiddenPause(false);
     setPlaying(false);
     setElapsed(0);
     setRecording(true);
+    setResult(null);
+    const token = ++renderToken.current;
     try {
       // A recording overtaken by a cancel or a second click leaves the page
       // state to whoever overtook it.
-      return await engine.startRecording(audio.buffer, activeRegion, type);
+      const done = await engine.startRecording(audio.buffer, activeRegion, audio.file);
+      if (token === renderToken.current && !done) setRecording(false);
+      return done;
     } catch (caught) {
+      if (token !== renderToken.current) return false;
+      engine.stop();
       setRecording(false);
-      setRenderError(caught instanceof Error ? caught.message : "לא הצלחנו להתחיל את ההקלטה.");
+      setRenderError(caught instanceof Error ? caught.message : "לא הצלחנו ליצור את קובץ הווידאו.");
       return false;
     }
   };
 
   const cancelRender = () => {
+    renderToken.current += 1;
     engine.stop();
     setRecording(false);
-    setHiddenPause(false);
     setElapsed(0);
   };
 
@@ -726,7 +778,7 @@ export function VisualizerTool() {
           : "לא נבחר שיר (רק הגולש בוחר קובץ)"
       }; סגנון ${style}, יחס ${aspect}, צבע ${hue}, רקע ${background}, כותרת „${title}”, אמן „${artist}”${cover ? ", יש תמונת עטיפה" : ""}; ${
         recording
-          ? `מקליט סרטון (${Math.round(recordFraction * 100)}%)${hiddenPause ? ", מושהה כי הלשונית מוסתרת" : ""}`
+          ? `יוצר קובץ וידאו (${Math.round(recordFraction * 100)}%)`
           : playing
             ? "התצוגה המקדימה מתנגנת"
             : result
@@ -737,7 +789,7 @@ export function VisualizerTool() {
       "visualizer.set": ({ style: nextStyle, hue: nextHue, title: nextTitle, artist: nextArtist, aspect: nextAspect }) => {
         if (nextStyle !== undefined && !isStyle(nextStyle)) return { ok: false, message: "style הוא bars, wave, circle או particles" };
         if (nextAspect !== undefined && !isAspect(nextAspect)) return { ok: false, message: "aspect הוא square, portrait או landscape" };
-        if (nextAspect !== undefined && recording && nextAspect !== aspect) return { ok: false, message: "אי אפשר לשנות את יחס המסך באמצע הקלטה" };
+        if (nextAspect !== undefined && recording && nextAspect !== aspect) return { ok: false, message: "אי אפשר לשנות את יחס המסך במהלך יצירת הקובץ" };
         if (nextHue !== undefined && !Number.isFinite(Number(nextHue))) return { ok: false, message: "hue הוא מספר בין 0 ל־360" };
         const changes: string[] = [];
         if (isStyle(nextStyle)) {
@@ -770,21 +822,21 @@ export function VisualizerTool() {
         }
         if (command !== "play") return { ok: false, message: "command הוא play או stop" };
         if (!audio) return { ok: false, message: "לא נבחר שיר; הגולש צריך לבחור קובץ" };
-        if (recording) return { ok: false, message: "מקליט עכשיו סרטון; אפשר לנגן אחרי שההקלטה תסתיים" };
+        if (recording) return { ok: false, message: "יוצר עכשיו סרטון; אפשר לנגן כשהייצוא יסתיים" };
         const started = await play();
         return started ? { ok: true, message: `מנגן את הקטע (${describeLength(regionLength)})` } : { ok: false, message: "הניגון לא התחיל" };
       },
       "visualizer.render": async () => {
         if (!audio) return { ok: false, message: "לא נבחר שיר; הגולש צריך לבחור קובץ" };
-        if (recording) return { ok: false, message: "כבר מקליט סרטון" };
-        if (!canRecord) return { ok: false, message: "הדפדפן הזה לא תומך בהקלטת וידאו" };
+        if (recording) return { ok: false, message: "כבר יוצר סרטון" };
+        if (!canRecord) return { ok: false, message: "הדפדפן הזה לא תומך ביצירת וידאו ישירה" };
         const started = await startRender();
         return started
           ? {
               ok: true,
-              message: `ההקלטה התחילה ותיקח ${describeLength(regionLength)}. הלשונית צריכה להישאר פתוחה וגלויה עד הסוף; אחר כך יופיע כפתור הורדה.`,
+              message: "קובץ הווידאו נוצר ומוכן להורדה.",
             }
-          : { ok: false, message: "ההקלטה לא התחילה" };
+          : { ok: false, message: "יצירת הקובץ בוטלה או נכשלה" };
       },
     },
   });
@@ -796,8 +848,8 @@ export function VisualizerTool() {
           <AudioWaveform size={26} />
         </span>
         <div>
-          <h1>ויזואלייזר לשיר</h1>
-          <p>הופכים קטע משיר לסרטון שזז עם המוזיקה — עמודות, גל, עיגול או חלקיקים, עם שם השיר ותמונה. הכול נוצר בדפדפן.</p>
+          <h1>סרטון ותמונה לשיתוף</h1>
+          <p>מעלים שיר והעטיפה שלו נשלפת אוטומטית, או מעלים סרטון ומשתמשים בו כבסיס. מוסיפים עיצוב ושומרים סרטון או תמונה לשיתוף.</p>
         </div>
       </div>
 
@@ -816,7 +868,7 @@ export function VisualizerTool() {
             if (recording) cancelRender();
             clear();
           }}
-          hint="MP3, WAV, M4A, OGG · בוחרים קטע של עד 3 דקות לסרטון"
+          hint="שמע או וידאו: MP3, M4A, FLAC, MP4, WebM · בוחרים קטע של עד 3 דקות לסרטון"
         />
         {error && (
           <div className="error-message" role="alert">
@@ -826,6 +878,7 @@ export function VisualizerTool() {
 
         {audio && peaks && activeRegion && (
           <>
+            <p role="status">{mediaReady ? mediaNote : "קורא את העטיפה ואת תמונת הסרטון…"}</p>
             <div className={`visualizer-region${recording ? " is-locked" : ""}`}>
               <div className="visualizer-region-head">
                 <strong>הקטע לסרטון</strong>
@@ -858,12 +911,17 @@ export function VisualizerTool() {
                   />
                 </div>
                 <div className="visualizer-stage-bar">
+                  <button type="button" className="secondary-button" disabled={recording || !mediaReady} onClick={() => {
+                    engine.canvas?.toBlob((blob) => {
+                      if (blob) downloadFile(blob, `${title || "תמונה-לשיתוף"}.png`, "image/png");
+                    }, "image/png");
+                  }}><Download size={16} /> הורד תמונה</button>
                   {playing ? (
                     <button type="button" className="secondary-button" onClick={stopPreview}>
                       <Square size={16} /> עצור
                     </button>
                   ) : (
-                    <button type="button" className="secondary-button" onClick={() => void play()} disabled={recording}>
+                    <button type="button" className="secondary-button" onClick={() => void play()} disabled={recording || !mediaReady}>
                       <Play size={16} /> נגן תצוגה מקדימה
                     </button>
                   )}
@@ -873,7 +931,7 @@ export function VisualizerTool() {
                 </div>
               </div>
 
-              <div className="settings-panel visualizer-settings">
+              <div className="settings-panel visualizer-settings" inert={recording || !mediaReady}>
                 <div className="setting-field">
                   <span id="visualizer-style">סגנון</span>
                   <div className="segmented-control wrap" role="group" aria-labelledby="visualizer-style">
@@ -1013,8 +1071,7 @@ export function VisualizerTool() {
             <p className="notice-message visualizer-note">
               <Clapperboard size={17} aria-hidden="true" />
               <span>
-                הסרטון מוקלט בזמן אמת, ולכן קטע של {describeLength(regionLength)} לוקח {describeLength(regionLength)}. יש להשאיר את הלשונית פתוחה וגלויה עד
-                הסוף — מעבר ללשונית אחרת משהה את ההקלטה, והיא ממשיכה כשחוזרים.
+                קובץ הווידאו נוצר ישירות מהשמע ומהתמונות, ללא הקלטת מסך וללא השמעת השיר בזמן הייצוא. אפשר לעבור ללשונית אחרת; יש להשאיר את הדף פתוח עד לסיום.
               </span>
             </p>
 
@@ -1028,14 +1085,14 @@ export function VisualizerTool() {
               <div className="processing-box" aria-live="polite">
                 <div className="processing-top">
                   <span>
-                    <Sparkles size={18} /> {hiddenPause ? "ההקלטה מושהית — חזרו ללשונית כדי להמשיך" : "מקליט את הסרטון…"}
+                    <Sparkles size={18} /> יוצר קובץ וידאו…
                   </span>
                   <strong>{Math.round(recordFraction * 100)}%</strong>
                 </div>
                 <div
                   className="progress-track"
                   role="progressbar"
-                  aria-label="התקדמות ההקלטה"
+                  aria-label="התקדמות יצירת הקובץ"
                   aria-valuenow={Math.round(recordFraction * 100)}
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -1044,7 +1101,7 @@ export function VisualizerTool() {
                 </div>
                 <div className="processing-bottom">
                   <small>
-                    {formatTime(elapsed)} מתוך {formatTime(regionLength)} · נשארו כ־{describeLength(Math.max(0, regionLength - elapsed))}. השמע מתנגן בזמן ההקלטה.
+                    {formatTime(elapsed)} מתוך {formatTime(regionLength)}. הקובץ נוצר ללא השמעה וללא הקלטת מסך.
                   </small>
                   <button type="button" className="secondary-button compact is-danger" onClick={cancelRender}>
                     <X size={16} /> בטל
@@ -1052,18 +1109,9 @@ export function VisualizerTool() {
                 </div>
               </div>
             ) : (
-              <button type="button" className="primary-button" onClick={() => void startRender()} disabled={!canRecord}>
+              <button type="button" className="primary-button" onClick={() => void startRender()} disabled={!canRecord || !mediaReady}>
                 <Clapperboard size={20} /> צור סרטון <small>· {describeLength(regionLength)}</small>
               </button>
-            )}
-
-            {wasHidden && (
-              <div className="notice-message visualizer-hidden-note" role="status">
-                <EyeOff size={17} aria-hidden="true" />
-                <span>
-                  הלשונית הוסתרה במהלך ההקלטה, ולכן היא הושהתה עד שחזרתם. אם משהו נראה קפוא בסרטון, כדאי להקליט שוב ולהשאיר את הלשונית גלויה.
-                </span>
-              </div>
             )}
 
             {renderError && (
@@ -1082,7 +1130,7 @@ export function VisualizerTool() {
                     <h3>{result.name}</h3>
                     <p>
                       {formatBytes(result.blob.size)} · {result.type.extension.toUpperCase()}
-                      {result.type.extension === "webm" ? " · הדפדפן הזה שומר WebM; ב־Safari וב־Chrome עדכני נשמר MP4." : ""}
+                      {result.type.extension === "webm" ? " · הדפדפן הזה תומך בייצוא ישיר ל־WebM." : ""}
                     </p>
                   </div>
                 </div>
