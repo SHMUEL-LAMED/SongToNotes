@@ -2579,7 +2579,11 @@
  "שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו.": "Vocals, drums, bass and the rest — each on its own track.",
  "הדפדפן הזה לא יודע לעבד שמע.": "This browser can't process audio.",
  "הקובץ גדול מ־{0}. {1}": "The file is larger than {0}. {1}",
- "ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־{0} דקות). {1}": "The recording is too long to decode on this device (about {0} minutes). {1}",
+ "ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־{0}). {1}": "The recording is too long to decode on this device (about {0}). {1}",
  "אפשר לקצר אותו, או לפתוח אותו במחשב.": "Shorten it, or open it on a computer.",
- "אפשר לקצר אותו ולנסות שוב.": "Shorten it and try again."
+ "אפשר לקצר אותו ולנסות שוב.": "Shorten it and try again.",
+ "הקובץ ארוך מדי למכשיר הזה (כ־{0}), אז נפתחו {1} הדקות הראשונות.": "The file is too long for this device (about {0}), so the first {1} minutes were opened.",
+ "„{0}”: {1}": "“{0}”: {1}",
+ "קובץ ה־WAV הזה בפורמט שלא נתמך כאן.": "This WAV file is in a format that isn't supported here.",
+ "לא הצלחנו לקרוא את קובץ ה־MP3.": "We couldn't read the MP3 file."
 }

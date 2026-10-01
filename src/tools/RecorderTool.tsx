@@ -1,7 +1,6 @@
 import { Download, FileAudio, Headphones, Layers, Mic, Play, Square, Timer, Trash2, Voicemail, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { checkAudioFile } from "../components/AudioPicker";
-import { decodeAudioFile } from "../lib/audio";
+import { openAudioFile } from "../components/AudioPicker";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
 import { audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
@@ -657,13 +656,9 @@ export function RecorderTool() {
     setError(null);
     setNotice(null);
     for (const file of Array.from(files).slice(0, room)) {
-      const problem = await checkAudioFile(file);
-      if (problem) {
-        setError(problem);
-        continue;
-      }
       try {
-        const buffer = await decodeAudioFile(await file.arrayBuffer());
+        const { buffer, note } = await openAudioFile(file);
+        if (note) setNotice(`„${file.name}”: ${note}`);
         const name = file.name.replace(/\.[^/.]+$/, "").slice(0, 60) || "קובץ";
         setTracks((list) => (list.length >= MAX_TRACKS ? list : [...list, makeTrack(buffer, name, list.length, "file")]));
       } catch (caught) {

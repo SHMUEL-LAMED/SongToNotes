@@ -1,6 +1,6 @@
 import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { checkAudioFile } from "../components/AudioPicker";
+import { openAudioFile } from "../components/AudioPicker";
 import { CreditCost } from "../components/CreditCost";
 import { AiError, findSongVideo, identifyAvailability, type Identification } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
@@ -358,17 +358,13 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
 
   const fromFile = async (file?: File | null) => {
     if (!file) return;
-    const problem = await checkAudioFile(file);
-    if (problem) {
-      setError(problem);
-      return;
-    }
     setResult(null);
     setExhausted(false);
     setBusy("מכין את הקטע…");
     setError(null);
     try {
-      await fileRound(file, await decodeAudioFile(await file.arrayBuffer()), 0);
+      const opened = await openAudioFile(file);
+      await fileRound(opened.file, opened.buffer, 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "לא הצלחנו לקרוא את הקובץ.");
       setBusy(null);

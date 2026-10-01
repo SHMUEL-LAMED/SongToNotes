@@ -1,8 +1,8 @@
 import { ArrowDown, ArrowUp, Combine, Download, GripVertical, Layers, Loader2, Play, Scissors, Smartphone, Square, Trash2, UploadCloud, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACCEPTED_EXTENSIONS, formatBytes, checkAudioFile } from "../components/AudioPicker";
+import { ACCEPTED_EXTENSIONS, AudioFileProblem, formatBytes, openAudioFile } from "../components/AudioPicker";
 import { Transport } from "../components/Transport";
-import { buildPeaks, decodeAudioFile, formatTime, getOfflineAudioContextClass } from "../lib/audio";
+import { buildPeaks, formatTime, getOfflineAudioContextClass } from "../lib/audio";
 import { BITRATES, encodeMp3 } from "../lib/convert";
 import { downloadFile, safeFilename } from "../lib/export";
 import { useOfferResult } from "../lib/currentFile";
@@ -492,13 +492,9 @@ export function JoinerTool() {
     setError(incoming.length > list.length ? `נוספו רק ${list.length} — אפשר לחבר עד ${MAX_CLIPS} קבצים.` : null);
     const added: Clip[] = [];
     for (const file of list) {
-      const problem = await checkAudioFile(file);
-      if (problem) {
-        setError(`„${file.name}”: ${problem}`);
-        continue;
-      }
       try {
-        const buffer = await decodeAudioFile(await file.arrayBuffer());
+        const { buffer, note } = await openAudioFile(file);
+        if (note) setError(`„${file.name}”: ${note}`);
         if (!buffer.length) throw new Error("empty");
         const clip: Clip = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -522,8 +518,12 @@ export function JoinerTool() {
           const withHue = { ...clip, hue: HUES[current.length % HUES.length] };
           return atStart ? [...current.slice(0, position), withHue, ...current.slice(position)] : [...current, withHue];
         });
-      } catch {
-        setError(`לא הצלחנו לפתוח את „${file.name}”. ייתכן שהקובץ פגום או בפורמט שהדפדפן לא מכיר.`);
+      } catch (caught) {
+        setError(
+          caught instanceof AudioFileProblem
+            ? `„${file.name}”: ${caught.message}`
+            : `לא הצלחנו לפתוח את „${file.name}”. ייתכן שהקובץ פגום או בפורמט שהדפדפן לא מכיר.`,
+        );
       }
     }
     setLoading(false);

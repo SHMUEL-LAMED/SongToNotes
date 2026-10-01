@@ -7,6 +7,7 @@ import { offerFile } from "../lib/currentFile";
 import { hasHandoff, takeHandoff } from "../lib/handoff";
 import { decodeMonoAt } from "../lib/longAudio";
 import { checkFit, deviceLimits, detectDevice } from "../lib/audioBudget";
+import { cutMp3, cutWav, streamWav } from "../lib/bigAudio";
 import { SendFileMenu } from "./SendFile";
 import {
   isRecordingSupported,
@@ -82,28 +83,80 @@ export function validateAudioFile(candidate: File, maxBytes = MAX_BYTES): string
   return null;
 }
 
+/** A file turned away before decoding, with a message that is shown as it is. */
+export class AudioFileProblem extends Error {}
+
+export type OpenedAudio = {
+  /** The file opened: the one chosen, or the part of it that fits (see bigAudio.ts). */
+  file: File;
+  buffer: AudioBuffer;
+  /** Said beside the file when only part of it was opened. */
+  note: string | null;
+};
+
+function minutesText(seconds: number) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes === 1 ? "דקה" : `${minutes} דקות`;
+}
+
+async function readWhole(candidate: Blob) {
+  try {
+    return await candidate.arrayBuffer();
+  } catch {
+    // A file handed over by a cloud-drive app can vanish between being
+    // chosen and being read, and the browser's own message for that says
+    // nothing a person can act on.
+    throw new Error(
+      "לא הצלחנו לקרוא את הקובץ מהמכשיר. אם הוא נמצא ב־Drive או ב־iCloud, כדאי להוריד אותו למכשיר ולנסות שוב.",
+    );
+  }
+}
+
 /**
- * Everything `validateAudioFile` checks, and then whether the audio is short
- * enough to decode on this device — which takes a look at the file's header,
- * so it waits.
+ * Validates and decodes a file the way this device can hold it: whole, as
+ * always; a long WAV read straight from the disk; or, when the audio is
+ * longer than the device can hold at all, the part of it that fits. A file
+ * that cannot be opened either way throws an `AudioFileProblem`.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export async function checkAudioFile(candidate: File, maxBytes = MAX_BYTES): Promise<string | null> {
-  const problem = validateAudioFile(candidate, maxBytes);
-  if (problem) return problem;
-  const fit = await checkFit(candidate);
-  if (fit.ok) return null;
-  const minutes = Math.round(fit.seconds / 60);
-  const where = detectDevice() === "phone" ? "אפשר לקצר אותו, או לפתוח אותו במחשב." : "אפשר לקצר אותו ולנסות שוב.";
-  return fit.reason === "bytes"
-    ? `הקובץ גדול מ־${formatBytes(deviceLimits().maxBytes)}. ${where}`
-    : `ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־${minutes} דקות). ${where}`;
+export async function openAudioFile(
+  candidate: File,
+  { maxBytes = MAX_BYTES, onProgress }: { maxBytes?: number; onProgress?: (fraction: number) => void } = {},
+): Promise<OpenedAudio> {
+  // The byte limit is for files read whole; one read in slices has none.
+  const problem = validateAudioFile(candidate, Infinity);
+  if (problem) throw new AudioFileProblem(problem);
+  const fit = await checkFit(candidate, deviceLimits(), maxBytes);
+
+  if (fit.action === "refuse") {
+    const where = detectDevice() === "phone" ? "אפשר לקצר אותו, או לפתוח אותו במחשב." : "אפשר לקצר אותו ולנסות שוב.";
+    throw new AudioFileProblem(
+      fit.reason === "bytes"
+        ? `הקובץ גדול מ־${formatBytes(maxBytes)}. ${where}`
+        : `ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־${minutesText(fit.seconds)}). ${where}`,
+    );
+  }
+  if (fit.action === "stream") {
+    return { file: candidate, buffer: await streamWav(candidate, undefined, onProgress), note: null };
+  }
+  if (fit.action === "partial") {
+    const note = `הקובץ ארוך מדי למכשיר הזה (כ־${minutesText(fit.seconds)}), אז נפתחו ${Math.floor(fit.keepSeconds / 60)} הדקות הראשונות.`;
+    if (fit.kind === "wav") {
+      const file = await cutWav(candidate, fit.keepSeconds);
+      return { file, buffer: await streamWav(file, undefined, onProgress), note };
+    }
+    const file = await cutMp3(candidate, fit.keepSeconds);
+    return { file, buffer: await decodeAudioFile(await readWhole(file)), note };
+  }
+  return { file: candidate, buffer: await decodeAudioFile(await readWhole(candidate)), note: null };
 }
 
 export type LoadedAudio = {
   file: File;
   buffer: AudioBuffer;
   url: string;
+  /** Said beside the file when only part of it was opened. */
+  note?: string | null;
 };
 
 export type AudioFileOptions = {
@@ -148,51 +201,43 @@ export function useAudioFile(options: AudioFileOptions = {}) {
 
   const load = useCallback(async (candidate?: File | null) => {
     if (!candidate) return;
-    loadTokenRef.current += 1;
-    const token = loadTokenRef.current;
     // A tool that decodes to mono at a low rate (see longAudio.ts) holds a
     // fraction of the samples, so only its own byte limit applies.
-    const problem = monoAt ? validateAudioFile(candidate, maxBytes) : await checkAudioFile(candidate, maxBytes);
-    if (loadTokenRef.current !== token) return;
+    const problem = monoAt ? validateAudioFile(candidate, maxBytes) : null;
     if (problem) {
       setError(problem);
       return;
     }
+    loadTokenRef.current += 1;
+    const token = loadTokenRef.current;
     setIsLoading(true);
     setProgress(null);
     setError(null);
+    const onProgress = (fraction: number) => {
+      if (loadTokenRef.current === token) setProgress(fraction);
+    };
     try {
-      let data: ArrayBuffer;
-      try {
-        data = await candidate.arrayBuffer();
-      } catch {
-        // A file handed over by a cloud-drive app can vanish between being
-        // chosen and being read, and the browser's own message for that says
-        // nothing a person can act on.
-        throw new Error(
-          "לא הצלחנו לקרוא את הקובץ מהמכשיר. אם הוא נמצא ב־Drive או ב־iCloud, כדאי להוריד אותו למכשיר ולנסות שוב.",
-        );
-      }
-      const buffer = monoAt
-        ? await decodeMonoAt(data, monoAt, (fraction) => {
-            if (loadTokenRef.current === token) setProgress(fraction);
-          })
-        : await decodeAudioFile(data);
+      const opened: OpenedAudio = monoAt
+        ? { file: candidate, buffer: await decodeMonoAt(await readWhole(candidate), monoAt, onProgress), note: null }
+        : await openAudioFile(candidate, { maxBytes, onProgress });
+      const { file, buffer, note } = opened;
       if (loadTokenRef.current !== token) return;
       if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) {
         throw new Error("הקובץ נפתח אבל אין בו שמע.");
       }
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      const url = URL.createObjectURL(candidate);
+      const url = URL.createObjectURL(file);
       urlRef.current = url;
-      setAudio({ file: candidate, buffer, url });
+      setAudio({ file, buffer, url, note });
     } catch (caught) {
       if (loadTokenRef.current !== token) return;
       const reason = caught instanceof Error ? caught.message : "";
       setError(
-        reason
-          ? `לא הצלחנו לפתוח את „${candidate.name}”. ${reason}`
-          : `לא הצלחנו לפתוח את „${candidate.name}”. ייתכן שהפורמט אינו נתמך בדפדפן הזה — המרה ל־MP3 או ל־WAV בדרך כלל פותרת את זה.`,
+        caught instanceof AudioFileProblem
+          ? reason
+          : reason
+            ? `לא הצלחנו לפתוח את „${candidate.name}”. ${reason}`
+            : `לא הצלחנו לפתוח את „${candidate.name}”. ייתכן שהפורמט אינו נתמך בדפדפן הזה — המרה ל־MP3 או ל־WAV בדרך כלל פותרת את זה.`,
       );
     } finally {
       if (loadTokenRef.current === token) {
@@ -369,6 +414,7 @@ export function AudioPicker({
             {audio.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"} ·{" "}
             {Math.round(audio.buffer.sampleRate / 100) / 10} kHz
           </span>
+          {audio.note ? <span className="file-note">{audio.note}</span> : null}
         </div>
         {children}
         <SendFileMenu file={audio.file} />
