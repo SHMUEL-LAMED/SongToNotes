@@ -1,5 +1,6 @@
 import { Check, Send, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useAuth } from "../lib/auth";
 import { FEEDBACK_KINDS, FEEDBACK_MAX, sendFeedback, type FeedbackKind } from "../lib/feedback";
 
 const PROMPTS: Record<FeedbackKind, string> = {
@@ -16,6 +17,7 @@ export function FeedbackDialog({ open, page, onClose }: { open: boolean; page: s
 }
 
 function FeedbackSheet({ page, onClose }: { page: string; onClose: () => void }) {
+  const { user } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [kind, setKind] = useState<FeedbackKind>("problem");
   const [message, setMessage] = useState("");
@@ -39,7 +41,7 @@ function FeedbackSheet({ page, onClose }: { page: string; onClose: () => void })
     event.preventDefault();
     if (!message.trim() || state === "sending") return;
     setState("sending");
-    void sendFeedback({ kind, message, contact, page }).then(
+    void sendFeedback({ kind, message, contact, page }, Boolean(user)).then(
       () => setState("sent"),
       () => setState("failed"),
     );
@@ -95,7 +97,11 @@ function FeedbackSheet({ page, onClose }: { page: string; onClose: () => void })
               placeholder="מייל לתשובה (לא חובה)"
               dir="auto"
             />
-            <p className="feedback-note">עם ההודעה נשלחים רק הדף שממנו היא נשלחה, שפת האתר וסוג המכשיר והדפדפן.</p>
+            <p className="feedback-note">
+              {user
+                ? "ההודעה נשלחת עם החשבון שלך, כדי שנוכל לחזור אליך, ועם הדף שממנו היא נשלחה, שפת האתר וסוג המכשיר והדפדפן."
+                : "עם ההודעה נשלחים רק הדף שממנו היא נשלחה, שפת האתר וסוג המכשיר והדפדפן."}
+            </p>
             {state === "failed" && (
               <p className="error-message" role="alert">
                 ההודעה לא נשלחה. בדוק את החיבור ונסה שוב.
