@@ -1,4 +1,4 @@
-import { CircleSlash, Info, Keyboard, MessageSquareText, Palette, PowerOff, Share2, Sparkles, UserRound, Wrench, House, Zap } from "lucide-react";
+import { CircleSlash, Info, Keyboard, MessageSquareText, Palette, PowerOff, Route as RouteIcon, Share2, Sparkles, UserRound, Wrench, House, Zap } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDrawer } from "./components/AccountDrawer";
 import { AiAssistant } from "./components/AiAssistant";
@@ -17,6 +17,7 @@ import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { SiteFooter } from "./components/SiteFooter";
 import { ToolPromo } from "./components/ToolPromo";
+import { Tour } from "./components/Tour";
 import { ToolVideo } from "./components/ToolVideo";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
@@ -35,6 +36,7 @@ import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
 import { TOOLS, findAnyTool, findTool, pageToolOf } from "./lib/tools";
+import { tourFor } from "./lib/tours";
 import type { DetectedNote } from "./lib/types";
 import { KIND_LABELS, KIND_TOOL, deleteWork, describeWork, listWorks, renameWork, syncLocalWorks, type SavedWork } from "./lib/works";
 import { normalizeSettings, type PendingTranscription, type Settings } from "./tools/settings";
@@ -164,6 +166,8 @@ function WorkspaceApp() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // The guided tour, and the page it was opened on: moving to another page ends it.
+  const [tourRoute, setTourRoute] = useState<string | null>(null);
   const { accent, setAccent } = useAccent();
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
@@ -262,6 +266,13 @@ function WorkspaceApp() {
   const closeAppearance = useCallback(() => setAppearanceOpen(false), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
   const closeFeedback = useCallback(() => setFeedbackOpen(false), []);
+  const openTour = useCallback(() => {
+    setPaletteOpen(false);
+    setShortcutsOpen(false);
+    setAccountOpen(false);
+    setTourRoute(route);
+  }, [route]);
+  const closeTour = useCallback(() => setTourRoute(null), []);
   const openFeedback = useCallback(() => setFeedbackOpen(true), []);
 
   // Signing in uploads whatever this device saved while signed out, so the
@@ -413,6 +424,7 @@ function WorkspaceApp() {
     const items: CommandItem[] = [
       { id: "page:home", label: "דף הבית", group: "דפים", icon: <House size={15} />, run: () => go("home") },
       { id: "page:me", label: "האזור האישי", hint: "הגלריה, התובנות, הקבצים והקישורים", group: "דפים", icon: <UserRound size={15} />, run: () => go("me") },
+      { id: "page:tour", label: "הסבר: סיור בעמוד הזה", hint: "מה יש כאן ואיך משתמשים בזה, צעד אחרי צעד", group: "דפים", icon: <RouteIcon size={15} />, keywords: "הסבר סיור מדריך עזרה הדרכה איך tour help guide", run: openTour },
       { id: "page:shortcuts", label: "קיצורי מקלדת", hint: "או ? מכל מקום", group: "דפים", icon: <Keyboard size={15} />, run: () => setShortcutsOpen(true) },
       { id: "page:appearance", label: "מראה וצבעים", hint: "בהיר או כהה, וצבע האתר", group: "דפים", icon: <Palette size={15} />, run: () => setAppearanceOpen(true) },
       { id: "page:share", label: "שיתוף האתר", hint: "קישור לחברים, בוואטסאפ או בכל מקום", group: "דפים", icon: <Share2 size={15} />, run: () => setShareOpen(true) },
@@ -445,7 +457,7 @@ function WorkspaceApp() {
       });
     }
     return items;
-  }, [go, openWork, owner, paletteWorks]);
+  }, [go, openTour, openWork, owner, paletteWorks]);
 
   const opened = pending && pending.route === route ? pending : null;
   const initialFor = (kind: SavedWork["kind"]) =>
@@ -485,6 +497,8 @@ function WorkspaceApp() {
       onOpenShare={() => setShareOpen(true)}
       onOpenFeedback={openFeedback}
       onOpenCredits={() => go("credits")}
+      onOpenTour={openTour}
+      touring={tourRoute === route}
     >
       <AccountDrawer
         open={accountOpen}
@@ -517,6 +531,7 @@ function WorkspaceApp() {
       />
       <ShareSiteDialog open={shareOpen} onClose={closeShare} onOpenCredits={() => go("credits")} />
       <FeedbackDialog open={feedbackOpen} page={route.slice(0, 40)} onClose={closeFeedback} />
+      {tourRoute === route && <Tour key={route} steps={tourFor(route, tool)} onClose={closeTour} />}
 
       {control.banner && !closed && (
         <p className={`site-banner is-${control.bannerKind}`} role="status">

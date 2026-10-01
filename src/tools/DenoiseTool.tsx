@@ -400,7 +400,7 @@ export function DenoiseTool() {
           <>
             <div className="settings-panel">
               <div className="settings-grid">
-                <label className="setting-field range-field">
+                <label className="setting-field range-field" data-tour="denoise-strength">
                   <span>
                     עוצמת הניקוי <b>{settings.strength}%</b>
                   </span>
@@ -416,7 +416,7 @@ export function DenoiseTool() {
                   <small>ככל שהעוצמה גבוהה יותר נעלם יותר רחש, אבל הקול עלול להישמע „מתכתי”. 40–70% מתאים לרוב ההקלטות.</small>
                 </label>
 
-                <div className="setting-field">
+                <div className="setting-field" data-tour="denoise-source">
                   <span id="denoise-source">מאיפה ללמוד את הרעש</span>
                   <div className="segmented-control" role="group" aria-labelledby="denoise-source">
                     <button type="button" className={sourceKind === "auto" ? "active" : ""} aria-pressed={sourceKind === "auto"} onClick={() => setSourceKind("auto")}>
@@ -444,7 +444,7 @@ export function DenoiseTool() {
                   </button>
                 </div>
 
-                <div className="setting-field">
+                <div className="setting-field" data-tour="denoise-hum">
                   <span id="denoise-hum">זמזום חשמל</span>
                   <div className="segmented-control" role="group" aria-labelledby="denoise-hum">
                     {HUM_OPTIONS.map((option) => (

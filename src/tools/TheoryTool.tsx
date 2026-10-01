@@ -321,7 +321,7 @@ export function TheoryTool() {
               ))}
             </div>
           </div>
-          <label className="setting-field">
+          <label className="setting-field" data-tour="theory-scale">
             <span>סולם או מודוס</span>
             <select value={scaleId} onChange={(event) => setScaleId(event.target.value as ScaleId)} aria-label="סולם">
               {SCALES.map((item) => (
@@ -372,7 +372,7 @@ export function TheoryTool() {
         ))}
       </ol>
 
-      <div className="workspace-card">
+      <div className="workspace-card" data-tour="theory-view">
         <div className="result-toolbar">
           <div className="tabs" role="tablist">
             <button type="button" role="tab" aria-selected={view === "piano"} className={view === "piano" ? "active" : ""} onClick={() => setView("piano")}>

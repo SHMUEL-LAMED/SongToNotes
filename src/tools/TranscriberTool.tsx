@@ -1073,6 +1073,7 @@ export function TranscriberTool({ initial }: Props) {
           ) : (
             <button
               className="primary-button"
+              data-tour="notes-start"
               type="button"
               disabled={!audio || audioFile.isLoading || !supported}
               onClick={startTranscription}

@@ -242,7 +242,7 @@ export function ConvertTool({ initial = null }: Props) {
           <>
             <div className="settings-panel">
               <div className="settings-grid">
-                <div className="setting-field">
+                <div className="setting-field" data-tour="convert-format">
                   <span id="convert-format">פורמט היעד</span>
                   <div className="segmented-control" role="group" aria-labelledby="convert-format">
                     <button type="button" className={format === "mp3" ? "active" : ""} aria-pressed={format === "mp3"} onClick={() => setFormat("mp3")}>
@@ -254,7 +254,7 @@ export function ConvertTool({ initial = null }: Props) {
                   </div>
                   <small>{format === "mp3" ? "קטן ונפוץ, מתאים לטלפון ולשיתוף." : "ללא דחיסה, לעריכה ולאיכות מלאה."}</small>
                 </div>
-                <label className="setting-field">
+                <label className="setting-field" data-tour="convert-quality">
                   <span>קצב דגימה</span>
                   <select value={sampleRate} onChange={(event) => setSampleRate(Number(event.target.value))} aria-label="קצב דגימה">
                     {SAMPLE_RATES.map((item) => (
@@ -291,7 +291,7 @@ export function ConvertTool({ initial = null }: Props) {
                     )}
                   </label>
                 )}
-                <label className="setting-field range-field">
+                <label className="setting-field range-field" data-tour="convert-gain">
                   <span>
                     עוצמה <b>{gain}%</b>
                   </span>

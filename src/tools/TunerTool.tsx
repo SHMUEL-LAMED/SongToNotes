@@ -474,7 +474,7 @@ export function TunerTool({ initial = null }: Props) {
 
       <div className="settings-panel">
         <div className="settings-grid">
-          <div className="setting-field">
+          <div className="setting-field" data-tour="tuner-instrument">
             <span>כלי</span>
             <div className="segmented-control wrap">
               {PRESETS.map((item) => (
@@ -490,7 +490,7 @@ export function TunerTool({ initial = null }: Props) {
               ))}
             </div>
           </div>
-          <label className="setting-field range-field">
+          <label className="setting-field range-field" data-tour="tuner-reference">
             <span>
               כיוון לה (A4) <b>{referenceA4} Hz</b>
             </span>

@@ -672,6 +672,7 @@ export function MePage({ onOpenWork, onOpenAdmin, onOpenCredits, onHome, onSignI
               role="tab"
               aria-selected={tab === item.id}
               className={`admin-tab ${tab === item.id ? "active" : ""}`}
+              data-tour={`me-tab-${item.id}`}
               onClick={() => setTab(item.id)}
             >
               <Icon size={16} aria-hidden="true" /> {item.label}

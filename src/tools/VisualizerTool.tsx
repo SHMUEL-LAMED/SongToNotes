@@ -1135,7 +1135,7 @@ export function VisualizerTool() {
                   </div>
                 )}
 
-                <div className="setting-field">
+                <div className="setting-field" data-tour="visualizer-style">
                   <span id="visualizer-style">סגנון</span>
                   <div className="segmented-control wrap" role="group" aria-labelledby="visualizer-style">
                     {STYLES.map((option) => (
@@ -1188,7 +1188,7 @@ export function VisualizerTool() {
                   />
                 </label>
 
-                <div className="setting-field">
+                <div className="setting-field" data-tour="visualizer-background">
                   <span id="visualizer-background">רקע</span>
                   <div className="segmented-control" role="group" aria-labelledby="visualizer-background">
                     {BACKGROUNDS.map((option) => (
@@ -1246,7 +1246,7 @@ export function VisualizerTool() {
                   </div>
                 </div>
 
-                <label className="setting-field">
+                <label className="setting-field" data-tour="visualizer-title">
                   <span>שם השיר</span>
                   <input type="text" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="שם השיר" dir="auto" />
                 </label>
@@ -1329,7 +1329,7 @@ export function VisualizerTool() {
                 </div>
               </div>
             ) : (
-              <button type="button" className="primary-button" onClick={() => void startRender()} disabled={!canRecord || !mediaReady}>
+              <button type="button" className="primary-button" onClick={() => void startRender()} disabled={!canRecord || !mediaReady} data-tour="visualizer-render">
                 <Clapperboard size={20} /> צור סרטון <small>· {describeLength(regionLength)}</small>
               </button>
             )}

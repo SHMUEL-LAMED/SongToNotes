@@ -375,7 +375,7 @@ export function SongbookTool({ initial = null }: Props) {
               תצוגה
             </button>
           </div>
-          <button type="button" className="link-button" onClick={() => void loadSongs()}>
+          <button type="button" className="link-button" onClick={() => void loadSongs()} data-tour="songbook-mysongs">
             <FolderOpen size={15} /> השירים שלי {showSongs ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -444,7 +444,7 @@ export function SongbookTool({ initial = null }: Props) {
                   </span>
                   <input type="range" min={14} max={32} value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} aria-label="גודל הטקסט" />
                 </div>
-                <div className="setting-field">
+                <div className="setting-field" data-tour="songbook-scroll">
                   <span>גלילה אוטומטית</span>
                   <div className="segmented-control" role="group" aria-label="סוג הגלילה">
                     <button type="button" className={scrollMode === "free" ? "active" : ""} aria-pressed={scrollMode === "free"} onClick={() => setScrollMode("free")}>

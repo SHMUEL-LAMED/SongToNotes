@@ -715,11 +715,11 @@ export function SongCardTool() {
         </div>
 
         <div className="songcard-form">
-          <div className="settings-panel">
+          <div className="settings-panel" data-tour="songcard-details">
             <div className="settings-title">
               פרטי השיר
               <em>
-                <button type="button" className="link-button" onClick={() => void openImports()} aria-expanded={showImports}>
+                <button type="button" className="link-button" onClick={() => void openImports()} aria-expanded={showImports} data-tour="songcard-import">
                   <FolderOpen size={14} /> ייבוא משיר שמור
                 </button>
               </em>
@@ -778,7 +778,7 @@ export function SongCardTool() {
                   ))}
                 </select>
               </label>
-              <label className="setting-field songcard-wide">
+              <label className="setting-field songcard-wide" data-tour="songcard-chords">
                 <span>אקורדים</span>
                 <input type="text" dir="ltr" value={fields.chords} maxLength={LIMITS.chords} placeholder="Am F C G" onChange={(event) => update({ chords: event.target.value })} spellCheck={false} />
                 {chords.length > 0 && (
@@ -826,7 +826,7 @@ export function SongCardTool() {
             </div>
           </div>
 
-          <div className="settings-panel" style={{ "--accent-hue": fields.hue } as CSSProperties}>
+          <div className="settings-panel" style={{ "--accent-hue": fields.hue } as CSSProperties} data-tour="songcard-design">
             <div className="settings-title">עיצוב</div>
             <div className="settings-grid songcard-grid">
               <div className="setting-field songcard-wide">
