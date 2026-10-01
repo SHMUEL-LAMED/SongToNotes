@@ -1,6 +1,6 @@
 import { Download, Headphones, Layers, Pause, Play, Plus, Repeat, Square, Trash2, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatBytes, validateAudioFile } from "../components/AudioPicker";
+import { formatBytes, checkAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
@@ -105,7 +105,7 @@ export function MixerTool({ initial = null }: Props) {
     setLoading(true);
     setError(null);
     for (const file of list) {
-      const problem = validateAudioFile(file);
+      const problem = await checkAudioFile(file);
       if (problem) {
         setError(problem);
         continue;

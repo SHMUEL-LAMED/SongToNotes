@@ -1,6 +1,6 @@
 import { Download, FileAudio, Headphones, Layers, Mic, Play, Square, Timer, Trash2, Voicemail, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { validateAudioFile } from "../components/AudioPicker";
+import { checkAudioFile } from "../components/AudioPicker";
 import { decodeAudioFile } from "../lib/audio";
 import { downloadFile } from "../lib/export";
 import { handOffTo } from "../lib/handoff";
@@ -657,7 +657,7 @@ export function RecorderTool() {
     setError(null);
     setNotice(null);
     for (const file of Array.from(files).slice(0, room)) {
-      const problem = validateAudioFile(file);
+      const problem = await checkAudioFile(file);
       if (problem) {
         setError(problem);
         continue;
