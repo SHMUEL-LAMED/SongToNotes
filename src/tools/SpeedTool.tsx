@@ -329,7 +329,7 @@ export function SpeedTool({ initial = null }: Props) {
 
             <div className="settings-panel">
               <div className="settings-grid">
-                <label className="setting-field range-field">
+                <label className="setting-field range-field" data-tour="speed-tempo">
                   <span>
                     מהירות <b>{speed}%</b>
                   </span>
@@ -353,7 +353,7 @@ export function SpeedTool({ initial = null }: Props) {
                     ))}
                   </div>
                 </label>
-                <label className="setting-field range-field">
+                <label className="setting-field range-field" data-tour="speed-pitch">
                   <span>
                     {/* A signed number is its own left-to-right run: on this
                         right-to-left page "-3" otherwise shows as "3-". */}

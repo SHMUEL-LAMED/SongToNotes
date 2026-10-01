@@ -306,7 +306,7 @@ export function LyricsTool({ initial = null }: Props) {
               </div>
             ) : !busy ? (
               <>
-                <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
+                <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading} data-tour="lyrics-run">
                   <Wand2 size={20} /> זהה את המילים והזמנים
                   <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
                 </button>

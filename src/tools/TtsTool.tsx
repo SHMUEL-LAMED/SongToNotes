@@ -412,7 +412,7 @@ export function TtsTool({ initial = null }: Props) {
             </div>
           </div>
           <div className="download-buttons">
-            <button type="button" onClick={() => void makeFile()} disabled={!text.trim() || busy || !user}>
+            <button type="button" onClick={() => void makeFile()} disabled={!text.trim() || busy || !user} data-tour="tts-mp3">
               <Wand2 size={17} />
               <span>
                 {busy ? "מקליט בשרת…" : "צור MP3"}

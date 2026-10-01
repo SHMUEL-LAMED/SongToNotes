@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   Menu,
   MessageSquareText,
+  Route as RouteIcon,
   Search,
   Share2,
   ShieldCheck,
@@ -45,6 +46,10 @@ type Props = PropsWithChildren<{
   onOpenFeedback: () => void;
   /** The page about credits and the private link. */
   onOpenCredits: () => void;
+  /** The guided tour of the page on screen. */
+  onOpenTour: () => void;
+  /** True while that tour is running. */
+  touring?: boolean;
 }>;
 
 /**
@@ -70,6 +75,8 @@ export function AppShell({
   onOpenShare,
   onOpenFeedback,
   onOpenCredits,
+  onOpenTour,
+  touring = false,
   children,
 }: Props) {
   const { user, profile } = useAuth();
@@ -253,6 +260,19 @@ export function AppShell({
           </div>
 
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="tour-button"
+              onClick={onOpenTour}
+              aria-pressed={touring}
+              aria-label={tool ? `הסבר: סיור ב${tool.title}` : "הסבר: סיור בעמוד"}
+              title="סיור מודרך שמסביר איך משתמשים בעמוד הזה"
+            >
+              <span className="tour-button-mark" aria-hidden="true">
+                <RouteIcon size={16} />
+              </span>
+              <span>הסבר</span>
+            </button>
             {tool && (
               <button
                 type="button"

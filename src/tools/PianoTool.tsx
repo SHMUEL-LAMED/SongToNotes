@@ -667,6 +667,7 @@ export function PianoTool() {
           className={`secondary-button ${recording ? "is-danger" : ""}`}
           type="button"
           onClick={toggleRecording}
+          data-tour="piano-record"
         >
           {recording ? <Square size={16} /> : <Circle size={16} />}
           {recording ? "עצור הקלטה" : "הקלט נגינה"}

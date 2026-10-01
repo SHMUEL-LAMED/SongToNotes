@@ -712,7 +712,7 @@ export function TranscriptTool({ initial = null }: Props) {
 
         <div className="settings-panel">
           <div className="settings-grid">
-            <label className="setting-field">
+            <label className="setting-field" data-tour="transcript-language">
               <span>
                 <Languages size={15} /> שפת הדיבור
               </span>
@@ -788,7 +788,7 @@ export function TranscriptTool({ initial = null }: Props) {
         )}
         {audio && !busy && !resume && (user || authLoading) && (
           <>
-            <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading}>
+            <button className="primary-button" type="button" onClick={() => void run()} disabled={authLoading} data-tour="transcript-run">
               <Wand2 size={20} /> {trim ? "תמלל את הקטע המסומן" : "תמלל את ההקלטה"}
               <small>{formatTime(trim ? trim.end - trim.start : audio.buffer.duration)}</small>
             </button>

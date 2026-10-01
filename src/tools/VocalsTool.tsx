@@ -775,7 +775,7 @@ export function VocalsTool({ initial = null }: Props) {
           <>
             <div className="settings-panel">
               <div className="settings-grid">
-                <div className="setting-field">
+                <div className="setting-field" data-tour="vocals-mode">
                   <span id="vocals-mode">מצב</span>
                   <div className="segmented-control" role="group" aria-labelledby="vocals-mode">
                     <button className={mode === "simple" ? "active" : ""} onClick={() => { stopStems(); setMode("simple"); }} type="button" aria-pressed={mode === "simple"} disabled={aiBusy}>
@@ -789,7 +789,7 @@ export function VocalsTool({ initial = null }: Props) {
                 </div>
                 {mode === "simple" && (
                 <>
-                <div className="setting-field">
+                <div className="setting-field" data-tour="vocals-target">
                   <span id="vocals-target">מה להשאיר?</span>
                   <div
                     className="segmented-control"
@@ -814,7 +814,7 @@ export function VocalsTool({ initial = null }: Props) {
                     </button>
                   </div>
                 </div>
-                <label className="setting-field range-field">
+                <label className="setting-field range-field" data-tour="vocals-strength">
                   <span>
                     עוצמת ההפרדה <b>{strength}%</b>
                   </span>
@@ -1093,7 +1093,7 @@ export function VocalsTool({ initial = null }: Props) {
               </p>
             )}
 
-            <div className="ai-separator">
+            <div className="ai-separator" data-tour="vocals-ai">
               <div className="ai-separator-head">
                 <span className="tool-intro-icon">
                   <Cpu size={20} />
@@ -1178,7 +1178,7 @@ export function VocalsTool({ initial = null }: Props) {
               )}
             </div>
 
-            <div className="downloads-card">
+            <div className="downloads-card" data-tour="vocals-download">
               <div>
                 <span className="download-icon">
                   <Download size={22} />

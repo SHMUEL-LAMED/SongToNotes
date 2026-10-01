@@ -444,7 +444,7 @@ export function SetlistTool({ onOpenWork }: Props) {
       </div>
 
       <div className="settings-panel setlist-manage">
-        <div className="setlist-manage-row">
+        <div className="setlist-manage-row" data-tour="setlist-sets">
           <label className="setlist-field setlist-field-grow">
             <span>הסט</span>
             <select className="field" value={active.id} onChange={(event) => setStore((current) => ({ ...current, activeId: event.target.value }))}>
@@ -582,7 +582,7 @@ export function SetlistTool({ onOpenWork }: Props) {
             <button type="button" className="secondary-button" onClick={addBreak}>
               <Coffee size={17} /> הוסף הפסקה
             </button>
-            <button type="button" className="secondary-button" onClick={() => void openPicker()} aria-expanded={pickerOpen}>
+            <button type="button" className="secondary-button" onClick={() => void openPicker()} aria-expanded={pickerOpen} data-tour="setlist-import">
               <FolderOpen size={17} /> ייבוא מהשירון
             </button>
           </div>

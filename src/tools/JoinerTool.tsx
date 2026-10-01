@@ -839,7 +839,7 @@ export function JoinerTool() {
 
             <div className="settings-panel">
               <div className="settings-grid">
-                <div className="setting-field">
+                <div className="setting-field" data-tour="joiner-transition">
                   <span id="joiner-transition">מעבר בין הקבצים</span>
                   <div className="segmented-control" role="group" aria-labelledby="joiner-transition">
                     {TRANSITIONS.map((item) => (
@@ -859,7 +859,7 @@ export function JoinerTool() {
                     {shortened && <small>בין קבצים קצרים המעבר מתקצר לחצי מאורך הקובץ הקצר, כדי שלא יבלע אותו.</small>}
                   </label>
                 )}
-                <div className="setting-field">
+                <div className="setting-field" data-tour="joiner-format">
                   <span id="joiner-format">פורמט הקובץ</span>
                   <div className="segmented-control" role="group" aria-labelledby="joiner-format">
                     <button type="button" className={format === "mp3" ? "active" : ""} aria-pressed={format === "mp3"} onClick={() => setFormat("mp3")}>
