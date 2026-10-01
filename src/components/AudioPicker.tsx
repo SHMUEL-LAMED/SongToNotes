@@ -6,6 +6,7 @@ import { decodeAudioFile, formatTime } from "../lib/audio";
 import { offerFile } from "../lib/currentFile";
 import { hasHandoff, takeHandoff } from "../lib/handoff";
 import { decodeMonoAt } from "../lib/longAudio";
+import { checkFit, deviceLimits, detectDevice } from "../lib/audioBudget";
 import { SendFileMenu } from "./SendFile";
 import {
   isRecordingSupported,
@@ -37,13 +38,11 @@ export const ACCEPTED_EXTENSIONS = [
   "wma",
 ];
 /**
- * A file this size decodes to well over a gigabyte of 32-bit samples, which
- * is where a phone stops decoding and starts reloading the tab. The old limit
- * was 150MB and the crash it produced looked like the site being broken
- * rather than the file being too big, so the bar now sits where the decode
- * actually survives.
+ * The largest file this device reads at all. Whether a file under it opens is
+ * decided by how long its audio is, not its bytes (see audioBudget.ts): a long
+ * MP3 decodes to far more than a WAV of the same size.
  */
-const MAX_BYTES = 80 * 1024 * 1024;
+const MAX_BYTES = deviceLimits().maxBytes;
 
 const ACCEPT = [
   "audio/*",
@@ -54,6 +53,7 @@ const ACCEPT = [
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes >= 1024 * 1024 * 1024) return `${+(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
@@ -80,6 +80,24 @@ export function validateAudioFile(candidate: File, maxBytes = MAX_BYTES): string
     return "זה לא קובץ שמע. אפשר לבחור MP3, WAV, OGG, FLAC, M4A או AAC.";
   }
   return null;
+}
+
+/**
+ * Everything `validateAudioFile` checks, and then whether the audio is short
+ * enough to decode on this device — which takes a look at the file's header,
+ * so it waits.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export async function checkAudioFile(candidate: File, maxBytes = MAX_BYTES): Promise<string | null> {
+  const problem = validateAudioFile(candidate, maxBytes);
+  if (problem) return problem;
+  const fit = await checkFit(candidate);
+  if (fit.ok) return null;
+  const minutes = Math.round(fit.seconds / 60);
+  const where = detectDevice() === "phone" ? "אפשר לקצר אותו, או לפתוח אותו במחשב." : "אפשר לקצר אותו ולנסות שוב.";
+  return fit.reason === "bytes"
+    ? `הקובץ גדול מ־${formatBytes(deviceLimits().maxBytes)}. ${where}`
+    : `ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־${minutes} דקות). ${where}`;
 }
 
 export type LoadedAudio = {
@@ -130,13 +148,16 @@ export function useAudioFile(options: AudioFileOptions = {}) {
 
   const load = useCallback(async (candidate?: File | null) => {
     if (!candidate) return;
-    const problem = validateAudioFile(candidate, maxBytes);
+    loadTokenRef.current += 1;
+    const token = loadTokenRef.current;
+    // A tool that decodes to mono at a low rate (see longAudio.ts) holds a
+    // fraction of the samples, so only its own byte limit applies.
+    const problem = monoAt ? validateAudioFile(candidate, maxBytes) : await checkAudioFile(candidate, maxBytes);
+    if (loadTokenRef.current !== token) return;
     if (problem) {
       setError(problem);
       return;
     }
-    loadTokenRef.current += 1;
-    const token = loadTokenRef.current;
     setIsLoading(true);
     setProgress(null);
     setError(null);

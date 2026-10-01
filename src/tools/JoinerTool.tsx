@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Combine, Download, GripVertical, Layers, Loader2, Play, Scissors, Smartphone, Square, Trash2, UploadCloud, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACCEPTED_EXTENSIONS, formatBytes, validateAudioFile } from "../components/AudioPicker";
+import { ACCEPTED_EXTENSIONS, formatBytes, checkAudioFile } from "../components/AudioPicker";
 import { Transport } from "../components/Transport";
 import { buildPeaks, decodeAudioFile, formatTime, getOfflineAudioContextClass } from "../lib/audio";
 import { BITRATES, encodeMp3 } from "../lib/convert";
@@ -492,7 +492,7 @@ export function JoinerTool() {
     setError(incoming.length > list.length ? `נוספו רק ${list.length} — אפשר לחבר עד ${MAX_CLIPS} קבצים.` : null);
     const added: Clip[] = [];
     for (const file of list) {
-      const problem = validateAudioFile(file);
+      const problem = await checkAudioFile(file);
       if (problem) {
         setError(`„${file.name}”: ${problem}`);
         continue;

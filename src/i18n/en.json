@@ -2577,5 +2577,9 @@
  "רץ כאן בדפדפן, בחינם: בפעם הראשונה יורדת רשת של כ־180MB, וההפרדה לוקחת כמה דקות.": "Runs here in the browser, for free: the first time a network of about 180MB downloads, and the separation takes a few minutes.",
  "בשרת, במודל המדויק ביותר. לוקח שתיים־שלוש דקות.": "On the server, with the most accurate model. Takes two or three minutes.",
  "שירה, תופים, בס ושאר הכלים — כל אחד לערוץ משלו.": "Vocals, drums, bass and the rest — each on its own track.",
- "הדפדפן הזה לא יודע לעבד שמע.": "This browser can't process audio."
+ "הדפדפן הזה לא יודע לעבד שמע.": "This browser can't process audio.",
+ "הקובץ גדול מ־{0}. {1}": "The file is larger than {0}. {1}",
+ "ההקלטה ארוכה מדי לפענוח במכשיר הזה (כ־{0} דקות). {1}": "The recording is too long to decode on this device (about {0} minutes). {1}",
+ "אפשר לקצר אותו, או לפתוח אותו במחשב.": "Shorten it, or open it on a computer.",
+ "אפשר לקצר אותו ולנסות שוב.": "Shorten it and try again."
 }
