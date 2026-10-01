@@ -38,8 +38,10 @@ export type DeviceLimits = {
 
 const LIMITS: Record<Device, DeviceLimits> = {
   // Where a phone's tab survives: a 35-minute song at 320 kbit/s, decoded.
-  phone: { maxBytes: 400 * 1024 * 1024, budget: 1024 * 1024 * 1024 },
-  computer: { maxBytes: 1024 * 1024 * 1024, budget: 3 * 1024 * 1024 * 1024 },
+  phone: { maxBytes: 400 * 1024 * 1024, budget: 896 * 1024 * 1024 },
+  // Chrome's decoder holds nearly twice its output while it works, and a tab
+  // asked for three gigabytes of samples crashed outright; two came through.
+  computer: { maxBytes: 1024 * 1024 * 1024, budget: 2 * 1024 * 1024 * 1024 },
 };
 
 type NavigatorHints = Navigator & {
@@ -67,10 +69,34 @@ export type AudioProbe = {
   /** Length of the audio in seconds, or null when the header did not say. */
   seconds: number | null;
   channels: number;
+  /**
+   * A format this site can read a piece at a time without the whole file in
+   * memory, and cut short cheaply: plain PCM WAV, and MP3.
+   */
+  kind?: "wav" | "mp3";
+  /** For a WAV: the rate its samples are kept at once read (see bigAudio.ts). */
+  sampleRate?: number;
+  /** Where the audio starts in the file: past the header or the ID3 tag. */
+  audioStart?: number;
 };
 
 function ascii(bytes: Uint8Array, offset: number, length: number) {
   return String.fromCharCode(...bytes.subarray(offset, offset + length));
+}
+
+export type WavSamples = { format: "int" | "float"; bits: number };
+
+/** The sample format of a WAV whose `fmt ` chunk is given whole, when it is one read here. */
+export function wavSamples(fmtChunk: Uint8Array): WavSamples | null {
+  if (fmtChunk.length < 24) return null;
+  const view = new DataView(fmtChunk.buffer, fmtChunk.byteOffset, fmtChunk.byteLength);
+  let code = view.getUint16(8, true);
+  const bits = view.getUint16(22, true);
+  // WAVE_FORMAT_EXTENSIBLE keeps the real code in the first two bytes of its GUID.
+  if (code === 0xfffe && fmtChunk.length >= 34) code = view.getUint16(32, true);
+  if (code === 1 && [8, 16, 24, 32].includes(bits)) return { format: "int", bits };
+  if (code === 3 && bits === 32) return { format: "float", bits };
+  return null;
 }
 
 function probeWav(head: Uint8Array, size: number): AudioProbe | null {
@@ -79,7 +105,13 @@ function probeWav(head: Uint8Array, size: number): AudioProbe | null {
   // The size in the header is often a placeholder in a recording that was
   // streamed to disk, so the file's own length is the measure.
   const dataBytes = Math.max(0, size - layout.dataOffset);
-  return { seconds: dataBytes / (layout.sampleRate * layout.blockAlign), channels: layout.channels };
+  return {
+    seconds: dataBytes / (layout.sampleRate * layout.blockAlign),
+    channels: layout.channels,
+    kind: wavSamples(layout.fmtChunk) ? "wav" : undefined,
+    sampleRate: layout.sampleRate,
+    audioStart: layout.dataOffset,
+  };
 }
 
 function probeFlac(head: Uint8Array): AudioProbe | null {
@@ -92,33 +124,45 @@ function probeFlac(head: Uint8Array): AudioProbe | null {
   return { seconds: total / sampleRate, channels };
 }
 
-function probeMp3(head: Uint8Array, size: number): AudioProbe | null {
-  let offset = id3Length(head);
-  // The first frame header, past any padding the tag left behind.
-  const limit = Math.min(head.length - 4, offset + 64 * 1024);
-  let frame = null;
-  for (; offset < limit; offset += 1) {
-    frame = readMp3Frame(head, offset);
-    if (frame && readMp3Frame(head, offset + frame.length)) break;
-    frame = null;
+/** The first MP3 frame that the next one vouches for, past any ID3 tag and its padding. */
+export function firstMp3Frame(head: Uint8Array) {
+  const start = id3Length(head);
+  const limit = Math.min(head.length - 4, start + 64 * 1024);
+  for (let offset = start; offset < limit; offset += 1) {
+    const frame = readMp3Frame(head, offset);
+    if (frame && readMp3Frame(head, offset + frame.length)) return frame;
   }
-  if (!frame) return null;
+  return null;
+}
+
+/** Where a Xing (or Info) header would sit in the frame at `offset`, and whether one does. */
+export function xingHeader(head: Uint8Array, offset: number) {
   const mono = head[offset + 3] >> 6 === 3;
-  const channels = mono ? 1 : 2;
-  const mpeg1 = (head[offset + 1] >> 3 & 3) === 3;
+  const mpeg1 = ((head[offset + 1] >> 3) & 3) === 3;
+  const at = offset + 4 + (mpeg1 ? (mono ? 17 : 32) : mono ? 9 : 17);
+  if (at + 8 > head.length) return null;
+  const tag = ascii(head, at, 4);
+  return tag === "Xing" || tag === "Info" ? at : null;
+}
+
+function probeMp3(head: Uint8Array, size: number): AudioProbe | null {
+  const frame = firstMp3Frame(head);
+  if (!frame) return null;
+  const { offset } = frame;
+  const channels = head[offset + 3] >> 6 === 3 ? 1 : 2;
+  const base = { channels, kind: "mp3" as const, audioStart: offset };
   // A VBR file says how many frames it has in a Xing (or Info) header in its
   // first frame; without one, the first frame's bitrate stands for them all.
-  const xingAt = offset + 4 + (mpeg1 ? (mono ? 17 : 32) : mono ? 9 : 17);
-  if (xingAt + 12 <= head.length) {
-    const tag = ascii(head, xingAt, 4);
+  const xing = xingHeader(head, offset);
+  if (xing !== null && xing + 12 <= head.length) {
     const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
-    if ((tag === "Xing" || tag === "Info") && view.getUint32(xingAt + 4) & 1) {
-      const frames = view.getUint32(xingAt + 8);
-      if (frames) return { seconds: (frames * frame.samples) / frame.sampleRate, channels };
+    if (view.getUint32(xing + 4) & 1) {
+      const frames = view.getUint32(xing + 8);
+      if (frames) return { ...base, seconds: (frames * frame.samples) / frame.sampleRate };
     }
   }
   const bitrate = (frame.length * 8 * frame.sampleRate) / frame.samples;
-  return { seconds: ((size - offset) * 8) / bitrate, channels };
+  return { ...base, seconds: ((size - offset) * 8) / bitrate };
 }
 
 /** Reads the length of the audio from the start of the file, where the format allows. */
@@ -146,46 +190,91 @@ function guessSeconds(name: string, type: string, size: number) {
   return (size * 8) / bitrate;
 }
 
-export type Fit = { ok: true } | { ok: false; seconds: number; reason: "bytes" | "length" };
+/**
+ * How a file is to be opened:
+ * - `whole`: read into memory and handed to the browser's decoder, as always;
+ * - `stream`: a WAV read straight from the file into samples, a slice at a
+ *   time, so the file itself is never held in memory beside them;
+ * - `partial`: too long for this device, but in a format that can be cut,
+ *   so its first `keepSeconds` are opened instead of nothing;
+ * - `refuse`: too long, and in a format that cannot be cut here.
+ */
+export type Fit =
+  | { action: "whole" }
+  | { action: "stream" }
+  | { action: "partial"; kind: "wav" | "mp3"; seconds: number; keepSeconds: number }
+  | { action: "refuse"; seconds: number; reason: "bytes" | "length" };
+
+/** Anything shorter is not worth opening as "the part that fits". */
+const MIN_PARTIAL_SECONDS = 60;
 
 /**
- * Whether a file of this size and header can be decoded here. Files up to
- * `SAFE_BYTES` always pass, so nothing that opened before is turned away now.
+ * Whether a file of this size and header can be decoded here, and how. Files
+ * up to `SAFE_BYTES` are always opened whole, exactly as before.
  */
 export function judgeFit(
   file: { name: string; type: string; size: number },
   probe: AudioProbe | null,
   limits: DeviceLimits,
+  maxBytes = limits.maxBytes,
 ): Fit {
+  if (file.size <= SAFE_BYTES) return { action: "whole" };
   const seconds = probe?.seconds ?? guessSeconds(file.name, file.type, file.size);
-  if (file.size <= SAFE_BYTES) return { ok: true };
-  if (file.size > limits.maxBytes) return { ok: false, seconds, reason: "bytes" };
-  const channels = Math.min(2, Math.max(1, probe?.channels ?? 2));
-  const needed = file.size + seconds * channels * DECODED_BYTES_PER_CHANNEL_SECOND;
-  return needed <= limits.budget ? { ok: true } : { ok: false, seconds, reason: "length" };
+  const channels = Math.min(32, Math.max(1, probe?.channels ?? 2));
+
+  if (probe?.kind === "wav" && probe.sampleRate) {
+    // Read as it is stored: the file's own rate and channels, four bytes a sample.
+    const perSecond = Math.max(1, probe.channels) * probe.sampleRate * 4;
+    if (seconds * perSecond <= limits.budget) return { action: "stream" };
+    const keepSeconds = Math.floor(limits.budget / perSecond);
+    return keepSeconds >= MIN_PARTIAL_SECONDS
+      ? { action: "partial", kind: "wav", seconds, keepSeconds }
+      : { action: "refuse", seconds, reason: "length" };
+  }
+
+  const perSecond = Math.min(2, channels) * DECODED_BYTES_PER_CHANNEL_SECOND;
+  const fitsWhole = file.size <= maxBytes && file.size + seconds * perSecond <= limits.budget;
+  if (fitsWhole) return { action: "whole" };
+
+  if (probe?.kind === "mp3" && seconds > 0) {
+    // The part kept is read whole and decoded, so both count against the budget.
+    const bytesPerSecond = (file.size - (probe.audioStart ?? 0)) / seconds;
+    const keepSeconds = Math.floor(
+      Math.min(limits.budget / (perSecond + bytesPerSecond), maxBytes / bytesPerSecond, seconds),
+    );
+    if (keepSeconds >= MIN_PARTIAL_SECONDS) return { action: "partial", kind: "mp3", seconds, keepSeconds };
+  }
+  return { action: "refuse", seconds, reason: file.size > maxBytes ? "bytes" : "length" };
 }
 
-/** Reads the head of the file and judges it; a file that cannot be read is left to the decoder. */
-export async function checkFit(file: File, limits: DeviceLimits = deviceLimits()): Promise<Fit> {
-  if (file.size <= SAFE_BYTES) return { ok: true };
+/**
+ * The start of the file, enough to read its header. A tag with cover art can
+ * push an MP3's first frame past the first read, so then the bytes just past
+ * the tag are read too and laid where they belong.
+ */
+export async function readHead(file: Blob): Promise<Uint8Array> {
+  const head = new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer());
+  const tag = id3Length(head);
+  if (tag <= HEAD_BYTES - 1024 || tag >= file.size) return head;
+  try {
+    const rest = new Uint8Array(await file.slice(tag, tag + 64 * 1024).arrayBuffer());
+    const joined = new Uint8Array(tag + rest.length);
+    joined.set(head.subarray(0, Math.min(head.length, tag)));
+    joined.set(rest, tag);
+    return joined;
+  } catch {
+    return head;
+  }
+}
+
+/** Reads the head of the file and judges it; a file whose head cannot be read is left to the decoder. */
+export async function checkFit(file: File, limits: DeviceLimits = deviceLimits(), maxBytes = limits.maxBytes): Promise<Fit> {
+  if (file.size <= SAFE_BYTES) return { action: "whole" };
   let head: Uint8Array;
   try {
-    head = new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer());
+    head = await readHead(file);
   } catch {
-    return judgeFit(file, null, limits);
+    return judgeFit(file, null, limits, maxBytes);
   }
-  // A tag with cover art can push the first frame past the first read.
-  const tag = id3Length(head);
-  if (tag > HEAD_BYTES - 1024 && tag < file.size) {
-    try {
-      const rest = new Uint8Array(await file.slice(tag, tag + 64 * 1024).arrayBuffer());
-      const joined = new Uint8Array(tag + rest.length);
-      joined.set(head.subarray(0, Math.min(head.length, tag)));
-      joined.set(rest, tag);
-      head = joined;
-    } catch {
-      // Judged on what was read.
-    }
-  }
-  return judgeFit(file, probeAudio(head, file.size), limits);
+  return judgeFit(file, probeAudio(head, file.size), limits, maxBytes);
 }

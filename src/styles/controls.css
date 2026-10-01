@@ -251,6 +251,7 @@
 .file-details { flex: 1 1 180px; min-width: 0; }
 .file-details strong { display: block; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-details span { font-size: 12.5px; color: var(--text-muted); }
+.file-details .file-note { display: block; margin-top: 2px; color: var(--text); }
 .selected-file audio { height: 40px; max-width: 100%; }
 
 /* ---- recording ---- */

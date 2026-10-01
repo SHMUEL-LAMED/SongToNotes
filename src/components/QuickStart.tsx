@@ -28,7 +28,7 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
 
   const choose = (candidate?: File | null) => {
     if (!candidate) return;
-    const limit = 800 * 1024 * 1024;
+    const limit = 4 * 1024 * 1024 * 1024;
     // Empty and oversized files are refused whatever they are; only the
     // audio-type check is waived for a video.
     const problem =

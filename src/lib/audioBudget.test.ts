@@ -72,31 +72,38 @@ describe("judgeFit", () => {
 
   it("never turns away a file the old limit took", () => {
     const longMp3 = { seconds: 5 * 3600, channels: 2 };
-    expect(judgeFit({ name: "a.mp3", type: "audio/mpeg", size: SAFE_BYTES }, longMp3, phone)).toEqual({ ok: true });
+    expect(judgeFit({ name: "a.mp3", type: "audio/mpeg", size: SAFE_BYTES }, longMp3, phone)).toEqual({ action: "whole" });
   });
 
-  it("takes a half-hour 300MB WAV on a phone and a computer", () => {
+  it("reads a long WAV in slices, and keeps the part that fits when it is longer than the device holds", () => {
+    const probe = { seconds: 1800, channels: 2, kind: "wav" as const, sampleRate: 44_100, audioStart: 44 };
     const file = { name: "take.wav", type: "audio/wav", size: 300 * MB };
-    const probe = { seconds: 1800, channels: 2 };
-    expect(judgeFit(file, probe, computer).ok).toBe(true);
-    expect(judgeFit({ ...file, size: 150 * MB }, { seconds: 900, channels: 2 }, phone).ok).toBe(true);
+    expect(judgeFit(file, probe, phone)).toEqual({ action: "stream" });
+    // Past the byte limit too: a WAV read in slices has none.
+    const long = judgeFit({ ...file, size: 1200 * MB }, { ...probe, seconds: 7200 }, phone);
+    expect(long).toMatchObject({ action: "partial", kind: "wav", seconds: 7200 });
+    if (long.action !== "partial") throw new Error();
+    expect(long.keepSeconds).toBe(Math.floor(phone.budget / (2 * 44_100 * 4)));
   });
 
-  it("turns a three-hour MP3 away on a phone but takes it on a computer up to the budget", () => {
+  it("opens a three-hour MP3 in part on a phone, and an hour and a quarter whole on a computer", () => {
     const file = { name: "set.mp3", type: "audio/mpeg", size: 170 * MB };
-    expect(judgeFit(file, { seconds: 3 * 3600, channels: 2 }, phone)).toMatchObject({ ok: false, reason: "length" });
-    expect(judgeFit(file, { seconds: 2 * 3600, channels: 2 }, computer).ok).toBe(true);
+    const probe = { channels: 2, kind: "mp3" as const, audioStart: 0 };
+    const onPhone = judgeFit(file, { ...probe, seconds: 3 * 3600 }, phone);
+    expect(onPhone).toMatchObject({ action: "partial", kind: "mp3" });
+    if (onPhone.action !== "partial") throw new Error();
+    // The part kept and its decoded samples stay inside the budget.
+    const kept = onPhone.keepSeconds;
+    expect(kept * (file.size / (3 * 3600)) + kept * 2 * 48_000 * 4).toBeLessThanOrEqual(phone.budget);
+    expect(kept).toBeGreaterThan(35 * 60);
+    expect(judgeFit(file, { ...probe, seconds: 75 * 60 }, computer)).toEqual({ action: "whole" });
   });
 
-  it("refuses anything past the device's byte limit", () => {
-    const file = { name: "huge.wav", type: "audio/wav", size: computer.maxBytes + 1 };
-    expect(judgeFit(file, { seconds: 60, channels: 1 }, computer)).toMatchObject({ ok: false, reason: "bytes" });
-  });
-
-  it("guesses conservatively when the header says nothing", () => {
-    const file = { name: "song.m4a", type: "audio/mp4", size: 200 * MB };
-    expect(judgeFit(file, null, computer).ok).toBe(false);
-    expect(judgeFit({ ...file, size: 100 * MB }, null, computer).ok).toBe(true);
+  it("refuses a format it cannot cut once past the byte limit or the budget", () => {
+    const file = { name: "huge.flac", type: "audio/flac", size: computer.maxBytes + 1 };
+    expect(judgeFit(file, { seconds: 60, channels: 1 }, computer)).toMatchObject({ action: "refuse", reason: "bytes" });
+    const m4a = { name: "song.m4a", type: "audio/mp4", size: 200 * MB };
+    expect(judgeFit(m4a, null, computer)).toMatchObject({ action: "refuse", reason: "length" });
   });
 });
 

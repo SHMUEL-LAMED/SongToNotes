@@ -1,10 +1,10 @@
 import { Download, Headphones, Layers, Pause, Play, Plus, Repeat, Square, Trash2, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatBytes, checkAudioFile } from "../components/AudioPicker";
+import { AudioFileProblem, formatBytes, openAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
 import { ShareButton } from "../components/ShareButton";
 import { Waveform } from "../components/Waveform";
-import { buildPeaks, decodeAudioFile, formatTime, type TrimRange } from "../lib/audio";
+import { buildPeaks, formatTime, type TrimRange } from "../lib/audio";
 import { downloadFile, safeFilename } from "../lib/export";
 import { handOffTo, hasHandoff, takeHandoffFiles } from "../lib/handoff";
 import { MixPlayer, audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
@@ -105,13 +105,9 @@ export function MixerTool({ initial = null }: Props) {
     setLoading(true);
     setError(null);
     for (const file of list) {
-      const problem = await checkAudioFile(file);
-      if (problem) {
-        setError(problem);
-        continue;
-      }
       try {
-        const buffer = await decodeAudioFile(await file.arrayBuffer());
+        const { buffer, note } = await openAudioFile(file);
+        if (note) setError(`„${file.name}”: ${note}`);
         setTracks((current) => [
           ...current,
           {
@@ -126,8 +122,8 @@ export function MixerTool({ initial = null }: Props) {
             color: HUES[current.length % HUES.length],
           },
         ]);
-      } catch {
-        setError(`לא הצלחנו לפתוח את „${file.name}”.`);
+      } catch (caught) {
+        setError(caught instanceof AudioFileProblem ? caught.message : `לא הצלחנו לפתוח את „${file.name}”.`);
       }
     }
     setLoading(false);
