@@ -191,11 +191,20 @@ export function Tour({ steps: given, onClose }: { steps: TourStep[]; onClose: ()
     <div className="tour" data-placement={placement}>
       {/* Clicks on the dimmed page go nowhere: the tour is left with its own buttons or Esc. */}
       <div className="tour-shield" aria-hidden="true" />
-      <div
-        className={`tour-hole ${hole ? "" : "is-centered"}`}
-        aria-hidden="true"
-        style={hole ? { top: hole.top, left: hole.left, width: hole.width, height: hole.height } : undefined}
-      />
+      {/* The dimming, with the lit part cut out of it by a mask; a shadow
+          spread over the whole screen was drawn too faintly to read as dim. */}
+      <svg className="tour-dim" aria-hidden="true" width="100%" height="100%">
+        <defs>
+          <mask id="tour-mask">
+            <rect width="100%" height="100%" fill="white" />
+            {hole && <rect x={hole.left} y={hole.top} width={hole.width} height={hole.height} rx={14} fill="black" />}
+          </mask>
+        </defs>
+        <rect width="100%" height="100%" mask="url(#tour-mask)" />
+      </svg>
+      {hole && (
+        <div className="tour-hole" aria-hidden="true" style={{ top: hole.top, left: hole.left, width: hole.width, height: hole.height }} />
+      )}
       <div
         ref={bubbleRef}
         className="tour-bubble"

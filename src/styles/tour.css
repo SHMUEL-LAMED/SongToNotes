@@ -67,22 +67,19 @@
   inset: 0;
 }
 
-/* The lit window: everything around it is darkened by its own shadow. */
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  fill: rgba(6, 6, 12, 0.6);
+  pointer-events: none;
+}
+
+/* The ring around the lit part. */
 .tour-hole {
   position: fixed;
   border-radius: 14px;
-  box-shadow:
-    0 0 0 3px var(--tour-gold),
-    0 0 0 9999px rgba(6, 6, 12, 0.58);
+  box-shadow: 0 0 0 3px var(--tour-gold), 0 0 24px color-mix(in oklab, var(--tour-gold) 45%, transparent);
   pointer-events: none;
-  transition: top 0.2s var(--ease), left 0.2s var(--ease), width 0.2s var(--ease), height 0.2s var(--ease);
-}
-.tour-hole.is-centered {
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  box-shadow: 0 0 0 9999px rgba(6, 6, 12, 0.58);
 }
 
 .tour-bubble {
@@ -195,7 +192,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tour-hole,
   .tour-progress span { transition: none; }
   .tour-bubble { animation: none; }
 }
