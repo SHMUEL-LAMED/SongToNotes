@@ -13,9 +13,12 @@
  * picked out of. The one exception is `?view=accounts`, the list of accounts
  * the owner asked for — who signed up and how much each keeps here, never the
  * content of their work — and every opening of it is written to the audit log.
+ * The other is `?view=feedback`: a message a signed-in visitor chose to send
+ * comes with their account, so the owner can see who wrote and answer them.
  *
  * GET  ?view=overview&days=30  everything the dashboard draws, in one reply
  * GET  ?view=accounts          the accounts on the site, one row each
+ * GET  ?view=feedback          what visitors sent, and who when signed in
  * GET  ?view=settings          which server keys are set (never their values)
  * GET  ?view=audit             the log of what the admin area did
  * POST {action, …}             one change: a notice, maintenance, a tool off,
@@ -451,6 +454,30 @@ async function accounts(admin: SupabaseClient) {
   return { accounts: list, truncated: users.length >= MAX_ACCOUNTS };
 }
 
+/** Who wrote each message: the address and name of every account among them. */
+async function feedbackSenders(admin: SupabaseClient, ids: unknown[]) {
+  const unique = [...new Set(ids.filter((id): id is string => typeof id === "string" && id !== ""))];
+  const senders = new Map<string, { id: string; email: string | null; phone: string | null; name: string | null }>();
+  if (!unique.length) return senders;
+  const { data: profiles } = await admin.from("profiles").select("id, full_name").in("id", unique);
+  const names = new Map(((profiles ?? []) as { id: string; full_name: string | null }[]).map((row) => [row.id, row.full_name]));
+  await Promise.all(
+    unique.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const user = data?.user;
+      if (!user) return;
+      const meta = (user.user_metadata ?? {}) as Row;
+      senders.set(id, {
+        id,
+        email: user.email ?? null,
+        phone: user.phone || null,
+        name: names.get(id) ?? (typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string" ? meta.name : null),
+      });
+    }),
+  );
+  return senders;
+}
+
 /* ---------------------------------------------------------------- credits */
 
 type CreditSettingsRow = {
@@ -823,15 +850,22 @@ Deno.serve(async (req: Request) => {
         });
       }
       if (view === "feedback") {
-        // What visitors sent from "משוב והצעות", newest first. Before
-        // supabase/site_feedback.sql has run there is no table: say so.
-        const { data, error } = await admin
-          .from("site_feedback")
-          .select("id, created_at, kind, message, contact, page, language, device, browser, os, handled")
-          .order("created_at", { ascending: false })
-          .limit(300);
-        if (error) return json(200, { entries: [], missing: true });
-        return json(200, { entries: data ?? [] });
+        // What visitors sent from "משוב והצעות", newest first, with who sent
+        // each one when they were signed in. Before supabase/site_feedback.sql
+        // has run there is no table: say so; before its latest run there is
+        // no user_id column: list the messages anyway and say that too.
+        const columns = "id, created_at, kind, message, contact, page, language, device, browser, os, handled";
+        const read = async (select: string) => {
+          const { data, error } = await admin.from("site_feedback").select(select).order("created_at", { ascending: false }).limit(300);
+          return error ? null : ((data ?? []) as unknown as Row[]);
+        };
+        const withSender = await read(`${columns}, user_id`);
+        const rows = withSender ?? (await read(columns));
+        if (!rows) return json(200, { entries: [], missing: true });
+        const upgrade = !withSender;
+        const senders = await feedbackSenders(admin, rows.map((row) => row.user_id));
+        const entries = rows.map((row) => ({ ...row, sender: typeof row.user_id === "string" ? senders.get(row.user_id) ?? null : null }));
+        return json(200, { entries, upgrade });
       }
       if (view === "accounts") {
         const reply = await accounts(admin);

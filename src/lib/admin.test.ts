@@ -14,6 +14,7 @@ import {
   isAdminEmail,
   normalizeControlState,
   normalizeFeedback,
+  senderLabel,
   normalizeHours,
   normalizeSnapshot,
   series,
@@ -249,7 +250,18 @@ describe("the visitors' feedback", () => {
     const [entry] = normalizeFeedback([
       { id: 7, created_at: "2026-09-25T10:00:00Z", kind: "idea", message: "עוד סולמות", contact: "", page: "ear", language: "he", device: "phone", browser: "Safari", os: "iOS", handled: false },
     ]);
-    expect(entry).toEqual({ id: 7, createdAt: "2026-09-25T10:00:00Z", kind: "idea", message: "עוד סולמות", contact: null, page: "ear", language: "he", device: "phone", browser: "Safari", os: "iOS", handled: false });
+    expect(entry).toEqual({ id: 7, createdAt: "2026-09-25T10:00:00Z", kind: "idea", message: "עוד סולמות", contact: null, page: "ear", language: "he", device: "phone", browser: "Safari", os: "iOS", handled: false, sender: null });
+  });
+
+  it("keeps who sent a message, and names a guest as one", () => {
+    const [entry] = normalizeFeedback([
+      { id: 8, created_at: "2026-09-25T10:00:00Z", kind: "problem", message: "לא עובד", user_id: "u1", sender: { id: "u1", email: "dana@example.com", phone: "", name: "דנה" } },
+    ]);
+    expect(entry.sender).toEqual({ id: "u1", email: "dana@example.com", phone: null, name: "דנה" });
+    expect(senderLabel(entry.sender)).toBe("דנה");
+    expect(senderLabel({ id: "u2", email: "x@y.com", phone: null, name: null })).toBe("x@y.com");
+    expect(senderLabel(null)).toBe("אורח");
+    expect(normalizeFeedback([{ id: 9, created_at: "2026-09-25T10:00:00Z", message: "a", sender: { email: "no-id" } }])[0].sender).toBeNull();
   });
 
   it("leaves out what is malformed and treats an unknown kind as a problem", () => {

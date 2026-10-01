@@ -270,6 +270,13 @@
 .feedback-kind { padding: 2px 9px; border-radius: var(--radius-pill); font-weight: 700; background: var(--surface-2); color: var(--text-soft); }
 .feedback-kind.is-problem { background: var(--danger-soft); color: var(--danger); }
 .feedback-kind.is-idea { background: var(--accent-tint); color: var(--accent-text); }
+.feedback-sender { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--text-soft); }
+.feedback-sender > svg { flex: none; color: var(--text-muted); }
+.feedback-sender.is-guest { color: var(--text-muted); }
+.feedback-sender-name { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--text); cursor: pointer; }
+.feedback-sender-name:hover { color: var(--accent-text); text-decoration: underline; }
+.feedback-sender a { color: var(--accent-text); }
+.feedback-sender-count { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--surface-2); font-size: 12px; color: var(--text-muted); }
 .feedback-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .feedback-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .feedback-row-actions a { margin-inline-end: auto; font-size: 13px; color: var(--accent-text); }

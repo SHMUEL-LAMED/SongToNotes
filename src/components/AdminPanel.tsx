@@ -61,6 +61,7 @@ import {
   providerLabel,
   quotaLabel,
   runAdminAction,
+  senderLabel,
   series,
   successRate,
   sumSeries,
@@ -1420,9 +1421,41 @@ function AccountsTab({
 const FEEDBACK_KIND_LABELS: Record<FeedbackEntry["kind"], string> = { problem: "בעיה", idea: "רעיון", other: "אחר" };
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type FeedbackState = { entries: FeedbackEntry[]; missing: boolean };
+type FeedbackState = { entries: FeedbackEntry[]; missing: boolean; upgrade: boolean };
+type FeedbackFrom = "all" | "accounts" | "guests";
 
-/** What visitors sent from "משוב והצעות": the open ones first, handled ones on request. */
+/** Who sent a message: their name and address, or "guest" when nobody was signed in. */
+function FeedbackSenderLine({ entry, count, onPick }: { entry: FeedbackEntry; count: number; onPick: () => void }) {
+  const { sender } = entry;
+  if (!sender) {
+    return (
+      <div className="feedback-sender is-guest">
+        <UserRound size={15} aria-hidden="true" />
+        <span>אורח (לא מחובר)</span>
+      </div>
+    );
+  }
+  const address = sender.email ?? sender.phone;
+  return (
+    <div className="feedback-sender">
+      <UserRound size={15} aria-hidden="true" />
+      <button type="button" className="feedback-sender-name" onClick={onPick} title="כל ההודעות מהחשבון הזה" dir="auto">
+        {senderLabel(sender)}
+      </button>
+      {address && address !== senderLabel(sender) &&
+        (sender.email ? (
+          <a href={`mailto:${sender.email}`} dir="ltr">
+            {sender.email}
+          </a>
+        ) : (
+          <span dir="ltr">{address}</span>
+        ))}
+      {count > 1 && <span className="feedback-sender-count">{formatNumber(count)} הודעות</span>}
+    </div>
+  );
+}
+
+/** What visitors sent from "משוב והצעות": the open ones first, handled ones on request, with who sent each. */
 function FeedbackTab({
   feedback,
   busy,
@@ -1437,8 +1470,16 @@ function FeedbackTab({
   onReload: () => void;
 }) {
   const [showHandled, setShowHandled] = useState(false);
+  const [from, setFrom] = useState<FeedbackFrom>("all");
+  const [query, setQuery] = useState("");
   // Deleting takes a second press on the same message.
   const [confirming, setConfirming] = useState<number | null>(null);
+
+  const perSender = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of feedback?.entries ?? []) if (entry.sender) counts.set(entry.sender.id, (counts.get(entry.sender.id) ?? 0) + 1);
+    return counts;
+  }, [feedback]);
 
   if (!feedback) {
     return (
@@ -1449,17 +1490,45 @@ function FeedbackTab({
     );
   }
   const open = feedback.entries.filter((entry) => !entry.handled);
-  const shown = showHandled ? feedback.entries : open;
+  const needle = query.trim().toLowerCase();
+  const shown = (showHandled ? feedback.entries : open).filter((entry) => {
+    if (from === "accounts" && !entry.sender) return false;
+    if (from === "guests" && entry.sender) return false;
+    if (!needle) return true;
+    const sender = entry.sender;
+    return [entry.message, entry.contact, sender?.name, sender?.email, sender?.phone, sender?.id]
+      .some((text) => text?.toLowerCase().includes(needle));
+  });
+  const fromAccounts = feedback.entries.filter((entry) => entry.sender).length;
 
   return (
     <div className="admin-grid">
       <Card
         title="משוב מהגולשים"
-        hint={feedback.missing ? "הטבלה עוד לא קיימת" : `${formatNumber(open.length)} ממתינות · ${formatNumber(feedback.entries.length)} בסך הכול`}
+        hint={
+          feedback.missing
+            ? "הטבלה עוד לא קיימת"
+            : `${formatNumber(open.length)} ממתינות · ${formatNumber(feedback.entries.length)} בסך הכול · ${formatNumber(fromAccounts)} מחשבונות`
+        }
         icon={<MessageSquareText size={17} />}
         wide
         actions={
           <>
+            <span className="admin-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                placeholder="תוכן, שם או אימייל"
+                aria-label="חיפוש בהודעות"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </span>
+            <select value={from} aria-label="מי שלח" onChange={(event) => setFrom(event.target.value as FeedbackFrom)}>
+              <option value="all">מכולם</option>
+              <option value="accounts">מחשבונות מחוברים</option>
+              <option value="guests">מאורחים</option>
+            </select>
             <label className="feedback-filter">
               <input type="checkbox" checked={showHandled} onChange={(event) => setShowHandled(event.target.checked)} /> גם כאלה שטופלו
             </label>
@@ -1473,53 +1542,69 @@ function FeedbackTab({
           <p className="notice-message">
             כדי לקבל משוב צריך להריץ פעם אחת את <code dir="ltr">supabase/site_feedback.sql</code> בפרויקט ה־Supabase.
           </p>
-        ) : shown.length ? (
-          <ul className="feedback-list">
-            {shown.map((entry) => (
-              <li key={entry.id} className={entry.handled ? "is-handled" : ""}>
-                <div className="feedback-meta">
-                  <span className={`feedback-kind is-${entry.kind}`}>{FEEDBACK_KIND_LABELS[entry.kind]}</span>
-                  <span title={formatDate(entry.createdAt)}>{timeAgo(entry.createdAt)}</span>
-                  {entry.page && <span>{entry.page === "home" ? "דף הבית" : toolLabel(entry.page)}</span>}
-                  {(entry.device || entry.browser || entry.os) && <span dir="ltr">{[entry.device, entry.browser, entry.os].filter(Boolean).join(" · ")}</span>}
-                </div>
-                <p className="feedback-text" dir="auto">
-                  {entry.message}
-                </p>
-                <div className="feedback-row-actions">
-                  {entry.contact &&
-                    (EMAIL.test(entry.contact) ? (
-                      <a href={`mailto:${entry.contact}`} dir="ltr">
-                        {entry.contact}
-                      </a>
-                    ) : (
-                      <span dir="auto">{entry.contact}</span>
-                    ))}
-                  <button type="button" className="secondary-button compact" onClick={() => onHandle(entry)} disabled={busy}>
-                    {entry.handled ? "החזר לטיפול" : "סמן כטופל"}
-                  </button>
-                  <button
-                    type="button"
-                    className={`secondary-button compact ${confirming === entry.id ? "is-danger" : ""}`}
-                    onClick={() => {
-                      if (confirming !== entry.id) {
-                        setConfirming(entry.id);
-                        return;
-                      }
-                      setConfirming(null);
-                      onDelete(entry);
-                    }}
-                    onBlur={() => setConfirming((current) => (current === entry.id ? null : current))}
-                    disabled={busy}
-                  >
-                    {confirming === entry.id ? "בטוח? למחוק" : "מחיקה"}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <p className="admin-empty">{feedback.entries.length ? "כל ההודעות טופלו." : "עוד לא הגיעו הודעות."}</p>
+          <>
+            {feedback.upgrade && (
+              <p className="notice-message">
+                כדי לראות מי שלח כל הודעה צריך להריץ שוב את <code dir="ltr">supabase/site_feedback.sql</code> בפרויקט ה־Supabase.
+              </p>
+            )}
+            {shown.length ? (
+              <ul className="feedback-list">
+                {shown.map((entry) => (
+                  <li key={entry.id} className={entry.handled ? "is-handled" : ""}>
+                    <div className="feedback-meta">
+                      <span className={`feedback-kind is-${entry.kind}`}>{FEEDBACK_KIND_LABELS[entry.kind]}</span>
+                      <span title={formatDate(entry.createdAt)}>{timeAgo(entry.createdAt)}</span>
+                      {entry.page && <span>{entry.page === "home" ? "דף הבית" : toolLabel(entry.page)}</span>}
+                      {(entry.device || entry.browser || entry.os) && <span dir="ltr">{[entry.device, entry.browser, entry.os].filter(Boolean).join(" · ")}</span>}
+                    </div>
+                    <FeedbackSenderLine
+                      entry={entry}
+                      count={entry.sender ? perSender.get(entry.sender.id) ?? 0 : 0}
+                      onPick={() => setQuery(entry.sender?.email ?? entry.sender?.id ?? "")}
+                    />
+                    <p className="feedback-text" dir="auto">
+                      {entry.message}
+                    </p>
+                    <div className="feedback-row-actions">
+                      {entry.contact && entry.contact !== entry.sender?.email &&
+                        (EMAIL.test(entry.contact) ? (
+                          <a href={`mailto:${entry.contact}`} dir="ltr" title="המייל שנכתב בהודעה">
+                            {entry.contact}
+                          </a>
+                        ) : (
+                          <span dir="auto">{entry.contact}</span>
+                        ))}
+                      <button type="button" className="secondary-button compact" onClick={() => onHandle(entry)} disabled={busy}>
+                        {entry.handled ? "החזר לטיפול" : "סמן כטופל"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`secondary-button compact ${confirming === entry.id ? "is-danger" : ""}`}
+                        onClick={() => {
+                          if (confirming !== entry.id) {
+                            setConfirming(entry.id);
+                            return;
+                          }
+                          setConfirming(null);
+                          onDelete(entry);
+                        }}
+                        onBlur={() => setConfirming((current) => (current === entry.id ? null : current))}
+                        disabled={busy}
+                      >
+                        {confirming === entry.id ? "בטוח? למחוק" : "מחיקה"}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="admin-empty">
+                {needle || from !== "all" ? "אין הודעה שמתאימה לסינון." : feedback.entries.length ? "כל ההודעות טופלו." : "עוד לא הגיעו הודעות."}
+              </p>
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -1579,7 +1664,7 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   const loadFeedback = useCallback(() => {
     void fetchFeedback()
       .then(setFeedback)
-      .catch(() => setFeedback((current) => current ?? { entries: [], missing: false }));
+      .catch(() => setFeedback((current) => current ?? { entries: [], missing: false, upgrade: false }));
   }, []);
 
   useEffect(() => {

@@ -44,6 +44,29 @@ describe("sendFeedback", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({ kind: "idea", message: "עוד סולמות במאמן השמיעה", page: "ear", device: "desktop" });
   });
 
+  it("sends a signed-in visitor's account with their own token, and falls back to none", async () => {
+    vi.doMock("./supabase", async (original) => ({
+      ...(await original<typeof import("./supabase")>()),
+      getSupabase: async () => ({ auth: { getSession: async () => ({ data: { session: { access_token: "user-token", user: { id: "u1" } } } }) } }),
+    }));
+    vi.resetModules();
+    const { sendFeedback: send } = await import("./feedback");
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("window", { innerWidth: 1280 });
+    vi.stubGlobal("navigator", { maxTouchPoints: 0, userAgent: "" });
+    await send({ kind: "problem", message: "משהו נתקע", page: "home" }, true);
+    const [[, first], [, second]] = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(JSON.parse(String(first.body))).toMatchObject({ user_id: "u1" });
+    expect((first.headers as Record<string, string>).Authorization).toBe("Bearer user-token");
+    expect(JSON.parse(String(second.body)).user_id).toBeUndefined();
+    vi.doUnmock("./supabase");
+    vi.resetModules();
+  });
+
   it("throws when the row did not arrive", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
     vi.stubGlobal("window", { innerWidth: 1280 });

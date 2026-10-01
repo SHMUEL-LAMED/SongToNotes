@@ -3,12 +3,13 @@
  * sent straight into `site_feedback` (supabase/site_feedback.sql), which
  * anyone may add to and only the admin function reads. With the message go
  * the page it was sent from, the site's language and the kind of device and
- * browser, which is what a problem report needs; nothing else about the
- * visitor, and an address only when they wrote one.
+ * browser, which is what a problem report needs, and — for a visitor who is
+ * signed in — their account, so the owner can see who wrote and answer them.
+ * Nothing else about the visitor, and an address only when they wrote one.
  */
 import { browserName, classifyDevice, osName } from "./analytics";
 import { currentLang } from "./i18n";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, getSupabase } from "./supabase";
 
 export type FeedbackKind = "problem" | "idea" | "other";
 
@@ -39,8 +40,38 @@ export function feedbackRow(input: FeedbackInput, environment: { width: number; 
   };
 }
 
-/** Sends it; throws when it did not arrive, so the dialog can say so. */
-export async function sendFeedback(input: FeedbackInput) {
+/** The signed-in visitor's account and token, or null; never blocks sending. */
+async function currentAccount(): Promise<{ id: string; token: string } | null> {
+  try {
+    const supabase = await getSupabase();
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    return session?.access_token && session.user?.id ? { id: session.user.id, token: session.access_token } : null;
+  } catch {
+    return null;
+  }
+}
+
+function post(row: object, token: string) {
+  return fetch(`${SUPABASE_URL}/rest/v1/site_feedback`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(row),
+  });
+}
+
+/**
+ * Sends it; throws when it did not arrive, so the dialog can say so. A
+ * signed-in visitor's message goes with their account (the table checks it is
+ * really theirs); if that is refused — an old token, or a table from before
+ * the column — it goes again without one rather than not at all.
+ */
+export async function sendFeedback(input: FeedbackInput, signedIn = false) {
   const row = feedbackRow(input, {
     width: window.innerWidth,
     touch: navigator.maxTouchPoints > 0,
@@ -48,15 +79,11 @@ export async function sendFeedback(input: FeedbackInput) {
     language: currentLang(),
   });
   if (!row) throw new Error("empty");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/site_feedback`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(row),
-  });
+  const account = signedIn ? await currentAccount() : null;
+  if (account) {
+    const response = await post({ ...row, user_id: account.id }, account.token);
+    if (response.ok) return;
+  }
+  const response = await post(row, SUPABASE_PUBLISHABLE_KEY);
   if (!response.ok) throw new Error(`feedback ${response.status}`);
 }

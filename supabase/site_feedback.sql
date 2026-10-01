@@ -1,6 +1,7 @@
 -- Feedback from visitors: a problem, an idea or anything else, sent from the
 -- "משוב והצעות" dialog at the foot of every page. Anyone may add a row, the
--- way anyone may add an anonymous event; nobody may read one back. Only the
+-- way anyone may add an anonymous event; nobody may read one back. A
+-- signed-in visitor's row carries their account, and only their own. Only the
 -- admin function, with the service role, lists them, marks them handled and
 -- deletes them. Safe to run again.
 
@@ -21,6 +22,11 @@ create table if not exists public.site_feedback (
   handled boolean not null default false
 );
 
+-- Who sent it, for a visitor who was signed in: the owner sees the account
+-- beside the message. Empty for a guest; emptied if the account is deleted.
+alter table public.site_feedback
+  add column if not exists user_id uuid references auth.users (id) on delete set null;
+
 create index if not exists site_feedback_created_idx on public.site_feedback (created_at desc);
 
 alter table public.site_feedback enable row level security;
@@ -31,5 +37,5 @@ grant insert on public.site_feedback to anon, authenticated;
 drop policy if exists "Anyone may send feedback" on public.site_feedback;
 create policy "Anyone may send feedback"
 on public.site_feedback for insert to anon, authenticated
-with check (handled = false);
+with check (handled = false and (user_id is null or user_id = auth.uid()));
 -- No select, update or delete policy on purpose.

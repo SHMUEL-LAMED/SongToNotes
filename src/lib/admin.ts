@@ -511,7 +511,24 @@ export type FeedbackEntry = {
   browser: string | null;
   os: string | null;
   handled: boolean;
+  /** The account that sent it, when the visitor was signed in. */
+  sender: FeedbackSender | null;
 };
+
+export type FeedbackSender = { id: string; email: string | null; phone: string | null; name: string | null };
+
+function feedbackSender(raw: unknown): FeedbackSender | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  if (typeof item.id !== "string" || !item.id) return null;
+  return { id: item.id, email: optional(item.email), phone: optional(item.phone), name: optional(item.name) };
+}
+
+/** How the page names whoever sent a message: their name, else their address. */
+export function senderLabel(sender: FeedbackSender | null) {
+  if (!sender) return "אורח";
+  return sender.name || sender.email || sender.phone || "חשבון שנמחק";
+}
 
 /** The rows as the page shows them; anything malformed is left out. */
 export function normalizeFeedback(raw: unknown): FeedbackEntry[] {
@@ -535,15 +552,19 @@ export function normalizeFeedback(raw: unknown): FeedbackEntry[] {
         browser: optional(item.browser),
         os: optional(item.os),
         handled: item.handled === true,
+        sender: feedbackSender(item.sender),
       },
     ];
   });
 }
 
-/** The messages, newest first; `missing` until supabase/site_feedback.sql has run. */
-export async function fetchFeedback(): Promise<{ entries: FeedbackEntry[]; missing: boolean }> {
-  const body = await call<{ entries?: unknown; missing?: boolean }>("?view=feedback");
-  return { entries: normalizeFeedback(body.entries), missing: body.missing === true };
+/**
+ * The messages, newest first; `missing` until supabase/site_feedback.sql has
+ * run, `upgrade` while it still has to run again to add who sent each one.
+ */
+export async function fetchFeedback(): Promise<{ entries: FeedbackEntry[]; missing: boolean; upgrade: boolean }> {
+  const body = await call<{ entries?: unknown; missing?: boolean; upgrade?: boolean }>("?view=feedback");
+  return { entries: normalizeFeedback(body.entries), missing: body.missing === true, upgrade: body.upgrade === true };
 }
 
 export type AdminAction =
