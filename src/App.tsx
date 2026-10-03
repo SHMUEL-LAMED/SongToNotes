@@ -15,6 +15,7 @@ import { ToolTabs } from "./components/ToolTabs";
 import { SharePage } from "./components/SharePage";
 import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
+import { SignInPrompt } from "./components/SignInPrompt";
 import { SiteFooter } from "./components/SiteFooter";
 import { ToolPromo } from "./components/ToolPromo";
 import { Tour } from "./components/Tour";
@@ -35,6 +36,7 @@ import { ASSISTANT_TARGET, useToolPromo } from "./lib/toolPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
 import { useSharePrompt } from "./lib/siteShare";
+import { useSignInPrompt } from "./lib/signInPrompt";
 import { TOOLS, findAnyTool, findTool, pageToolOf } from "./lib/tools";
 import { tourFor } from "./lib/tours";
 import type { DetectedNote } from "./lib/types";
@@ -129,7 +131,7 @@ function toPendingTranscription(work: SavedWork): PendingTranscription {
 
 function WorkspaceApp() {
   const { route, navigate } = useRoute();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const credit = useCredits();
   const theme = useTheme();
   // A saved work the personal area asked a tool to open. The key bumps with
@@ -189,10 +191,28 @@ function WorkspaceApp() {
   const toolOff = Boolean(tool && control.disabledTools.includes(tool.id) && !owner);
   // Maintenance closes everything but the door the owner uses to reopen it.
   const closed = control.maintenance && !owner && !admin;
+  // A visitor without an account is invited to open one, once a visit, a few
+  // seconds in — never over another window, a tour, a closed site, the admin
+  // area or beside the invitation a friend's link already brought.
+  const signInPrompt = useSignInPrompt({
+    paused:
+      paletteOpen ||
+      shortcutsOpen ||
+      appearanceOpen ||
+      accountOpen ||
+      shareOpen ||
+      feedbackOpen ||
+      closed ||
+      admin ||
+      tourRoute !== null ||
+      Boolean(credit.invite),
+    signedIn: Boolean(user),
+    loading: authLoading,
+  });
   // Every ten minutes on screen, a request to pass the site on — never over
   // another dialog, a closed site or the admin area.
   const sharePrompt = useSharePrompt({
-    paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || closed || admin,
+    paused: paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || signInPrompt.open || closed || admin,
     sharing: shareOpen,
   });
   // Once a visit, after a little while on screen, an invitation to one of the
@@ -202,7 +222,7 @@ function WorkspaceApp() {
   const creditNotice = Boolean(credit.invite || credit.welcome || credit.empty);
   const toolPromo = useToolPromo({
     paused:
-      paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || feedbackOpen || closed || admin || sharePrompt.open || creditNotice,
+      paletteOpen || shortcutsOpen || appearanceOpen || accountOpen || shareOpen || feedbackOpen || signInPrompt.open || closed || admin || sharePrompt.open || creditNotice,
     current: tool?.id ?? null,
     disabledTools: control.disabledTools,
   });
@@ -531,6 +551,7 @@ function WorkspaceApp() {
       />
       <ShareSiteDialog open={shareOpen} onClose={closeShare} onOpenCredits={() => go("credits")} />
       <FeedbackDialog open={feedbackOpen} page={route.slice(0, 40)} onClose={closeFeedback} />
+      <SignInPrompt open={signInPrompt.open} onClose={signInPrompt.close} />
       {tourRoute === route && <Tour key={route} steps={tourFor(route, tool)} onClose={closeTour} />}
 
       {control.banner && !closed && (
