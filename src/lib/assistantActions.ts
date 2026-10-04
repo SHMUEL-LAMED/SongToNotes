@@ -92,7 +92,7 @@ export const TOOL_IDS = [
   "notes", "ringtone", "convert", "video", "vocals", "speed", "metronome", "tuner", "piano",
   "rhythm", "mixer", "ear", "lyrics", "transcript", "chords", "songbook", "tts", "identify", "analyze",
   "beats", "theory", "progressions", "changes",
-  "recorder", "denoise", "joiner", "melody", "visualizer", "voice", "songcard", "drumkit", "setlist",
+  "recorder", "denoise", "joiner", "melody", "visualizer", "voice", "songcard", "drumkit", "setlist", "speechsong",
 ].filter((id) => findTool(id) !== null);
 
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
@@ -190,6 +190,13 @@ export const ACTIONS: ActionSpec[] = [
   define("voice", "write", "voice.record", "הקלטת קול", "מתחיל או עוצר הקלטה מהמיקרופון.", ["command:start|stop"]),
   define("voice", "write", "voice.play", "השמעת התוצאה", "משמיע או עוצר את הקול עם האפקט.", ["command:play|stop"]),
   define("voice", "write", "voice.download", "הורדת הקול", "מוריד את הקול עם האפקט כקובץ WAV."),
+
+  // ---- speech to song ----
+  define("speechsong", "write", "speechsong.mode", "מצב", "שיר (הדיבור מושר), ראפ (כל הברה על הביט) או פזמון (המשפט הכי קליט בלופ).", ["mode:song|rap|hook"]),
+  define("speechsong", "write", "speechsong.set", "הגדרות השיר", "קצב (70..140), ביט, טוניקה (auto לפי הקול, או שם תו כמו C, F#, Bb), מינור, מספר חזרות (1..4), עוצמת הליווי (0..100) ומספר המשפט לפזמון (1..3).", ["bpm?:number", "beat?:boombap|trap|rock|reggaeton|house|funk", "key?", "minor?:boolean", "repeats?:number", "backing?:number", "hook?:number"]),
+  define("speechsong", "write", "speechsong.record", "הקלטת דיבור", "מתחיל או עוצר הקלטה מהמיקרופון.", ["command:start|stop"]),
+  define("speechsong", "write", "speechsong.play", "השמעת השיר", "משמיע או עוצר את השיר.", ["command:play|stop"]),
+  define("speechsong", "write", "speechsong.download", "הורדת השיר", "מוריד את השיר כקובץ WAV."),
 
   // ---- song card ----
   define("songcard", "write", "songcard.set", "פרטי הכרטיס", "שם השיר, אמן, סולם, קצב, אקורדים (מופרדים ברווח), עיצוב, גודל (post|story) וצבע (0..360).", ["title?", "artist?", "key?", "bpm?:number", "chords?", "theme?:gradient|dark|light|vinyl", "size?:post|story", "hue?:number"]),

@@ -17,6 +17,7 @@ import {
   Guitar,
   Layers,
   ListMusic,
+  MessageCircleHeart,
   Mic2,
   Music4,
   MicVocal,
@@ -161,6 +162,20 @@ export const ALL_TOOLS: ToolDefinition[] = [
     badge: "חדש",
     quick: "שינוי קול",
     related: ["tts", "ringtone", "recorder"],
+  },
+  {
+    id: "speechsong",
+    title: "דיבור לשיר",
+    tagline: "משפט רגיל הופך לשיר",
+    description:
+      "מקליטים משפט, והאתר הופך אותו לשיר: הקול שר מנגינה שנבנית מהאינטונציה שלכם, נוחת כראפ על הביט, או שהמשפט הכי קליט חוזר כפזמון — עם תופים, אקורדים ובס.",
+    icon: MessageCircleHeart,
+    hue: 112,
+    category: "create",
+    tags: ["דיבור לשיר", "שיר מדיבור", "ראפ", "פזמון", "אוטוטיון", "songify", "מצחיק", "קול"],
+    badge: "חדש",
+    quick: "להפוך לשיר",
+    related: ["voice", "mixer", "ringtone"],
   },
   {
     id: "songcard",
@@ -580,7 +595,7 @@ export const MENU_GROUPS: { id: string; label: string; tools: string[] }[] = [
   { id: "notation", label: "מהשיר לתווים", tools: ["notes", "chords", "identify"] },
   { id: "edit", label: "עריכת שמע", tools: ["vocals", "ringtone", "speed", "convert", "denoise", "voice", "video"] },
   { id: "create", label: "יצירה והפקה", tools: ["mixer", "beats", "progressions", "songbook", "visualizer"] },
-  { id: "words", label: "דיבור ומילים", tools: ["transcript", "tts"] },
+  { id: "words", label: "דיבור ומילים", tools: ["transcript", "speechsong", "tts"] },
   { id: "practice", label: "תרגול ונגינה", tools: ["tuner", "metronome", "piano", "ear", "rhythm", "theory", "setlist"] },
 ];
 
