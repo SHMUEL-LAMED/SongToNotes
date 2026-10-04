@@ -1,0 +1,102 @@
+/* Speech to song: the three mode cards, the beat chips, the tune strip and
+   the result card. Colours come only from tokens, so the tool's hue and both
+   themes apply. */
+
+.speechsong-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.speechsong-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 104px;
+  padding: 14px 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.speechsong-mode:hover { border-color: var(--accent); transform: translateY(-2px); }
+.speechsong-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.speechsong-mode.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
+}
+.speechsong-mode-emoji { font-size: 30px; line-height: 1.1; transition: transform 0.25s var(--ease-spring); }
+.speechsong-mode.active .speechsong-mode-emoji { transform: scale(1.15); }
+.speechsong-mode strong { font-size: 15px; font-weight: 700; }
+.speechsong-mode.active strong { color: var(--accent-text); }
+.speechsong-mode small { font-size: 12px; color: var(--text-muted); line-height: 1.35; overflow-wrap: anywhere; }
+
+.speechsong-chips,
+.speechsong-hooks { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.speechsong-key { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.speechsong-key select { flex: 1 1 140px; min-width: 0; }
+
+.speechsong-note { margin: 10px 0 0; font-size: 13px; color: var(--text-muted); }
+
+.speechsong-result-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.speechsong-result-head > div { min-width: 0; }
+.speechsong-result-head h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.speechsong-result-head p { margin: 3px 0 0; min-height: 1.5em; font-size: 13px; color: var(--text-muted); }
+.speechsong-result-emoji {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  font-size: 28px;
+}
+.speechsong-busy { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-text); font-weight: 600; }
+
+.speechsong-strip {
+  display: block;
+  width: 100%;
+  height: 90px;
+  margin-top: 14px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  /* Time runs left to right, as on a score, even on a right-to-left page. */
+  direction: ltr;
+}
+.speechsong-strip line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.speechsong-strip line.bar { stroke: var(--line-strong); }
+.speechsong-strip .note { fill: var(--accent); opacity: 0.6; }
+.speechsong-strip .note.on-beat { opacity: 1; }
+
+.speechsong-chords {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .speechsong-modes { gap: 8px; }
+  .speechsong-mode { min-height: 92px; padding: 12px 6px 10px; }
+  .speechsong-mode-emoji { font-size: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speechsong-mode,
+  .speechsong-mode-emoji { transition: none; }
+  .speechsong-mode:hover { transform: none; }
+}

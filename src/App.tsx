@@ -77,6 +77,7 @@ const VoiceTool = lazy(() => import("./tools/VoiceTool").then((module) => ({ def
 const SongCardTool = lazy(() => import("./tools/SongCardTool").then((module) => ({ default: module.SongCardTool })));
 const DrumKitTool = lazy(() => import("./tools/DrumKitTool").then((module) => ({ default: module.DrumKitTool })));
 const SetlistTool = lazy(() => import("./tools/SetlistTool").then((module) => ({ default: module.SetlistTool })));
+const SpeechSongTool = lazy(() => import("./tools/SpeechSongTool").then((module) => ({ default: module.SpeechSongTool })));
 
 // The transcriber pulls in the engraver and, through it, the biggest slice of
 // the bundle. Splitting it out keeps the hub and the lighter tools quick to
@@ -697,6 +698,7 @@ function WorkspaceApp() {
           {shown === "songcard" && <SongCardTool />}
           {shown === "drumkit" && <DrumKitTool />}
           {shown === "setlist" && <SetlistTool onOpenWork={openWork} />}
+          {shown === "speechsong" && <SpeechSongTool />}
         </Suspense>
 
         {tool && (
