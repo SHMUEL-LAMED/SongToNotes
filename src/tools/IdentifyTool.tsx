@@ -45,6 +45,21 @@ export function YouTubeLink({ href }: { href?: string | null }) {
 }
 
 /**
+ * ▶ YouTube in the list of recent songs: opens the song's video right there,
+ * under its line, instead of leaving the site; pressed again, it closes it.
+ */
+export function YouTubeHere({ href, open, onToggle }: { href?: string | null; open: boolean; onToggle: () => void }) {
+  if (!href) return null;
+  return (
+    <button type="button" className={`chip-toggle identify-youtube${open ? " active" : ""}`} onClick={onToggle} aria-expanded={open} title={open ? "לסגור את הסרטון" : "לנגן כאן"}>
+      <span dir="ltr">
+        <span aria-hidden="true">▶</span> YouTube
+      </span>
+    </button>
+  );
+}
+
+/**
  * Videos asked for again on this visit, by song page: one request each,
  * however often the identifier opens. A lookup that failed counts as none.
  */
@@ -65,7 +80,9 @@ type PlayerPhase = "still" | "trying" | "failed";
 
 /**
  * The song's video, played inside the result. Until the visitor presses play
- * it is only the video's still, so the player loads when it is wanted.
+ * it is only the video's still, so the player loads when it is wanted — unless
+ * it opens by their press already (`autoplay`), as under the list of recent
+ * songs, when it starts at once.
  *
  * The player then has to answer: YouTube's player tells the page it is ready,
  * or that the video cannot play. One that stays silent — a filter's block
@@ -73,8 +90,8 @@ type PlayerPhase = "still" | "trying" | "failed";
  * way to the next address; when none works, or the video allows no player
  * outside YouTube, the frame says so and offers the video on YouTube itself.
  */
-export function YouTubePlayer({ href, title }: { href?: string | null; title: string }) {
-  const [phase, setPhase] = useState<PlayerPhase>("still");
+export function YouTubePlayer({ href, title, autoplay = false }: { href?: string | null; title: string; autoplay?: boolean }) {
+  const [phase, setPhase] = useState<PlayerPhase>(autoplay ? "trying" : "still");
   const [attempt, setAttempt] = useState(0);
   // A still that does not load (blocked, offline) leaves the black frame and its play button.
   const [stillFailed, setStillFailed] = useState(false);
@@ -130,7 +147,7 @@ export function YouTubePlayer({ href, title }: { href?: string | null; title: st
         <iframe
           key={attempt}
           ref={frameRef}
-          src={youtubeEmbedUrl(id, { host: PLAYER_HOSTS[attempt], origin: window.location.origin })}
+          src={youtubeEmbedUrl(id, { host: PLAYER_HOSTS[attempt], origin: globalThis.location?.origin })}
           title={title}
           allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
           allowFullScreen
@@ -195,6 +212,8 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
   const lookupRef = useRef<AbortController | null>(null);
   // Song pages whose video was already asked for again on this visit, found or not.
   const [videoChecked, setVideoChecked] = useState<ReadonlySet<string>>(() => new Set());
+  // The recent song whose video is open under its line, by the video's address.
+  const [playing, setPlaying] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -260,6 +279,7 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
     setError(null);
     setResult(null);
     setExhausted(false);
+    setPlaying(null);
     const session = newSession();
     lookupRef.current?.abort();
     const controller = new AbortController();
@@ -314,6 +334,8 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
     setError(null);
     setResult(null);
     setExhausted(false);
+    // Nothing of ours plays into the microphone.
+    setPlaying(null);
     try {
       await recorder.start();
       setRecording(true);
@@ -543,14 +565,19 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
           <div className="identify-history">
             <span className="eyebrow-small">זוהו לאחרונה</span>
             <ul>
-              {recent.map((item, index) => (
-                <li key={index}>
-                  <span dir="auto">
-                    {item.title} — {item.artist}
-                  </span>
-                  <YouTubeLink href={item.links.youtube} />
-                </li>
-              ))}
+              {recent.map((item, index) => {
+                const video = item.links.youtube ?? null;
+                const open = video !== null && video === playing;
+                return (
+                  <li key={index}>
+                    <span dir="auto">
+                      {item.title} — {item.artist}
+                    </span>
+                    <YouTubeHere href={video} open={open} onToggle={() => setPlaying(open ? null : video)} />
+                    {open && <YouTubePlayer key={video} href={video} title={[item.title, item.artist].filter(Boolean).join(" — ")} autoplay />}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
