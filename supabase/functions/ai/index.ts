@@ -95,8 +95,10 @@ const PROVIDERS: Provider[] = [
     label: "Groq",
     base: "https://api.groq.com/openai/v1",
     keys: ["GROQ_API_KEY", "AI_GROQ_KEY", "STT_API_KEY"],
-    // llama-3.3-70b-versatile was retired by Groq (it answers 404 now).
-    models: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"],
+    // llama-3.3-70b-versatile and llama-3.1-8b-instant were retired by Groq
+    // (they answer 404 now); each model has its own per-minute allowance, so
+    // a third family keeps an answer coming when the other two are spent.
+    models: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
     free: true,
   },
   {
@@ -112,7 +114,10 @@ const PROVIDERS: Provider[] = [
     label: "Google Gemini",
     base: "https://generativelanguage.googleapis.com/v1beta/openai",
     keys: ["GEMINI_API_KEY", "GOOGLE_API_KEY", "AI_GEMINI_KEY"],
-    models: ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
+    // Google retires numbered models for keys that did not use them before,
+    // while still listing them (gemini-2.x answered 404 to this project). The
+    // "latest" aliases follow Google to whatever model is current.
+    models: ["gemini-flash-latest", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"],
     tokenParam: "max_tokens",
     free: true,
   },
@@ -267,38 +272,64 @@ function endpoints(setting: Setting): Endpoint[] {
 
 /**
  * Model names come and go on the hosted services. In order of preference,
- * the families known to handle Hebrew well; the first one the service
- * lists wins, and anything that is plainly not a chat model is skipped.
+ * the families known to handle Hebrew well; within a family the newest
+ * version the service lists comes first, and anything that is plainly not a
+ * chat model is skipped.
  */
 const PREFERRED = [
   /gpt-oss-120b/i,
-  /gemini-2\.\d-flash$/i,
+  /^gemini-flash-latest$/i,
+  /^gemini-\d+(\.\d+)?-flash$/i,
   /llama-4.*maverick/i,
   /llama-3\.3-70b/i,
-  /qwen3?-(32|72|235)b/i,
+  /qwen/i,
   /mistral-small/i,
   /kimi-k2/i,
   /gpt-oss-20b/i,
+  /^gemini-flash-lite-latest$/i,
+  /^gemini-\d+(\.\d+)?-flash-lite$/i,
   /gpt-4[.o]/i,
   /llama-3\.1-8b/i,
 ];
-const NOT_CHAT = /whisper|tts|guard|embed|orpheus|playai|moderation|rerank|vision-preview|image|video|veo|imagen|aqa|gecko/i;
+const NOT_CHAT =
+  /whisper|tts|guard|embed|orpheus|playai|moderation|rerank|vision-preview|image|video|veo|imagen|aqa|gecko|lyria|robotics|computer-use|transcribe|omni|banana|safeguard/i;
+/** How many models found this way are tried on one service, so a long list cannot hold a request up. */
+const DISCOVERED = 3;
 
-/** What else the service says it serves, when none of the known names worked. */
-async function discoverModel(endpoint: Endpoint) {
+/** The first version number in a model's name: 3.5 for gemini-3.5-flash, 3.8 for qwen3.8-27b. */
+function version(id: string) {
+  const match = /(\d+(?:\.\d+)?)/.exec(id);
+  return match ? Number(match[1]) : 0;
+}
+
+/**
+ * What else the service says it serves, when none of the known names worked:
+ * the best few it lists that were not already tried, best first. Taking only
+ * the single best name was the bug behind a run of "busy" replies — that
+ * name was always one already tried and refused, so the newer models the
+ * service listed right beside it were never asked.
+ */
+export function rankModels(ids: string[], tried: ReadonlySet<string>, count = DISCOVERED) {
+  const fresh = ids.filter((id) => !tried.has(id) && !NOT_CHAT.test(id));
+  const ranked: string[] = [];
+  for (const pattern of PREFERRED) {
+    const family = fresh.filter((id) => pattern.test(id) && !ranked.includes(id)).sort((a, b) => version(b) - version(a));
+    ranked.push(...family);
+  }
+  ranked.push(...fresh.filter((id) => !ranked.includes(id)));
+  return ranked.slice(0, count);
+}
+
+async function discoverModels(endpoint: Endpoint, tried: ReadonlySet<string>) {
   const response = await fetch(`${endpoint.base}/models`, {
     headers: { Authorization: `Bearer ${endpoint.apiKey}`, ...endpoint.headers },
   }).catch(() => null);
-  if (!response?.ok) return null;
+  if (!response?.ok) return [];
   const parsed = (await response.json().catch(() => null)) as { data?: { id?: string }[] } | null;
   const ids = (parsed?.data ?? []).map((item) => String(item.id ?? "").replace(/^models\//, "")).filter(Boolean);
-  if (!ids.length) return null;
+  if (!ids.length) return [];
   console.log(`${endpoint.id} serves:`, ids.slice(0, 40).join(", "));
-  for (const pattern of PREFERRED) {
-    const hit = ids.find((id) => pattern.test(id) && !NOT_CHAT.test(id));
-    if (hit) return hit;
-  }
-  return ids.find((id) => !NOT_CHAT.test(id)) ?? null;
+  return rankModels(ids, tried);
 }
 
 type Message = { role: "system" | "user" | "assistant"; content: string };
@@ -563,7 +594,10 @@ Deno.serve(async (req: Request) => {
           model,
           messages,
           temperature: action === "chat" ? 0.4 : 0.2,
-          [endpoint.tokenParam]: action === "chat" ? 4000 : 4000,
+          // Groq charges the requested length against its per-minute
+          // allowance before a word is written, so a large request spends a
+          // free key's minute in a few messages. 2000 is still a long answer.
+          [endpoint.tokenParam]: action === "chat" ? 2000 : 4000,
           ...(wantStream ? { stream: true } : {}),
         }),
         signal: controller.signal,
@@ -605,19 +639,19 @@ Deno.serve(async (req: Request) => {
   const failures: string[] = [];
   try {
     outer: for (const service of services) {
+      const queue = [...service.models];
+      const tried = new Set<string>();
       let discovered = false;
-      for (let index = 0; index < service.models.length + 1; index += 1) {
-        const candidate = index < service.models.length ? service.models[index] : null;
-        if (candidate === null) {
-          // Every known name is gone; ask the service what it does serve.
+      for (;;) {
+        if (!queue.length) {
+          // Every known name is gone or spent; ask the service what it does serve.
           if (discovered) break;
           discovered = true;
-          const found = await discoverModel(service);
-          if (!found || service.models.includes(found)) break;
-          model = found;
-        } else {
-          model = candidate;
+          queue.push(...(await discoverModels(service, tried)));
+          if (!queue.length) break;
         }
+        model = queue.shift()!;
+        tried.add(model);
         const attempt = await ask(service, model).catch(() => null);
         if (!attempt) {
           failures.push(`${service.id}: לא נענה`);
