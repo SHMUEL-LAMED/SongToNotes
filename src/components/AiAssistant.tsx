@@ -12,18 +12,17 @@ import {
   MessageSquarePlus,
   Mic,
   MicOff,
-  Pencil,
   Play,
   RefreshCw,
   Settings2,
   SendHorizontal,
   Sparkles,
   Square,
-  Trash2,
   X,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { AssistantHistory } from "./AssistantHistory";
 import { AiError, chatStream, type AssistantMode, type ChatMessage } from "../lib/aiApi";
 import { creditsLabel } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
@@ -205,12 +204,6 @@ function toHistory(messages: Message[]): ChatMessage[] {
   return messages.map(({ role, content }) => ({ role, content }));
 }
 
-const timeFormat = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" });
-function whenLabel(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : timeFormat.format(date);
-}
-
 /** The newest plan in the thread, from the assistant's own turns. */
 function latestPlan(messages: Message[]): PlanStep[] | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -304,7 +297,6 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>(restored.messages);
   const [draft, setDraft] = useState("");
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
@@ -476,7 +468,8 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       // Escape closes the panel only from inside it: on the page it belongs
       // to whatever dialog or menu is open there.
       if (event.key === "Escape" && panelRef.current?.contains(event.target as Node)) {
-        if (showSettings) setShowSettings(false);
+        if (showHistory) setShowHistory(false);
+        else if (showSettings) setShowSettings(false);
         else onClose();
       }
     };
@@ -485,7 +478,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       window.clearTimeout(timer);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, open, showSettings]);
+  }, [onClose, open, showHistory, showSettings]);
 
   // The box grows with the question, up to a few lines.
   const resize = useCallback(() => {
@@ -798,12 +791,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     }
   };
 
-  const commitRename = () => {
-    if (!renaming) return;
-    const title = renaming.title.trim();
-    const { id } = renaming;
-    setRenaming(null);
-    if (!title) return;
+  const renameThread = (id: string, title: string) => {
     void renameChat(id, title, userId).catch(() => undefined);
     setChats((list) => (list ? list.map((item) => (item.id === id ? { ...item, title } : item)) : list));
     setChat((live) => (live.id === id ? { ...live, title } : live));
@@ -1031,78 +1019,26 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
           )}
 
           {showHistory && (
-            <div className="assistant-history">
-              <div className="assistant-history-head">
-                <strong>שיחות קודמות</strong>
-                <button type="button" className="link-button" onClick={startNewChat}>
-                  <MessageSquarePlus size={14} /> שיחה חדשה
-                </button>
-              </div>
-              {chats === null ? (
-                <p className="table-footnote">טוען…</p>
-              ) : chats.filter((item) => item.messages.length).length === 0 ? (
-                <p className="table-footnote">
-                  עדיין אין שיחות שמורות. כל שיחה נשמרת מעצמה{user ? " ומסונכרנת לחשבון" : " במכשיר הזה; התחברות תסנכרן אותה לכל המכשירים"}.
-                </p>
-              ) : (
-                <ul className="assistant-history-list">
-                  {chats
-                    .filter((item) => item.messages.length)
-                    .map((item) => (
-                      <li key={item.id} className={item.id === chat.id ? "is-current" : ""}>
-                        {renaming?.id === item.id ? (
-                          <form
-                            className="assistant-history-rename"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              commitRename();
-                            }}
-                          >
-                            <input
-                              autoFocus
-                              value={renaming.title}
-                              maxLength={80}
-                              aria-label="שם השיחה"
-                              onChange={(event) => setRenaming({ id: item.id, title: event.target.value })}
-                              onKeyDown={(event) => {
-                                if (event.key === "Escape") setRenaming(null);
-                              }}
-                            />
-                            <button type="submit" className="icon-button" aria-label="שמור שם">
-                              <Check size={15} />
-                            </button>
-                          </form>
-                        ) : (
-                          <>
-                            <button type="button" className="assistant-history-open" onClick={() => openChat(item)}>
-                              <span>{item.title}</span>
-                              <small>
-                                {whenLabel(item.updatedAt)} · {item.messages.filter((message) => !message.hidden).length} הודעות
-                              </small>
-                            </button>
-                            <button type="button" className="icon-button" onClick={() => setRenaming({ id: item.id, title: item.title })} aria-label={`שנה שם ל${item.title}`}>
-                              <Pencil size={14} />
-                            </button>
-                            <button type="button" className="icon-button is-danger" onClick={() => dropChat(item.id)} aria-label={`מחק את ${item.title}`}>
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        )}
-                      </li>
-                    ))}
-                </ul>
-              )}
-            </div>
+            <AssistantHistory
+              chats={chats}
+              currentId={chat.id}
+              userId={userId}
+              onOpen={openChat}
+              onNew={startNewChat}
+              onBack={() => setShowHistory(false)}
+              onRename={renameThread}
+              onDelete={dropChat}
+            />
           )}
 
-          {livePlan && (
+          {!showHistory && livePlan && (
             <div className="assistant-progress">
               <PlanCard steps={livePlan} compact />
               <span dir="auto">{livePlan.find((step) => step.status !== "done")?.text ?? "מסיים…"}</span>
             </div>
           )}
 
-          <div className="assistant-messages" ref={listRef} onScroll={onListScroll} aria-live="polite" aria-busy={busy}>
+          <div className="assistant-messages" ref={listRef} hidden={showHistory} onScroll={onListScroll} aria-live="polite" aria-busy={busy}>
             {shown.length === 0 && !busy && (
               <div className="assistant-empty">
                 <span className="assistant-hero-orb" aria-hidden="true">
@@ -1205,7 +1141,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
             )}
           </div>
 
-          {user ? (
+          {showHistory ? null : user ? (
             <form className="assistant-compose" onSubmit={submit}>
               <div className="assistant-context">
                 <span className={`assistant-chip is-mode-${mode}`} title={current.hint}>
