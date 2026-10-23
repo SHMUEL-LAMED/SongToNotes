@@ -191,8 +191,8 @@ export function shortKeyName(label: string) {
 
 /* ---- direction ---- */
 
-const RTL_LETTERS = /[֐-׿؀-ۿݐ-ݿࢠ-ࣿיִ-﷿ﹰ-﻿]/;
-const LATIN_LETTERS = /[A-Za-zÀ-ɏ]/;
+const RTL_LETTERS = /[\p{Script=Hebrew}\p{Script=Arabic}]/u;
+const LATIN_LETTERS = /\p{Script=Latin}/u;
 
 /** True for "Imagine" or "The Beatles": Latin letters and no Hebrew or Arabic. */
 export function isLatinOnly(text: string) {
