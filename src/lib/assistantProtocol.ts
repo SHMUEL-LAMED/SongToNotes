@@ -78,20 +78,42 @@ function looseCalls(body: string): ActionCall[] | null {
   return calls && calls.every((call) => ACTION_ID.test(call.id)) ? calls : null;
 }
 
+/**
+ * The slips models make in JSON, mended: curly quotes, comments, trailing
+ * commas, unquoted keys, and single quotes when there are no double ones.
+ */
+export function repairJson(text: string) {
+  let out = text
+    .replace(/[\u201c\u201d\u201e\u05f4]/g, '"')
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/,\s*([}\]])/g, "$1")
+    .replace(/([{,]\s*)([A-Za-z_][\w.]*)\s*:/g, '$1"$2":');
+  if (!out.includes('"') && out.includes("'")) out = out.replace(/'/g, '"');
+  return out;
+}
+
+function parseJsonLoosely(text: string): unknown {
+  const attempts = [text, repairJson(text)];
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      // Several objects one after another, or a trailing comma, are common.
+      try {
+        return JSON.parse(`[${attempt.replace(/}\s*,?\s*{/g, "},{").replace(/,\s*$/, "")}]`);
+      } catch {
+        // The next attempt.
+      }
+    }
+  }
+  return undefined;
+}
+
 function parseCalls(body: string): ActionCall[] | null {
   const trimmed = body.trim();
   if (!trimmed) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    // Several objects one after another, or a trailing comma, are common.
-    try {
-      parsed = JSON.parse(`[${trimmed.replace(/}\s*,?\s*{/g, "},{").replace(/,\s*$/, "")}]`);
-    } catch {
-      return null;
-    }
-  }
+  const parsed = parseJsonLoosely(trimmed);
+  if (parsed === undefined) return null;
   const list = Array.isArray(parsed) ? parsed : [parsed];
   const calls = list.map(toCall).filter((call): call is ActionCall => call !== null);
   return calls.length ? calls : null;

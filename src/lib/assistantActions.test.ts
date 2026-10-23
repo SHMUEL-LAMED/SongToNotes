@@ -196,3 +196,54 @@ describe("voice.effect", () => {
     expect(coerceParams(spec, { effect: "robot", intensity: "70" })).toEqual({ params: { effect: "robot", intensity: 70 }, problems: [] });
   });
 });
+
+describe("what the model meant", () => {
+  it("resolves misspelt ids: case, underscores, slashes, a site prefix, parentheses", async () => {
+    const { resolveAction } = await import("./assistantActions");
+    expect(resolveAction("Metronome.Set")?.spec.id).toBe("metronome.set");
+    expect(resolveAction("metronome_set")?.spec.id).toBe("metronome.set");
+    expect(resolveAction("songbook/write")?.spec.id).toBe("songbook.write");
+    expect(resolveAction("site.navigate")?.spec.id).toBe("navigate");
+    expect(resolveAction("tts.speak()")?.spec.id).toBe("tts.speak");
+  });
+
+  it("treats a bare tool name as opening that tool", async () => {
+    const { resolveAction } = await import("./assistantActions");
+    const found = resolveAction("piano");
+    expect(found?.spec.id).toBe("navigate");
+    expect(found?.params).toEqual({ tool: "piano" });
+  });
+
+  it("names the closest actions when none fits", async () => {
+    const { similarActions, runAssistantAction } = await import("./assistantActions");
+    expect(similarActions("metronome.go")).toContain("metronome.start");
+    const record = await runAssistantAction({ id: "nothing.here", params: {} });
+    expect(record.ok).toBe(false);
+    expect(record.message).toContain("אולי התכוונת");
+  });
+
+  it("explains an invalid block instead of running it", async () => {
+    const { runAssistantAction } = await import("./assistantActions");
+    const record = await runAssistantAction({ id: "invalid", params: { raw: "x" } });
+    expect(record.ok).toBe(false);
+    expect(record.message).toContain("JSON");
+  });
+
+  it("matches parameter names loosely and takes the one stray value for the one missing required parameter", async () => {
+    const { coerceParams, findAction } = await import("./assistantActions");
+    const ringtone = findAction("ringtone.set")!;
+    expect(coerceParams(ringtone, { fade_in: 2, FadeOut: "3" }).params).toEqual({ fadeIn: 2, fadeOut: 3 });
+    const write = findAction("songbook.write")!;
+    const out = coerceParams(write, { text: "[Am]שיר" });
+    expect(out.problems).toEqual([]);
+    expect(out.params).toEqual({ body: "[Am]שיר" });
+  });
+
+  it("describes every visible tool to the model, by id", async () => {
+    const { describeTools } = await import("./assistantActions");
+    const text = describeTools();
+    expect(text).toContain("(metronome)");
+    expect(text).toContain("(recorder)");
+    expect(text).toContain("(setlist)");
+  });
+});

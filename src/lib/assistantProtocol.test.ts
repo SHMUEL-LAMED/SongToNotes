@@ -97,3 +97,21 @@ describe("plans", () => {
     expect(parseAssistantReply("שלום").plan).toBeNull();
   });
 });
+
+describe("the ways models bend JSON", () => {
+  it("mends curly quotes, trailing commas and unquoted keys", () => {
+    const reply = "```action\n{action: “metronome.set”, params: {bpm: 100,},}\n```";
+    expect(parseAssistantReply(reply).actions).toEqual([{ id: "metronome.set", params: { bpm: 100 } }]);
+  });
+
+  it("accepts single quotes when there are no double ones", () => {
+    const reply = "```action\n{'action': 'tts.write', 'params': {'text': 'שלום'}}\n```";
+    expect(parseAssistantReply(reply).actions).toEqual([{ id: "tts.write", params: { text: "שלום" } }]);
+  });
+
+  it("still marks a hopeless block as invalid rather than showing it", () => {
+    const parsed = parseAssistantReply("```action\nmetronome.set bpm 100\n```");
+    expect(parsed.actions[0].id).toBe("invalid");
+    expect(parsed.text).toBe("");
+  });
+});
