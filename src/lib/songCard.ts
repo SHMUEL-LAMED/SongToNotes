@@ -16,9 +16,9 @@ import { isChordToken, parseChordSymbol, songChords, transposeChord } from "./so
  * printed on something people pass around. Same address as index.html's
  * canonical link.
  */
-export const SITE_URL = "https://shmuel-lamed.github.io/SongToNotes/";
+export const SITE_URL = "https://xn--4dbjbascrao3i.com/";
 /** The address as printed: without the scheme and trailing slash, so it reads at a glance. */
-export const SITE_LABEL = "shmuel-lamed.github.io/SongToNotes";
+export const SITE_LABEL = "שמואלליווי.com";
 export const SITE_NAME = "כלי מוזיקה";
 export const STORAGE_KEY = "musictools.songcard.v1";
 
@@ -191,8 +191,8 @@ export function shortKeyName(label: string) {
 
 /* ---- direction ---- */
 
-const RTL_LETTERS = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
-const LATIN_LETTERS = /[A-Za-z\u00C0-\u024F]/;
+const RTL_LETTERS = /[\p{Script=Hebrew}\p{Script=Arabic}]/u;
+const LATIN_LETTERS = /\p{Script=Latin}/u;
 
 /** True for "Imagine" or "The Beatles": Latin letters and no Hebrew or Arabic. */
 export function isLatinOnly(text: string) {
