@@ -64,7 +64,7 @@ export const DEFAULT_REGION_SECONDS = 30;
 export const MIN_REGION_SECONDS = 1;
 
 export const WATERMARK_NAME = "כלי מוזיקה";
-export const WATERMARK_URL = "shmuel-lamed.github.io/SongToNotes";
+export const WATERMARK_URL = "שמואלליווי.com";
 
 /** Output sizes: the ones the social networks crop to without letterboxing. */
 export function aspectSize(aspect: VisualizerAspect): { width: number; height: number } {
