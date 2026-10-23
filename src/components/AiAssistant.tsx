@@ -1,4 +1,5 @@
 import {
+  ArrowUpLeft,
   Bot,
   Check,
   CircleHelp,
@@ -22,7 +23,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { AiError, chatStream, type AssistantMode, type ChatMessage } from "../lib/aiApi";
 import { creditsLabel } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
@@ -984,6 +985,11 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
           </header>
 
           <div className="assistant-modes" role="group" aria-label="מצב העוזר">
+            <span
+              className="assistant-modes-thumb"
+              aria-hidden="true"
+              style={{ "--mode-index": Math.max(0, MODES.findIndex((item) => item.id === mode)) } as CSSProperties}
+            />
             {MODES.map((item) => {
               const Icon = item.icon;
               return (
@@ -1111,20 +1117,27 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
                       : "שאל כל שאלה על הכלים באתר ועל מוזיקה — תיאוריה, אקורדים, טכניקה ותרגול."}
                 </p>
                 <div className="assistant-capabilities" aria-hidden="true">
-                  <span>
-                    <CircleHelp size={13} /> שואל
+                  <span className={mode === "question" ? "is-current" : ""}>
+                    <CircleHelp size={16} />
+                    <b>שואל</b>
+                    <small>עונה ומסביר</small>
                   </span>
-                  <span>
-                    <ListChecks size={13} /> מתכנן
+                  <span className={mode === "plan" ? "is-current" : ""}>
+                    <ListChecks size={16} />
+                    <b>מתכנן</b>
+                    <small>צעד אחר צעד</small>
                   </span>
-                  <span>
-                    <Zap size={13} /> מבצע
+                  <span className={mode === "execute" ? "is-current" : ""}>
+                    <Zap size={16} />
+                    <b>מבצע</b>
+                    <small>עובד באתר בעצמו</small>
                   </span>
                 </div>
                 <div className="assistant-suggestions">
                   {starters.map((item) => (
                     <button key={item} type="button" className="assistant-suggestion" onClick={() => send(item)} disabled={busy || !user}>
-                      {item}
+                      <span>{item}</span>
+                      <ArrowUpLeft size={15} className="assistant-suggestion-arrow" aria-hidden="true" />
                     </button>
                   ))}
                 </div>
