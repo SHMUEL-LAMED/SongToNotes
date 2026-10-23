@@ -29,6 +29,7 @@ import { useCredits } from "../lib/creditsContext";
 import {
   describeCatalog,
   describeState,
+  describeTools,
   findAction,
   formatActionResults,
   runAssistantAction,
@@ -84,6 +85,15 @@ const MAX_ROUNDS = 12;
 const MAX_ACTIONS = 8;
 /** Between two actions, so the page has rendered the first before the second reads it. */
 const ACTION_GAP = 80;
+/**
+ * How long a reply may go without a word before it is given up on: the
+ * clock restarts with every piece that arrives, so a long answer is never
+ * cut off while it is still being written, and a reply that never starts is
+ * asked for again rather than left hanging.
+ */
+const IDLE_TIMEOUT = 75_000;
+/** A reply that arrives blank is asked for again this many times before the visitor is told. */
+const EMPTY_RETRIES = 1;
 /** The panel's width, in pixels: what it opens at and how far it can be dragged. */
 const DEFAULT_WIDTH = 420;
 const MIN_WIDTH = 340;
@@ -583,10 +593,18 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
     haltRef.current = false;
     const controller = new AbortController();
     abortRef.current = controller;
-    const timer = window.setTimeout(() => {
-      if (abortRef.current !== controller) return;
-      controller.abort();
-    }, 90_000);
+    // Silence, not length, is what times out: the clock restarts with every piece.
+    let timer = 0;
+    let timedOut = false;
+    const rearm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (abortRef.current !== controller) return;
+        timedOut = true;
+        controller.abort();
+      }, IDLE_TIMEOUT);
+    };
+    rearm();
     writtenRef.current = "";
     let answeredBy: string | null = null;
     const asked = next[next.length - 1]?.content ?? "";
@@ -594,32 +612,49 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
       const context = {
         state: describeState().slice(0, 4000) || undefined,
         catalog: runMode === "question" ? undefined : describeCatalog(toolId),
+        tools: describeTools(),
       };
-      const reply = await chatStream(
-        toHistory(next),
-        {
-          tool: toolId,
-          detailed: prefs.detailed,
-          mode: runMode,
-          context,
-          chat: chatRef.current.id,
-          signal: controller.signal,
-          onModel: (name) => {
-            answeredBy = name;
-            setModel(name);
+      const ask = () =>
+        chatStream(
+          toHistory(next),
+          {
+            tool: toolId,
+            detailed: prefs.detailed,
+            mode: runMode,
+            context,
+            chat: chatRef.current.id,
+            signal: controller.signal,
+            onModel: (name) => {
+              answeredBy = name;
+              setModel(name);
+            },
           },
-        },
-        (piece) => {
-          if (controller.signal.aborted) return;
-          writtenRef.current += piece;
-          setPartial(writtenRef.current);
-        },
-      );
+          (piece) => {
+            if (controller.signal.aborted) return;
+            rearm();
+            writtenRef.current += piece;
+            setPartial(writtenRef.current);
+          },
+        );
+      let reply = "";
+      let parsed = parseAssistantReply("");
+      for (let attempt = 0; attempt <= EMPTY_RETRIES; attempt += 1) {
+        reply = await ask();
+        if (controller.signal.aborted) return;
+        parsed = parseAssistantReply(reply);
+        // A reply with something in it — words, a plan, or an action.
+        if (parsed.text || parsed.plan || parsed.actions.length) break;
+        writtenRef.current = "";
+        setPartial("");
+      }
       window.clearTimeout(timer);
-      if (controller.signal.aborted) return;
-      const parsed = parseAssistantReply(reply);
+      if (!parsed.text && !parsed.plan && !parsed.actions.length) throw new Error("לא התקבלה תשובה מהמודל גם אחרי ניסיון נוסף. נסה לנסח שוב, או שלח שוב בעוד רגע.");
       const actions = runMode === "execute" ? parsed.actions : [];
-      if (!parsed.text && !parsed.plan && !actions.length) throw new Error("התקבלה תשובה ריקה. אפשר לנסות שוב.");
+      // The model tried to act where only an answer was asked for: the
+      // visitor gets the words and a pointer, not a blank bubble.
+      if (!parsed.text && !parsed.plan && parsed.actions.length && runMode !== "execute") {
+        reply = `${reply.trim()}\n\nכדי שאבצע את זה באתר, עבור למצב „סוכן” בראש הלוח ושלח שוב.`;
+      }
       writtenRef.current = "";
       setPartial(null);
       let entry: Message = {
@@ -649,10 +684,23 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
         await converse([...history, report], round + 1, runMode);
       }
     } catch (caught) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted && !timedOut) return;
       setPartial(null);
+      // What was written before the silence is kept; the visitor sees it,
+      // not a bare error.
+      const kept = writtenRef.current.trim();
+      writtenRef.current = "";
+      if (timedOut && kept && parseAssistantReply(kept).text) {
+        setMessages([...next, { role: "assistant", content: kept, ...(answeredBy ? { model: answeredBy } : {}) }]);
+      }
       if (round === 0) setRetry(asked);
-      setError(caught instanceof AiError || caught instanceof Error ? caught.message : "לא הצלחנו לענות.");
+      setError(
+        timedOut
+          ? "המודל השתתק באמצע. אפשר לנסות שוב — בדרך כלל זה עובר בניסיון הבא."
+          : caught instanceof AiError || caught instanceof Error
+            ? caught.message
+            : "לא הצלחנו לענות.",
+      );
     } finally {
       window.clearTimeout(timer);
       if (abortRef.current === controller) {

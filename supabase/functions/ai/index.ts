@@ -58,6 +58,14 @@ const MAX_INPUT_CHARS = 200_000;
  */
 const HISTORY_CHARS = 400_000;
 const MAX_TURNS = 200;
+/**
+ * How long a service gets to begin its answer. A service that hangs used
+ * to hang the whole request with it, and the visitor saw nothing; now it is
+ * left for the next one.
+ */
+const CONNECT_TIMEOUT_MS = 20_000;
+/** How long a whole unstreamed answer may take. */
+const ANSWER_TIMEOUT_MS = 90_000;
 
 type Provider = {
   id: string;
@@ -438,7 +446,7 @@ Deno.serve(async (req: Request) => {
     stream?: boolean;
     detailed?: boolean;
     mode?: "question" | "plan" | "execute";
-    context?: { state?: string; catalog?: string };
+    context?: { state?: string; catalog?: string; tools?: string };
     chat?: string;
   };
   try {
@@ -449,7 +457,10 @@ Deno.serve(async (req: Request) => {
   const action = typeof body.action === "string" ? body.action : "chat";
   const language = typeof body.language === "string" ? body.language.slice(0, 40) : null;
 
-  let messages: Message[] = prompts(action, language);
+  // The site sends the list of tools it has today; the one written here is
+  // the fallback for a page from before that.
+  const liveTools = action === "chat" && typeof body.context?.tools === "string" ? body.context.tools.trim().slice(0, 12_000) : "";
+  let messages: Message[] = liveTools ? [{ role: "system", content: ASSISTANT_PROMPT.replace(TOOL_LIST, liveTools) }] : prompts(action, language);
   let trimmed = 0;
   let textLength = 0;
   if (action === "chat") {
@@ -539,18 +550,45 @@ Deno.serve(async (req: Request) => {
   };
 
   const wantStream = action === "chat" && body.stream === true;
-  const ask = (endpoint: Endpoint, model: string) =>
-    fetch(`${endpoint.base}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${endpoint.apiKey}`, "Content-Type": "application/json", ...endpoint.headers },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: action === "chat" ? 0.4 : 0.2,
-        [endpoint.tokenParam]: action === "chat" ? 4000 : 4000,
-        ...(wantStream ? { stream: true } : {}),
-      }),
-    });
+  const ask = async (endpoint: Endpoint, model: string) => {
+    // A streamed reply is timed to its first byte, an unstreamed one to its
+    // last: the stream's own pace is the visitor's to watch.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), wantStream ? CONNECT_TIMEOUT_MS : ANSWER_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${endpoint.base}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${endpoint.apiKey}`, "Content-Type": "application/json", ...endpoint.headers },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: action === "chat" ? 0.4 : 0.2,
+          [endpoint.tokenParam]: action === "chat" ? 4000 : 4000,
+          ...(wantStream ? { stream: true } : {}),
+        }),
+        signal: controller.signal,
+      });
+      if (wantStream) clearTimeout(timer);
+      else {
+        // The body is read here so the timer covers it; the parsed reply
+        // travels on as a new response.
+        const text = await response.text();
+        clearTimeout(timer);
+        return new Response(text, { status: response.status, headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json" } });
+      }
+      return response;
+    } catch (caught) {
+      clearTimeout(timer);
+      throw caught;
+    }
+  };
+
+  /** An unstreamed answer with no words in it is no answer: the next model is asked. */
+  const blank = async (attempt: Response) => {
+    if (wantStream) return false;
+    const parsed = (await attempt.clone().json().catch(() => null)) as { choices?: { message?: { content?: string } }[] } | null;
+    return !parsed?.choices?.[0]?.message?.content?.trim();
+  };
 
   /**
    * Every service, every model, until one answers. A model the service no
@@ -586,6 +624,10 @@ Deno.serve(async (req: Request) => {
           continue;
         }
         if (attempt.ok) {
+          if (await blank(attempt)) {
+            failures.push(`${service.id}/${model}: תשובה ריקה`);
+            continue;
+          }
           response = attempt;
           endpoint = service;
           break outer;
@@ -607,24 +649,26 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!response && services.length) {
-      // Everything was busy at once. The services tell us how long to wait.
+      // Everything was busy at once. The services tell us how long to wait;
+      // then every service gets one more chance with its first model, not
+      // only the first service — the one that was busiest a moment ago.
       await new Promise((resolve) => setTimeout(resolve, retryAfterMs || 1500));
-      const first = services[0];
-      const attempt = await ask(first, first.models[0] ?? "").catch(() => null);
-      if (attempt?.ok) {
-        response = attempt;
-        endpoint = first;
-        model = first.models[0] ?? "";
-      } else if (attempt) {
-        failures.push(`${first.id}: ${attempt.status} (גם אחרי המתנה)`);
-        if (BUSY(attempt.status)) {
-          console.error("language models unavailable:", failures.join(" | "));
-          return await fail(502, { error: "provider_busy" });
+      for (const service of services) {
+        const candidate = service.models[0] ?? "";
+        const attempt = await ask(service, candidate).catch(() => null);
+        if (!attempt) continue;
+        if (attempt.ok && !(await blank(attempt))) {
+          response = attempt;
+          endpoint = service;
+          model = candidate;
+          break;
         }
-        if (BAD_KEY(attempt.status)) {
-          console.error("language models unavailable:", failures.join(" | "));
-          return await fail(502, { error: "provider_key" });
-        }
+        failures.push(`${service.id}: ${attempt.status} (גם אחרי המתנה)`);
+      }
+      if (!response) {
+        console.error("language models unavailable:", failures.join(" | "));
+        const codes = failures.join(" ");
+        return await fail(502, { error: /: 40[13]/.test(codes) && !/: (429|5\d\d)/.test(codes) ? "provider_key" : "provider_busy" });
       }
     }
   } catch (caught) {

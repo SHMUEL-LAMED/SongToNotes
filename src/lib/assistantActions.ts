@@ -11,7 +11,7 @@
  * says in its own words what happened.
  */
 import { currentRoute } from "./router";
-import { findTool } from "./tools";
+import { TOOLS, findTool } from "./tools";
 
 export type ParamType = "string" | "number" | "boolean" | "string[]";
 
@@ -98,6 +98,15 @@ export const TOOL_IDS = [
 const LANGUAGE = "auto|he|en|ar|ru|fr|es|de|it|pt|yi|tr|uk|zh|ja|ko|hi|nl|pl";
 
 const NOTE_NAMES = "C|C#|D|D#|E|F|F#|G|G#|A|A#|B";
+
+/**
+ * The tools as the model is told about them: title, id and what each does,
+ * from the same registry the menu is built from, so a tool added to the
+ * site is known to the assistant the same day.
+ */
+export function describeTools() {
+  return TOOLS.map((tool) => `- ${tool.title} (${tool.id}): ${tool.description.replace(/\s+/g, " ").trim()}`).join("\n");
+}
 
 /** Every action, grouped by the page that runs it. */
 export const ACTIONS: ActionSpec[] = [
@@ -369,6 +378,60 @@ export function findAction(id: string): ActionSpec | null {
   return BY_ID.get(id) ?? null;
 }
 
+/** Lower case, and the separators models put between a tool and its verb made a dot. */
+function normalizeId(id: string) {
+  return id
+    .trim()
+    .replace(/^site[._/:]/i, "")
+    .replace(/\(\)$/, "")
+    .replace(/[_/:\s]+/g, ".")
+    .toLowerCase();
+}
+
+const BY_LOOSE_ID = new Map(ACTIONS.map((spec) => [normalizeId(spec.id), spec]));
+
+/**
+ * The action a model meant, from the ways it misspells one: `Metronome.Set`,
+ * `metronome_set`, `songbook/write`, `metronome.set()`. A bare tool name
+ * means opening that tool. Null when nothing fits.
+ */
+export function resolveAction(id: string): { spec: ActionSpec; params?: ActionParams } | null {
+  const exact = findAction(id);
+  if (exact) return { spec: exact };
+  const loose = normalizeId(id);
+  const found = BY_LOOSE_ID.get(loose);
+  if (found) return { spec: found };
+  const navigate = findAction("navigate");
+  if (navigate && (loose === "home" || TOOL_IDS.includes(loose))) return { spec: navigate, params: { tool: loose } };
+  return null;
+}
+
+function distance(a: string, b: string) {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const kept = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = kept;
+    }
+  }
+  return row[b.length];
+}
+
+/** The names closest to one the model made up, so the next round can get it right. */
+export function similarActions(id: string, count = 6): string[] {
+  const loose = normalizeId(id);
+  const tool = loose.split(".")[0];
+  const sameTool = ACTIONS.filter((spec) => spec.tool === tool).map((spec) => spec.id);
+  if (sameTool.length) return sameTool.slice(0, 12);
+  return ACTIONS.map((spec) => ({ id: spec.id, score: distance(loose, spec.id.toLowerCase()) }))
+    .sort((a, b) => a.score - b.score)
+    .slice(0, count)
+    .map((item) => item.id);
+}
+
 /** `songbook.write(title?: string, body: string)` */
 export function signature(spec: ActionSpec, withTypes = true) {
   const params = spec.params
@@ -451,8 +514,19 @@ export function coerceParams(spec: ActionSpec, raw: unknown): { params: ActionPa
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const params: ActionParams = {};
   const problems: string[] = [];
+  // Models write `fade_in`, `FadeIn` or `fade-in` for `fadeIn`: the keys are
+  // matched without case or separators.
+  const looseKey = (key: string) => key.replace(/[_\s-]+/g, "").toLowerCase();
+  const byLoose = new Map(Object.keys(source).map((key) => [looseKey(key), key]));
+  const known = new Set(spec.params.map((item) => looseKey(item.name)));
+  const unknown = Object.keys(source).filter((key) => !known.has(looseKey(key)) && source[key] !== null && typeof source[key] !== "object");
+  const missingRequired = spec.params.filter((item) => item.required && byLoose.get(looseKey(item.name)) === undefined);
   for (const item of spec.params) {
-    let value = source[item.name];
+    const key = byLoose.get(looseKey(item.name));
+    let value = key === undefined ? undefined : source[key];
+    // The one required parameter under another name (`text` for `body`) is
+    // still that parameter, when there is exactly one such stray value.
+    if (value === undefined && item.required && missingRequired.length === 1 && unknown.length === 1) value = source[unknown[0]];
     if (value === undefined || value === null || value === "") {
       if (item.required) problems.push(`חסר הפרמטר ${item.name}`);
       continue;
@@ -610,11 +684,19 @@ function mountWait(tool: string) {
  * reports what the handler said. Never throws.
  */
 export async function runAssistantAction(call: ActionCall): Promise<ActionRecord> {
-  const spec = findAction(call.id);
-  if (!spec) {
-    return { ...call, ok: false, message: `אין פעולה בשם "${call.id}". השתמש רק בפעולות שברשימה.` };
+  if (call.id === "invalid") {
+    return {
+      ...call,
+      ok: false,
+      message: 'בלוק ה־action לא היה JSON תקין, והפעולה לא בוצעה. כתוב אותו שוב בדיוק כך: {"action": "שם_הפעולה", "params": {...}} — מרכאות כפולות, בלי פסיקים מיותרים.',
+    };
   }
-  const { params, problems } = coerceParams(spec, call.params);
+  const resolved = resolveAction(call.id);
+  if (!resolved) {
+    return { ...call, ok: false, message: `אין פעולה בשם "${call.id}". השתמש רק בפעולות שברשימה. אולי התכוונת ל: ${similarActions(call.id).join(", ")}.` };
+  }
+  const spec = resolved.spec;
+  const { params, problems } = coerceParams(spec, { ...(resolved.params ?? {}), ...call.params });
   if (problems.length) {
     return { id: spec.id, params, ok: false, message: `${problems.join("; ")}. החתימה: ${signature(spec)}` };
   }

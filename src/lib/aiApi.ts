@@ -39,16 +39,33 @@ export function describeAiError(code: string, status?: number) {
   return MESSAGES[code] ?? `הפעולה נכשלה${status ? ` (${status})` : ""}. נסה שוב בעוד רגע.`;
 }
 
-async function token() {
-  const { data } = await (await getSupabase()).auth.getSession();
-  const value = data.session?.access_token;
-  if (!value) throw new AiError("signed_out", MESSAGES.signed_out);
-  return value;
+/**
+ * The account's token. A token the browser kept past its expiry is the
+ * usual reason a signed-in visitor got "sign in first": `fresh` asks the
+ * auth server for a new one, which is what the retry after a 401 does.
+ */
+async function token(fresh = false) {
+  const auth = (await getSupabase()).auth;
+  if (fresh) {
+    const { data } = await auth.refreshSession().catch(() => ({ data: { session: null } }));
+    if (data.session?.access_token) return data.session.access_token;
+  }
+  const { data } = await auth.getSession();
+  const session = data.session;
+  if (!session?.access_token) throw new AiError("signed_out", MESSAGES.signed_out);
+  // Expired or about to: refresh before asking, rather than after a refusal.
+  if (!fresh && session.expires_at && session.expires_at * 1000 - Date.now() < 30_000) return token(true);
+  return session.access_token;
+}
+
+/** Whether a refusal is one a fresh token could turn into an answer. */
+function staleToken(status: number) {
+  return status === 401;
 }
 
 /** One call to a site function; the error, if any, comes back ready to show. */
-async function call<T>(name: string, init: RequestInit & { query?: Record<string, string> } = {}): Promise<T> {
-  const access = await token();
+async function call<T>(name: string, init: RequestInit & { query?: Record<string, string> } = {}, retried = false): Promise<T> {
+  const access = await token(retried);
   const query = init.query ? `?${new URLSearchParams(init.query)}` : "";
   let response: Response;
   try {
@@ -66,6 +83,7 @@ async function call<T>(name: string, init: RequestInit & { query?: Record<string
     }
     throw new AiError("network", MESSAGES.network);
   }
+  if (staleToken(response.status) && !retried && !(init.body instanceof FormData)) return call<T>(name, init, true);
   const body = (await response.json().catch(() => null)) as (T & { error?: string; credits?: unknown }) | null;
   if (!response.ok) {
     const code = body?.error ?? (response.status === 401 ? "signed_out" : "http");
@@ -146,6 +164,8 @@ export type ChatContext = {
   state?: string;
   /** The actions the site offers, as the model reads them; only in execute mode. */
   catalog?: string;
+  /** The tools the site has today, one line each, so the model's list is never stale. */
+  tools?: string;
 };
 
 export type ChatOptions = {
@@ -180,8 +200,9 @@ export async function chatStream(
   messages: ChatMessage[],
   options: ChatOptions,
   onDelta: (piece: string) => void,
+  retried = false,
 ): Promise<string> {
-  const access = await token();
+  const access = await token(retried);
   let response: Response;
   try {
     response = await fetch(`${FUNCTIONS}/ai`, {
@@ -207,6 +228,7 @@ export async function chatStream(
     if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
     throw new AiError("network", MESSAGES.network);
   }
+  if (staleToken(response.status) && !retried) return chatStream(messages, options, onDelta, true);
   if (!response.ok) throw await refusal(response);
   announceCreditsFrom(response);
   const answering = response.headers.get("X-Model");
@@ -221,30 +243,61 @@ export async function chatStream(
   const decoder = new TextDecoder();
   let pending = "";
   let whole = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    pending += decoder.decode(value, { stream: true });
-    const lines = pending.split("\n");
-    pending = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] };
-        const piece = parsed.choices?.[0]?.delta?.content;
-        if (piece) {
-          whole += piece;
-          onDelta(piece);
-        }
-      } catch {
-        // A partial or keep-alive line; the next chunk completes it.
+  let streamError: string | null = null;
+  const take = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    const data = trimmed.slice(5).trim();
+    if (!data || data === "[DONE]") return;
+    try {
+      const parsed = JSON.parse(data) as {
+        choices?: { delta?: { content?: string | null; text?: string }; text?: string; message?: { content?: string } }[];
+        error?: { message?: string } | string;
+      };
+      // An error the service sent inside the stream, after the 200 — the
+      // reason a reply sometimes came back blank.
+      if (parsed.error && !parsed.choices) {
+        streamError = typeof parsed.error === "string" ? parsed.error : parsed.error.message ?? "error";
+        return;
       }
+      const choice = parsed.choices?.[0];
+      const piece = choice?.delta?.content ?? choice?.delta?.text ?? choice?.text ?? choice?.message?.content;
+      if (piece) {
+        whole += piece;
+        onDelta(piece);
+      }
+    } catch {
+      // A partial or keep-alive line; the next chunk completes it.
     }
+  };
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      lines.forEach(take);
+    }
+    pending += decoder.decode();
+    if (pending.trim()) take(pending);
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === "AbortError") throw new AiError("cancelled", MESSAGES.cancelled);
+    // The connection dropped mid-reply: what arrived is kept when it is
+    // something, and the whole is asked for again when it is nothing.
+    if (whole.trim()) return whole;
+    throw new AiError("network", MESSAGES.network);
   }
-  return whole;
+  if (whole.trim()) return whole;
+  if (options.signal?.aborted) throw new AiError("cancelled", MESSAGES.cancelled);
+  // Nothing came through the stream (the service broke off, or answered with
+  // an error inside it): one plain, unstreamed request, which the server
+  // routes past the broken service. A conversation already paid for is not
+  // charged again.
+  if (streamError) console.warn("the assistant's stream carried an error:", streamError);
+  const plain = await chat(messages, options);
+  onDelta(plain.text);
+  return plain.text;
 }
 
 // ---------------------------------------------------------------------------
