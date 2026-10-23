@@ -119,7 +119,7 @@ function binaryAsTextParts(): Plugin {
   };
 }
 
-const SITE_URL = "https://shmuel-lamed.github.io/SongToNotes/";
+const SITE_URL = "https://xn--4dbjbascrao3i.com/";
 const SITE_NAME = "כלי מוזיקה";
 
 function escapeAttr(value: string) {
@@ -155,7 +155,7 @@ function toolPages(): Plugin {
       const { module } = await runnerImport<{ TOOLS: ToolPage[] }>("./src/lib/tools.tsx");
       const shell = readFileSync(join(outDir, "index.html"), "utf8")
         // Relative links would point inside the tool's folder.
-        .replace(/(href|src)="\.\//g, '$1="/SongToNotes/');
+        .replace(/(href|src)="\.\//g, '$1="/');
 
       for (const tool of module.TOOLS) {
         const url = `${SITE_URL}${tool.id}/`;
@@ -187,7 +187,7 @@ function toolPages(): Plugin {
 }
 
 export default defineConfig({
-  base: "/SongToNotes/",
+  base: "/",
   define: {
     __SEPARATION_MODEL_BYTES__: JSON.stringify(separationModelBytes()),
   },
