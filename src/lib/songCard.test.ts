@@ -306,7 +306,7 @@ describe("songCard: share text", () => {
         }
       }
     }
-    expect(SITE_URL).toBe("https://shmuel-lamed.github.io/SongToNotes/");
+    expect(SITE_URL).toBe("https://xn--4dbjbascrao3i.com/");
   });
 
   it("describes the song in natural Hebrew", () => {
