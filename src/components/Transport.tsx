@@ -1,5 +1,5 @@
 import { Pause, Play, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { formatTime } from "../lib/audio";
 import { BufferPlayer } from "../lib/bufferPlayer";
 
@@ -142,6 +142,9 @@ export function Transport({
   }, [isPlaying]);
 
   const duration = buffer?.duration ?? 0;
+  // The played part of the seek bar is drawn by the stylesheet from this
+  // share; a browser cannot read a slider's value in CSS alone.
+  const played = duration > 0 ? Math.min(100, (Math.min(position, duration) / duration) * 100) : 0;
 
   return (
     <div className="transport">
@@ -189,6 +192,7 @@ export function Transport({
         step={0.01}
         value={Math.min(position, duration)}
         disabled={!buffer}
+        style={{ "--range-fill": `${played}%` } as CSSProperties}
         onChange={(event) => {
           const time = Number(event.target.value);
           playerRef.current?.seek(time);

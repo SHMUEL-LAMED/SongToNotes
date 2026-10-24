@@ -1,16 +1,20 @@
 /* ==========================================================================
    The guided tour: the "הסבר" button in the top bar, and the tour itself —
    the page dimmed around a lit window, and a bubble that says what is in it.
+   The tour wears the page's colour: Tour.tsx sets --accent-hue on its root
+   from the page it walks, so the ring, the step badge, the progress line and
+   the buttons match the tool instead of carrying a colour of their own.
    ========================================================================== */
 
 :root {
-  --tour-gold: oklch(0.7 0.13 82);
-  --tour-gold-text: oklch(0.45 0.09 82);
+  /* The bubble's glass, tuned per theme below. */
+  --tour-glass: rgba(255, 255, 255, 0.9);
 }
 :root[data-theme="dark"] {
-  --tour-gold: oklch(0.8 0.13 85);
-  --tour-gold-text: oklch(0.88 0.09 85);
+  --tour-glass: rgba(21, 21, 28, 0.88);
 }
+
+/* ---- the button: one of the top bar's pills; only its mark is coloured ---- */
 
 .tour-button {
   flex: none;
@@ -19,38 +23,44 @@
   align-items: center;
   gap: 8px;
   padding-block: 0;
-  padding-inline: 5px 14px;
+  padding-inline: 4px 14px;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in oklab, var(--tour-gold) 45%, transparent);
-  background: var(--surface);
-  color: var(--tour-gold-text);
-  font-size: 13.5px;
-  font-weight: 700;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 2px 10px color-mix(in oklab, var(--tour-gold) 18%, transparent);
-  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease), transform 0.18s var(--ease);
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease), transform 0.18s var(--ease);
 }
 .tour-button:hover {
-  border-color: var(--tour-gold);
-  box-shadow: 0 4px 16px color-mix(in oklab, var(--tour-gold) 30%, transparent);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
 }
-.tour-button:active { transform: scale(0.96); }
+.tour-button:active { transform: translateY(0) scale(0.97); }
+.tour-button[aria-pressed="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
 .tour-button-mark {
   width: 28px;
   height: 28px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--tour-gold);
   color: #fff;
+  background: var(--brand-gradient);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 10px -4px color-mix(in srgb, var(--brand-2) 75%, transparent);
 }
-:root[data-theme="dark"] .tour-button-mark { color: #1a1408; }
-.tour-button[aria-pressed="true"] { border-color: var(--tour-gold); }
 
 /* Where the bar is short of room, the word goes and the mark stays. */
 @container topbar (max-width: 420px) {
-  .tour-button { width: 38px; padding: 0; justify-content: center; }
+  .tour-button { width: 38px; padding: 0; border-radius: 11px; justify-content: center; }
   .tour-button > span:last-child { display: none; }
 }
 
@@ -70,30 +80,44 @@
 .tour-dim {
   position: absolute;
   inset: 0;
-  fill: rgba(6, 6, 12, 0.6);
+  fill: rgba(6, 6, 12, 0.62);
   pointer-events: none;
 }
 
-/* The ring around the lit part. */
+/* The ring around the lit part: a thin line in the page's colour, and a glow
+   that spreads onto the dimmed page. The dim is dark in both themes, so this
+   reads the same under each. */
 .tour-hole {
   position: fixed;
   border-radius: 14px;
-  box-shadow: 0 0 0 3px var(--tour-gold), 0 0 24px color-mix(in oklab, var(--tour-gold) 45%, transparent);
+  box-shadow:
+    0 0 0 2px oklch(0.82 0.15 var(--accent-hue)),
+    0 0 0 6px oklch(0.72 0.2 var(--accent-hue) / 0.28),
+    0 0 40px 6px oklch(0.7 0.2 var(--accent-hue) / 0.45);
   pointer-events: none;
 }
 
+/* A glass card with a lit top edge and a glow of the page's colour behind it. */
 .tour-bubble {
   position: fixed;
-  width: min(370px, calc(100vw - 24px));
-  padding: 14px 16px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: var(--surface-solid);
+  width: min(380px, calc(100vw - 24px));
+  padding: 14px 16px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.78 0.17 var(--accent-hue) / 0.75), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 60% at 100% 0%, oklch(0.7 0.2 var(--accent-hue) / 0.16), transparent 60%),
+    radial-gradient(70% 50% at 0% 100%, oklch(0.7 0.2 calc(var(--accent-hue) + 50) / 0.1), transparent 60%),
+    var(--tour-glass);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
   color: var(--text);
-  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in oklab, var(--tour-gold) 25%, transparent);
-  animation: tour-in 0.22s var(--ease);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px oklch(0.7 0.2 var(--accent-hue) / 0.14),
+    0 26px 70px -30px oklch(0.65 0.22 var(--accent-hue) / 0.65);
+  animation: tour-in 0.26s var(--ease);
 }
-.tour[data-placement="center"] .tour-bubble { width: min(420px, calc(100vw - 24px)); }
 
 /* A small point toward the lit part. */
 .tour-bubble::before {
@@ -102,8 +126,8 @@
   left: calc(var(--tour-arrow) - 8px);
   width: 16px;
   height: 16px;
-  background: inherit;
-  border: inherit;
+  background: var(--tour-glass);
+  border: 1px solid var(--line-strong);
   transform: rotate(45deg);
   display: none;
 }
@@ -120,78 +144,127 @@
   border-left-color: transparent;
 }
 
+/* Told in the middle of the screen: a little larger, a little more lit. */
+.tour[data-placement="center"] .tour-bubble {
+  width: min(440px, calc(100vw - 24px));
+  padding: 18px 20px 20px;
+  background:
+    linear-gradient(90deg, transparent, oklch(0.78 0.17 var(--accent-hue) / 0.85), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 60% at 100% 0%, oklch(0.7 0.2 var(--accent-hue) / 0.22), transparent 62%),
+    radial-gradient(70% 55% at 0% 100%, oklch(0.7 0.2 calc(var(--accent-hue) + 50) / 0.14), transparent 62%),
+    var(--tour-glass);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px oklch(0.7 0.2 var(--accent-hue) / 0.18),
+    0 30px 90px -30px oklch(0.65 0.22 var(--accent-hue) / 0.8);
+}
+.tour[data-placement="center"] .tour-badge { width: 36px; height: 36px; border-radius: 12px; }
+.tour[data-placement="center"] .tour-title { font-size: 20px; }
+
 .tour-head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
 }
+/* The step's badge: a gradient tile in the page's colour. */
 .tour-badge {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex: none;
-  border-radius: 50%;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: var(--tour-gold);
-  color: #fff;
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px -6px oklch(0.6 0.2 var(--accent-hue) / 0.7);
 }
-:root[data-theme="dark"] .tour-badge { color: #1a1408; }
 .tour-count {
   flex: 1;
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
-.tour-close { width: 32px; height: 32px; }
+.tour-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border-color: transparent;
+  background: none;
+  color: var(--text-muted);
+}
+.tour-close:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; color: var(--text); }
 
+/* The progress: a gradient line that glows, growing with each step. */
 .tour-progress {
   height: 4px;
-  margin: 10px 0 12px;
+  margin: 12px 0 14px;
   border-radius: var(--radius-pill);
   background: var(--surface-sunken);
-  overflow: hidden;
 }
 .tour-progress span {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: var(--tour-gold);
-  transition: width 0.25s var(--ease);
+  border-radius: var(--radius-pill);
+  background: var(--accent-grad);
+  box-shadow: 0 0 12px oklch(0.7 0.2 var(--accent-hue) / 0.55);
+  transition: width 0.3s var(--ease);
 }
 
 .tour-title {
   margin: 0 0 6px;
   font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
   line-height: 1.3;
 }
 .tour-text {
   margin: 0;
   color: var(--text-soft);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
+/* The actions: pills, the way forward in the page's colour. */
 .tour-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 .tour-nav { display: inline-flex; gap: 8px; }
-.tour-skip { padding-inline: 8px; color: var(--text-muted); font-size: 13px; }
+.tour-skip {
+  padding-inline: 10px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 13px;
+}
 .tour-actions .primary-button,
 .tour-actions .secondary-button {
   min-height: 38px;
-  padding-inline: 14px;
+  padding-inline: 16px;
+  border-radius: var(--radius-pill);
   font-size: 13.5px;
+}
+.tour-actions .primary-button {
+  gap: 6px;
+  background: var(--accent-grad);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 8px 20px -8px oklch(0.55 0.2 var(--accent-hue) / 0.75);
+}
+.tour-actions .secondary-button {
+  padding-inline: 14px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  box-shadow: none;
 }
 
 @keyframes tour-in {
-  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tour-progress span { transition: none; }
   .tour-bubble { animation: none; }
+  .tour-button:hover { transform: none; }
 }

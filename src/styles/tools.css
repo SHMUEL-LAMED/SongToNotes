@@ -15,10 +15,16 @@
   align-items: center;
   gap: 18px;
   background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
     radial-gradient(60% 70% at 50% 40%, var(--accent-tint), transparent 70%),
     var(--surface);
+  transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
 }
-.metronome-stage[data-running="true"] { border-color: var(--accent-line); }
+/* Running, the whole stage is lit a little more. */
+.metronome-stage[data-running="true"] {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-sm), 0 30px 70px -40px oklch(0.6 0.2 var(--accent-hue) / 0.7), var(--inner-highlight);
+}
 
 .pendulum-frame {
   width: 100%;
@@ -31,9 +37,23 @@
   width: 3px;
   height: 112px;
   border-radius: 99px;
-  background: linear-gradient(180deg, var(--accent), var(--line-strong));
+  background: linear-gradient(180deg, var(--accent), var(--accent-line) 70%, transparent);
   transform-origin: bottom center;
   transition: transform linear;
+}
+/* The pivot the rod swings on. */
+.pendulum::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-solid);
+  border: 2px solid var(--accent-line);
+  box-shadow: var(--shadow-xs);
 }
 .pendulum-weight {
   position: absolute;
@@ -44,8 +64,10 @@
   height: 24px;
   border-radius: 50%;
   background: var(--accent-grad);
-  box-shadow: var(--shadow-accent), 0 0 0 5px var(--accent-tint);
+  box-shadow: var(--shadow-accent), 0 0 0 5px var(--accent-tint), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: box-shadow 0.3s var(--ease);
 }
+.metronome-stage[data-running="true"] .pendulum-weight { box-shadow: var(--shadow-accent), 0 0 0 7px var(--accent-tint), 0 0 24px var(--accent-ring), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
 
 .bpm-readout { display: flex; align-items: center; gap: 22px; direction: ltr; }
 .bpm-step {
@@ -55,12 +77,14 @@
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(10px);
   color: var(--text-soft);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
   cursor: pointer;
-  transition: border-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.2s var(--ease-spring);
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.2s var(--ease-spring), box-shadow 0.2s var(--ease), background 0.18s var(--ease);
 }
-.bpm-step:hover { border-color: var(--accent); color: var(--accent-text); transform: scale(1.08); }
+.bpm-step:hover { border-color: var(--accent-line); background: var(--accent-tint); color: var(--accent-text); transform: scale(1.08); box-shadow: var(--shadow-sm), 0 0 0 4px var(--accent-tint); }
 .bpm-step:active { transform: scale(0.94); }
 .bpm-value { text-align: center; min-width: 180px; }
 .bpm-value strong {
@@ -77,7 +101,7 @@
 }
 .metronome-stage[data-running="true"] .bpm-value strong { animation: beatpop 0.18s var(--ease); }
 @keyframes beatpop { from { transform: scale(1.05); } to { transform: scale(1); } }
-.bpm-value span { font-size: 12.5px; color: var(--text-muted); letter-spacing: 0.04em; }
+.bpm-value span { font-size: 11.5px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.08em; }
 .bpm-slider { max-width: 440px; }
 
 .beat-dots { display: flex; gap: 8px; }
@@ -87,19 +111,43 @@
   border-radius: 99px;
   background: var(--surface-3);
   border: 1px solid var(--line);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.05);
   transition: background 0.08s linear, transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
 }
-.beat-dot.is-accent { width: 42px; border-color: var(--accent-line); }
+.beat-dot.is-accent { width: 42px; border-color: var(--accent-line); background: var(--accent-tint); }
 .beat-dot.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-grad);
+  border-color: transparent;
   transform: scaleY(1.4);
-  box-shadow: 0 0 18px var(--accent-ring);
+  box-shadow: 0 0 18px var(--accent-ring), 0 0 0 3px var(--accent-tint), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .beat-dot.is-accent.is-active { background: var(--brand-gradient); }
 
 .metronome-actions { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .metronome-actions .primary-button { width: auto; min-width: 190px; }
+
+/* The popular tempos: a glass strip, the chosen one lit. */
+.metronome .preset-strip {
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.45), transparent) top / 100% 1px no-repeat,
+    color-mix(in srgb, var(--surface) 80%, transparent);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
+}
+.metronome .preset-strip > span { font-weight: 700; letter-spacing: 0.02em; }
+.metronome .preset-row button {
+  min-height: 36px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+  font-weight: 700;
+}
+.metronome .preset-row button:hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-tint); transform: translateY(-1px); }
+.metronome .preset-row button.active {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: var(--on-accent);
+  box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
 
 /* ---- ear trainer ---- */
 
@@ -114,60 +162,111 @@
 .ear-hint { color: var(--text-muted); font-size: 12.5px; text-align: center; }
 
 .ear-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+/* An answer: a soft glass card with its key as a keycap at the start. */
 .ear-choice {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 54px;
+  min-height: 56px;
   padding: 0 14px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.45), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 90% at 100% 0%, var(--accent-tint), transparent 70%),
+    color-mix(in srgb, var(--surface) 82%, transparent);
   color: var(--text);
   font-weight: 600;
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
   cursor: pointer;
-  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-.ear-choice:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent); background: var(--accent-tint); }
+.ear-choice:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent-line); box-shadow: var(--shadow-sm), 0 12px 26px -12px oklch(0.6 0.2 var(--accent-hue) / 0.5); }
 .ear-choice b {
   flex: none;
-  width: 26px;
+  min-width: 26px;
   height: 26px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: var(--surface-sunken);
-  color: var(--text-muted);
+  padding: 0 6px;
+  border-radius: 7px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  color: var(--text-soft);
   font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
-.ear-choice b:empty { background: none; }
+.ear-choice:hover:not(:disabled) b { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent-line); }
+.ear-choice b:empty { background: none; border: 0; }
 .ear-choice span { flex: 1; text-align: start; }
+.ear-choice > svg { flex: none; }
 .ear-choice:disabled { cursor: default; opacity: 0.55; }
 .ear-choice.is-right,
 .ear-choice.is-wrong { opacity: 1; }
-.ear-choice.is-right { border-color: var(--success); background: var(--success-soft); color: var(--success); }
-.ear-choice.is-wrong { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.ear-choice.is-right {
+  border-color: var(--success);
+  background: radial-gradient(90% 90% at 100% 0%, var(--success-soft), transparent 70%), var(--success-soft);
+  color: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft), var(--shadow-xs);
+}
+.ear-choice.is-right b { background: var(--success); border-color: var(--success); color: #fff; }
+.ear-choice.is-wrong {
+  border-color: var(--danger);
+  background: radial-gradient(90% 90% at 100% 0%, var(--danger-soft), transparent 70%), var(--danger-soft);
+  color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft), var(--shadow-xs);
+}
+.ear-choice.is-wrong b { background: var(--danger); border-color: var(--danger); color: #fff; }
 
 .ear-verdict { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; min-height: 46px; text-align: center; }
-.ear-verdict strong { font-size: 18px; }
+.ear-verdict strong { font-size: 18px; letter-spacing: -0.01em; }
 .ear-verdict strong.is-right { color: var(--success); }
 .ear-verdict strong.is-wrong { color: var(--danger); }
 .ear-verdict span { color: var(--text-soft); font-size: 14px; direction: ltr; }
 .ear-waiting { color: var(--text-muted); }
 
+/* The score: a row of stat tiles, each figure in the tool's gradient. */
 .ear-score {
   margin-top: 4px;
-  padding: 16px 20px;
+  padding: 12px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 12px;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.45), transparent) top / 100% 1px no-repeat,
+    var(--surface);
+  box-shadow: var(--shadow-sm), var(--inner-highlight);
 }
-.ear-score > div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.ear-score strong { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.ear-score span { color: var(--text-muted); font-size: 12px; }
+.ear-score > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 10px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(90% 90% at 50% 0%, var(--accent-tint), transparent 70%),
+    var(--surface-2);
+}
+.ear-score strong {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ear-score span { color: var(--text-muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; }
+.ear-score .link-button { justify-self: center; align-self: center; }
 
 /* ---- tuner ---- */
 
@@ -179,15 +278,22 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  background: radial-gradient(60% 70% at 50% 30%, var(--accent-tint), transparent 70%), var(--surface);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(60% 70% at 50% 30%, var(--accent-tint), transparent 70%),
+    var(--surface);
   transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
 }
+.tuner-stage.has-signal { border-color: var(--accent-line); box-shadow: var(--shadow-sm), 0 30px 70px -40px oklch(0.6 0.2 var(--accent-hue) / 0.7), var(--inner-highlight); }
 .tuner-stage.is-in-tune {
   border-color: var(--success);
-  box-shadow: 0 0 0 4px var(--success-soft), var(--shadow-md);
-  background: radial-gradient(60% 70% at 50% 30%, var(--success-soft), transparent 70%), var(--surface);
+  box-shadow: 0 0 0 4px var(--success-soft), 0 30px 70px -40px var(--success), var(--shadow-md);
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--success) 60%, transparent), transparent) top / 100% 1px no-repeat,
+    radial-gradient(60% 70% at 50% 30%, var(--success-soft), transparent 70%),
+    var(--surface);
 }
-.tuner-gauge { width: min(360px, 100%); height: auto; }
+.tuner-gauge { width: min(360px, 100%); height: auto; filter: drop-shadow(0 8px 18px oklch(0.6 0.2 var(--accent-hue) / 0.16)); }
 .tuner-gauge path:last-of-type { transition: opacity 0.3s var(--ease); }
 .tuner-needle { transition: transform 0.12s var(--ease); stroke: var(--text); fill: var(--text); }
 .tuner-stage.is-in-tune .tuner-needle { stroke: var(--success); fill: var(--success); }
@@ -201,8 +307,15 @@
   letter-spacing: -0.04em;
   direction: ltr;
 }
+/* The note heard, in the tool's gradient; green once it sits in tune. */
+.tuner-stage.has-signal .tuner-note:not(.placeholder) {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .tuner-note.placeholder { color: var(--text-muted); opacity: 0.4; }
-.tuner-stage.is-in-tune .tuner-note { color: var(--success); }
+.tuner-stage.is-in-tune .tuner-note { color: var(--success); background: linear-gradient(135deg, var(--success), var(--mint)); }
 .tuner-hebrew { display: block; font-size: 14px; color: var(--text-soft); }
 .tuner-cents { display: block; margin-top: 4px; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .tuner-hint { display: block; margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--accent-text); }
@@ -214,19 +327,23 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 15px;
+  min-height: 38px;
+  padding: 7px 15px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--text);
   font-size: 13.5px;
   font-weight: 700;
+  box-shadow: var(--shadow-xs);
   direction: ltr;
   cursor: pointer;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-.string-chip:hover { border-color: var(--accent); }
-.string-chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.string-chip.is-detected { border-color: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.string-chip:hover { border-color: var(--accent-line); background: var(--accent-tint); transform: translateY(-1px); }
+.string-chip.active { background: var(--accent-grad); border-color: transparent; color: var(--on-accent); box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+.string-chip.is-detected { border-color: var(--success); background: var(--success-soft); color: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.string-chip.active.is-detected { background: linear-gradient(135deg, var(--success), var(--mint)); color: #fff; }
 
 /* ---- piano ---- */
 
@@ -254,7 +371,7 @@
   padding: 10px 0 0;
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #1b1a22, #0d0c12);
-  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-md), 0 30px 70px -36px oklch(0.6 0.2 var(--accent-hue) / 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -318,8 +435,27 @@
 }
 .piano-key.black .piano-key-name { color: rgba(255, 255, 255, 0.55); }
 .piano-key-name small { font-size: 9px; opacity: 0.75; }
-.piano-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+/* The controls under the keys sit on one glass bar. */
+.piano-controls,
+.piano-lesson-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.45), transparent) top / 100% 1px no-repeat,
+    color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
+}
 .piano-controls .segmented-control { flex: 0 1 auto; }
+.piano-controls .segmented-control,
+.piano-lesson-bar .segmented-control { background: var(--surface-sunken); }
+.piano-controls .secondary-button,
+.piano-lesson-bar .secondary-button { box-shadow: none; }
 
 /* The lesson: its bar, then the notes falling onto the keys, one piece with them. */
 .piano-stage { display: flex; flex-direction: column; }
@@ -333,7 +469,7 @@
   gap: 10px;
 }
 .piano-lesson-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.piano-lesson-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.piano-lesson-bar { gap: 8px 10px; }
 .piano-lesson-bar .segmented-control { flex: 0 1 auto; }
 .piano-lesson-bar .segmented-control button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
 .piano-lesson-title {
@@ -342,7 +478,9 @@
   gap: 6px;
   flex: 1;
   min-width: 0;
+  padding-inline-start: 6px;
   font-size: 15px;
+  font-weight: 700;
   color: var(--accent-text);
 }
 .piano-lesson-title > * { flex: none; }
@@ -391,8 +529,8 @@
 .chroma-bars { display: flex; align-items: flex-end; gap: 6px; height: 170px; margin-top: 8px; }
 .chroma-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 6px; }
 .chroma-bar > div { border-radius: 7px 7px 3px 3px; background: var(--surface-3); min-height: 3px; transition: height 0.5s var(--ease); }
-.chroma-bar.in-key > div { background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent)); }
-.chroma-bar.is-tonic > div { background: var(--brand-gradient); }
+.chroma-bar.in-key > div { background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent)); box-shadow: 0 0 12px var(--accent-tint); }
+.chroma-bar.is-tonic > div { background: var(--brand-gradient); box-shadow: 0 0 18px var(--accent-ring); }
 .chroma-bar span { text-align: center; font-size: 11px; color: var(--text-muted); direction: ltr; }
 .chroma-bar.is-tonic span { color: var(--accent-text); font-weight: 800; }
 
@@ -508,9 +646,20 @@
 
 /* ---- guitar chords ---- */
 
-.chord-diagram { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text); }
+.chord-diagram {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background 0.2s var(--ease), box-shadow 0.2s var(--ease), color 0.2s var(--ease);
+}
 .chord-diagram figcaption { font-size: 13px; font-weight: 700; }
-.chord-diagram.is-active { color: var(--accent-text); }
+.chord-diagram.is-active { color: var(--accent-text); background: var(--accent-tint); box-shadow: 0 0 0 1px var(--accent-line), 0 0 18px var(--accent-tint); }
+/* The chord sounding now: the name in the tool's gradient on a lit card. */
 .chords-now {
   display: flex;
   align-items: center;
@@ -519,14 +668,28 @@
   padding: 14px 18px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  background: radial-gradient(90% 140% at 100% 0%, var(--accent-tint), transparent 70%), var(--surface-2);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 140% at 100% 0%, var(--accent-tint), transparent 70%),
+    var(--surface-2);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
 }
 .chords-now > div { display: flex; flex-direction: column; gap: 2px; }
-.chords-now strong { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
+.chords-now strong {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .chords-now span { color: var(--text-muted); font-size: 14px; }
 .chords-now small { color: var(--text-soft); font-size: 13px; margin-top: 6px; }
 .chords-now p { margin: 0; color: var(--text-muted); font-size: 14px; }
-.chords-timeline { display: flex; gap: 4px; overflow-x: auto; padding: 6px 0; }
+.chords-timeline { display: flex; gap: 4px; overflow-x: auto; padding: 6px 2px; }
+/* Each block carries its chord's hue inline: a glass tile tinted by it. */
 .chords-block {
   flex: 1 0 auto;
   min-width: 54px;
@@ -536,17 +699,24 @@
   gap: 2px;
   padding: 8px 6px;
   border-radius: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid oklch(0.7 0.14 var(--chord-hue) / 0.3);
   cursor: pointer;
   color: var(--text);
-  background: oklch(0.7 0.14 var(--chord-hue) / 0.16);
-  transition: background 0.15s var(--ease);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.75 0.16 var(--chord-hue) / 0.7), transparent) top / 100% 1px no-repeat,
+    linear-gradient(180deg, oklch(0.7 0.14 var(--chord-hue) / 0.2), oklch(0.7 0.14 var(--chord-hue) / 0.1));
+  transition: background 0.15s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease), border-color 0.15s var(--ease);
 }
-.chords-block:hover { background: oklch(0.7 0.14 var(--chord-hue) / 0.28); }
+.chords-block:hover { background: oklch(0.7 0.14 var(--chord-hue) / 0.28); transform: translateY(-2px); border-color: oklch(0.7 0.14 var(--chord-hue) / 0.55); }
 .chords-block span { font-weight: 800; font-size: 15px; }
-.chords-block small { font-size: 11px; color: var(--text-muted); }
-.chords-block.is-current { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: oklch(0.7 0.14 var(--chord-hue) / 0.36); }
-.chords-diagrams { display: flex; flex-wrap: wrap; gap: 14px; padding: 6px 0; }
+.chords-block small { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.chords-block.is-current {
+  border-color: oklch(0.62 0.18 var(--chord-hue));
+  box-shadow: 0 0 0 3px oklch(0.62 0.18 var(--chord-hue) / 0.25), 0 8px 20px -8px oklch(0.62 0.18 var(--chord-hue) / 0.6);
+  background: oklch(0.7 0.14 var(--chord-hue) / 0.38);
+  transform: translateY(-2px);
+}
+.chords-diagrams { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 0; }
 
 /* ---- songbook ---- */
 
@@ -560,27 +730,44 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
   color: var(--text);
+  box-shadow: var(--shadow-xs);
   display: inline-grid;
   place-items: center;
   cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), color 0.18s var(--ease), transform 0.18s var(--ease);
 }
-.songbook-stepper > button:not(.link-button):not(.primary-button):hover { border-color: var(--accent); color: var(--accent-text); }
+.songbook-stepper > button:not(.link-button):not(.primary-button):hover { border-color: var(--accent-line); background: var(--accent-tint); color: var(--accent-text); transform: translateY(-1px); }
 .songbook-stepper input[type="range"] { flex: 1; }
+/* The sheet: paper with a lit edge and a breath of the tool's colour at the top. */
 .songbook-sheet {
   max-height: 70vh;
   overflow: auto;
   padding: 22px 24px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: var(--surface-solid);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(80% 40% at 50% 0%, var(--accent-tint), transparent 70%),
+    var(--surface-solid);
+  box-shadow: var(--shadow-sm), var(--inner-highlight);
   line-height: 1.5;
   scroll-behavior: auto;
 }
-.songbook-sheet h2 { margin: 0 0 14px; font-size: 1.5em; font-weight: 800; }
-.songbook-sheet h3 { margin: 20px 0 6px; font-size: 0.85em; color: var(--accent-text); letter-spacing: 0.06em; }
+.songbook-sheet h2 { margin: 0 0 14px; font-size: 1.5em; font-weight: 800; letter-spacing: -0.02em; }
+.songbook-sheet h3 {
+  display: inline-block;
+  margin: 20px 0 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint);
+  font-size: 0.72em;
+  font-weight: 700;
+  color: var(--accent-text);
+  letter-spacing: 0.06em;
+}
 .songbook-sheet p { margin: 0 0 4px; white-space: pre-wrap; }
 .songbook-blank { height: 0.9em; }
 .songbook-line { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 6px; }
@@ -588,7 +775,7 @@
 .songbook-piece.is-bare { margin-inline-end: 1.4em; }
 .songbook-sheet p[data-sung] { border-radius: 8px; padding-inline: 6px; margin-inline: -6px; transition: background 0.2s var(--ease), opacity 0.2s var(--ease); }
 .songbook-sheet.is-prompting p[data-sung]:not([data-now]) { opacity: 0.45; }
-.songbook-sheet p[data-now] { background: var(--accent-tint); }
+.songbook-sheet p[data-now] { background: var(--accent-tint); box-shadow: inset 3px 0 0 var(--accent); }
 .songbook-stepper select { min-height: 36px; }
 .songbook-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .songbook-tempo input { inline-size: 72px; min-height: 36px; }
@@ -610,16 +797,22 @@
 /* ---- rhythm trainer ---- */
 
 .rhythm-pattern { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; padding: 4px 0; }
-.rhythm-step { height: 24px; border-radius: 6px; background: var(--surface-3); border: 1px solid var(--line); }
+.rhythm-step { height: 24px; border-radius: 6px; background: var(--surface-3); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3); transition: box-shadow 0.1s linear; }
+:root[data-theme="dark"] .rhythm-step { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
 .rhythm-step.is-beat { border-color: var(--line-strong); }
-.rhythm-step.is-hit { background: var(--accent); border-color: var(--accent); }
-.rhythm-step.is-now { box-shadow: 0 0 0 3px var(--accent-ring); }
+.rhythm-step.is-hit { background: var(--accent-grad); border-color: transparent; box-shadow: 0 0 10px var(--accent-tint), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.rhythm-step.is-now { box-shadow: 0 0 0 3px var(--accent-ring), 0 0 14px var(--accent-ring); }
+/* The pad: a glass slab lit from above, flashing the verdict's colour. */
 .rhythm-pad {
   width: 100%;
   min-height: 160px;
   border-radius: var(--radius-xl);
-  border: 2px solid var(--line-strong);
-  background: radial-gradient(60% 80% at 50% 30%, var(--accent-tint), transparent 70%), var(--surface-2);
+  border: 2px solid var(--line);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 2px no-repeat,
+    radial-gradient(60% 80% at 50% 30%, var(--accent-tint), transparent 70%),
+    var(--surface-2);
+  box-shadow: var(--shadow-sm), var(--inner-highlight);
   color: var(--text);
   cursor: pointer;
   display: flex;
@@ -629,12 +822,12 @@
   gap: 6px;
   touch-action: manipulation;
   user-select: none;
-  transition: background 0.08s, border-color 0.08s, transform 0.08s;
+  transition: background 0.08s, border-color 0.08s, transform 0.08s, box-shadow 0.08s;
 }
 .rhythm-pad:disabled { cursor: default; opacity: 0.8; }
-.rhythm-pad strong { font-size: 22px; }
+.rhythm-pad strong { font-size: 22px; letter-spacing: -0.01em; }
 .rhythm-pad small { color: var(--text-muted); }
-.rhythm-pad.is-live { border-color: var(--accent); }
+.rhythm-pad.is-live { border-color: var(--accent-line); box-shadow: var(--shadow-sm), 0 0 0 4px var(--accent-tint), 0 30px 70px -40px var(--accent), var(--inner-highlight); }
 .rhythm-pad.is-live:active { transform: scale(0.985); }
 .rhythm-pad.is-perfect { background: var(--success-soft); border-color: var(--success); }
 .rhythm-pad.is-good { background: oklch(0.75 0.16 130 / 0.16); border-color: oklch(0.72 0.17 130); }
@@ -653,7 +846,7 @@
 .rhythm-tap.is-late i { background: var(--warning); }
 .rhythm-tap.is-miss i { background: var(--danger); }
 .rhythm-history { display: flex; align-items: flex-end; gap: 3px; height: 50px; padding: 4px 0; }
-.rhythm-history span { flex: 1; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.8; }
+.rhythm-history span { flex: 1; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, var(--accent), var(--accent-line)); }
 .rhythm-score-actions { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 
 /* ---- mixer ---- */
@@ -666,23 +859,33 @@
   gap: 14px;
   padding: 14px 16px;
   border-radius: var(--radius);
-  border: 1.5px dashed var(--line-strong);
-  background: var(--surface-2);
+  border: 1.5px dashed var(--accent-line);
+  background:
+    radial-gradient(70% 120% at 100% 50%, var(--accent-tint), transparent 70%),
+    var(--surface-2);
   cursor: pointer;
-  transition: border-color 0.18s var(--ease);
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
 }
-.mixer-add:hover { border-color: var(--accent); }
+.mixer-add:hover { border-color: var(--accent); background: radial-gradient(70% 120% at 100% 50%, var(--accent-soft), transparent 75%), var(--surface-2); }
 .mixer-add strong { display: block; }
 .mixer-add small { color: var(--text-muted); font-size: 12.5px; }
 .mixer-tracks { display: flex; flex-direction: column; gap: 10px; }
+/* A strip: lit along its top in the track's own hue, which it carries inline. */
 .mixer-track {
+  --mixer-track: oklch(0.66 0.16 var(--track-hue));
   padding: 12px 14px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  border-inline-start: 4px solid oklch(0.72 0.15 var(--track-hue));
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  border-inline-start: 4px solid var(--mixer-track);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.16 var(--track-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(60% 140% at 100% 0%, oklch(0.72 0.16 var(--track-hue) / 0.1), transparent 70%),
+    var(--surface);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
+  transition: opacity 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
+:root[data-theme="dark"] .mixer-track { --mixer-track: oklch(0.76 0.13 var(--track-hue)); }
+.mixer-track:hover { box-shadow: var(--shadow-sm), var(--inner-highlight); }
 .mixer-track.is-silent { opacity: 0.55; }
 .mixer-track-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mixer-track-name {

@@ -1,5 +1,5 @@
-import { Command, CornerDownLeft, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Command, CornerDownLeft, Search, SearchX } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * Ctrl+K: one box that reaches everything — a tool, a saved work, a page —
@@ -14,6 +14,8 @@ export type CommandItem = {
   hint?: string;
   group: string;
   icon?: ReactNode;
+  /** The colour of the icon's tile, when the item has one of its own (a tool's hue). */
+  hue?: number;
   keywords?: string;
   run: () => void;
 };
@@ -72,6 +74,9 @@ export function CommandPalette({
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // The highlight slides from row to row rather than jumping; it is placed
+  // from the chosen row's measured position inside the list.
+  const [thumb, setThumb] = useState<{ y: number; h: number } | null>(null);
 
   const shown = useMemo(() => rankCommands(items, query), [items, query]);
 
@@ -100,6 +105,12 @@ export function CommandPalette({
   useEffect(() => {
     if (!open) return;
     listRef.current?.querySelector<HTMLElement>(".palette-item.is-active")?.scrollIntoView({ block: "nearest" });
+  }, [cursor, open, shown]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = listRef.current?.querySelector<HTMLElement>(".palette-item.is-active");
+    setThumb(active ? { y: active.offsetTop, h: active.offsetHeight } : null);
   }, [cursor, open, shown]);
 
   useEffect(() => {
@@ -143,7 +154,7 @@ export function CommandPalette({
         onKeyDown={onKey}
       >
         <label className="palette-input">
-          <Search size={18} aria-hidden="true" />
+          <Search size={19} aria-hidden="true" />
           <input
             ref={inputRef}
             type="text"
@@ -158,7 +169,20 @@ export function CommandPalette({
           <kbd>Esc</kbd>
         </label>
         <ul className="palette-list" role="listbox" ref={listRef} aria-label="תוצאות">
-          {shown.length === 0 && <li className="palette-empty">לא נמצא כלום.</li>}
+          {thumb && (
+            <li
+              className="palette-thumb"
+              role="presentation"
+              aria-hidden="true"
+              style={{ "--row-y": `${thumb.y}px`, "--row-h": `${thumb.h}px` } as CSSProperties}
+            />
+          )}
+          {shown.length === 0 && (
+            <li className="palette-empty">
+              <SearchX size={22} aria-hidden="true" />
+              <span>לא נמצא כלום.</span>
+            </li>
+          )}
           {shown.map((item, index) => {
             const heading = index === 0 || shown[index - 1].group !== item.group ? item.group : null;
             return (
@@ -172,7 +196,12 @@ export function CommandPalette({
                   onMouseEnter={() => setCursor(index)}
                   onClick={() => pick(item)}
                 >
-                  <span className="palette-icon">{item.icon ?? <Command size={15} />}</span>
+                  <span
+                    className="palette-icon"
+                    style={item.hue === undefined ? undefined : ({ "--accent-hue": item.hue } as CSSProperties)}
+                  >
+                    {item.icon ?? <Command size={15} />}
+                  </span>
                   <span className="palette-text">
                     <span>{item.label}</span>
                     {item.hint && <small>{item.hint}</small>}
@@ -184,8 +213,17 @@ export function CommandPalette({
           })}
         </ul>
         <p className="palette-foot">
-          <kbd>↑</kbd>
-          <kbd>↓</kbd> ניווט · <kbd>Enter</kbd> בחירה · <kbd>Ctrl</kbd>+<kbd>K</kbd> פתיחה מכל מקום
+          <span className="palette-key">
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> ניווט
+          </span>
+          <span className="palette-key">
+            <kbd>Enter</kbd> בחירה
+          </span>
+          <span className="palette-key">
+            <kbd>Ctrl</kbd>
+            <kbd>K</kbd> פתיחה מכל מקום
+          </span>
         </p>
       </div>
     </div>

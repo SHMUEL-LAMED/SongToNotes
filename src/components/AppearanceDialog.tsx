@@ -43,12 +43,21 @@ export function AppearanceDialog({ open, onClose, preference, onPreference, acce
         <button ref={closeRef} type="button" className="icon-button dialog-close" onClick={onClose} aria-label="סגירה">
           <X size={17} />
         </button>
-        <h2 id="appearance-title">מראה</h2>
+        <h2 id="appearance-title">
+          <span className="gradient-text">מראה</span>
+        </h2>
         <p>נשמר בדפדפן הזה.</p>
 
         <div className="appearance-section">
           <span className="appearance-label">ערכת נושא</span>
-          <div className="segmented-control" role="group" aria-label="ערכת נושא">
+          {/* The pill slides under the chosen mode; the control itself is the plain one, for the tests and the keyboard. */}
+          <div
+            className="segmented-control dialog-modes"
+            role="group"
+            aria-label="ערכת נושא"
+            style={{ "--mode-index": MODES.findIndex((mode) => mode.id === preference), "--mode-count": MODES.length } as CSSProperties}
+          >
+            <span className="dialog-modes-thumb" aria-hidden="true" />
             {MODES.map((mode) => {
               const Icon = mode.icon;
               return (
@@ -85,7 +94,7 @@ export function AppearanceDialog({ open, onClose, preference, onPreference, acce
               );
             })}
           </div>
-          <label className="checkbox-field">
+          <label className="checkbox-field appearance-everywhere">
             <input
               type="checkbox"
               checked={accent.everywhere}

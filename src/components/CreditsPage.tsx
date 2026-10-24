@@ -1,6 +1,8 @@
 import {
+  ArrowLeft,
   CalendarClock,
   Check,
+  ChevronDown,
   CircleHelp,
   Copy,
   Gift,
@@ -155,7 +157,9 @@ function BalanceCard({ status, now, owner }: { status: CreditStatus; now: number
     <section className="credits-balance" aria-label="היתרה שלך">
       <p className="credits-balance-label">יש לך עכשיו</p>
       <p className="credits-balance-total">
-        <Zap size={30} aria-hidden="true" />
+        <span className="credits-balance-icon" aria-hidden="true">
+          <Zap size={24} />
+        </span>
         <b translate="no">{total.toLocaleString("he-IL")}</b>
         <span>קרדיטים</span>
       </p>
@@ -209,7 +213,9 @@ function GuestCard({
       )}
       <p className="credits-balance-label">מתחברים ומקבלים</p>
       <p className="credits-balance-total">
-        <Zap size={30} aria-hidden="true" />
+        <span className="credits-balance-icon" aria-hidden="true">
+          <Zap size={24} />
+        </span>
         <b translate="no">{rules.daily}</b>
         <span>קרדיטים בכל יום</span>
       </p>
@@ -307,17 +313,23 @@ function FriendsCard({ status, rules }: { status: CreditStatus; rules: CreditRul
       </header>
       <div className="credits-figures">
         <div>
-          <MousePointerClick size={17} aria-hidden="true" />
+          <span className="credits-figure-icon" aria-hidden="true">
+            <MousePointerClick size={17} />
+          </span>
           <b>{status.visits.toLocaleString("he-IL")}</b>
           <span>נכנסו לקישור</span>
         </div>
         <div>
-          <UserPlus size={17} aria-hidden="true" />
+          <span className="credits-figure-icon" aria-hidden="true">
+            <UserPlus size={17} />
+          </span>
           <b>{status.friends.toLocaleString("he-IL")}</b>
           <span>הצטרפו דרכו</span>
         </div>
         <div>
-          <Gift size={17} aria-hidden="true" />
+          <span className="credits-figure-icon" aria-hidden="true">
+            <Gift size={17} />
+          </span>
           <b>{status.earned.toLocaleString("he-IL")}</b>
           <span>קרדיטים שהרווחת</span>
         </div>
@@ -468,8 +480,13 @@ function HowItWorks({ rules }: { rules: CreditRules }) {
       <ol className="credits-steps">
         {steps.map((step, index) => (
           <li key={step.title} style={{ "--reveal": `${index * 60}ms` } as CSSProperties}>
-            <span className="credits-step-icon">{step.icon}</span>
-            <div>
+            <div className="credits-step-top">
+              <span className="credits-step-num" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="credits-step-icon">{step.icon}</span>
+            </div>
+            <div className="credits-step-body">
               <b>{step.title}</b>
               <p>
                 {step.text.map((line) => (
@@ -521,7 +538,10 @@ function PriceList({ rules, onOpen }: { rules: CreditRules; onOpen: (route: stri
                     <small>{label.unit}</small>
                   </th>
                   <td className="credits-price">
-                    {rules.prices[key] > 0 ? creditsLabel(rules.prices[key]) : "חינם"}
+                    <span className="credits-price-badge">
+                      <Zap size={13} aria-hidden="true" />
+                      {rules.prices[key] > 0 ? creditsLabel(rules.prices[key]) : "חינם"}
+                    </span>
                   </td>
                   <td>
                     <span className="credits-tool-links">
@@ -531,6 +551,7 @@ function PriceList({ rules, onOpen }: { rules: CreditRules; onOpen: (route: stri
                         tools.map((tool) => (
                           <button key={tool.id} type="button" className="link-button" onClick={() => onOpen(tool.id)}>
                             {tool.title}
+                            <ArrowLeft size={13} aria-hidden="true" />
                           </button>
                         ))
                       )}
@@ -545,7 +566,9 @@ function PriceList({ rules, onOpen }: { rules: CreditRules; onOpen: (route: stri
                 <small>תווים, צלצולים, מטרונום, טיונר, פסנתר, אקורדים, מכונת תופים ועוד</small>
               </th>
               <td className="credits-price is-free">
-                <InfinityIcon size={16} aria-hidden="true" /> חינם
+                <span className="credits-price-badge">
+                  <InfinityIcon size={15} aria-hidden="true" /> חינם
+                </span>
               </td>
               <td>
                 <span className="credits-muted">בלי הגבלה ובלי חשבון</span>
@@ -641,7 +664,12 @@ function Questions({ rules }: { rules: CreditRules }) {
       <div className="credits-faq-list">
         {items.map((item) => (
           <details key={item.q}>
-            <summary>{item.q}</summary>
+            <summary>
+              <span>{item.q}</span>
+              <span className="credits-faq-chevron" aria-hidden="true">
+                <ChevronDown size={16} />
+              </span>
+            </summary>
             <p>{item.a}</p>
           </details>
         ))}

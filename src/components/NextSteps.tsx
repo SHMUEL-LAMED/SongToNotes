@@ -33,7 +33,13 @@ function RelatedTools({ next, onOpen }: { next: ToolDefinition[]; onOpen: (id: s
   return (
     <section className="next-steps" aria-labelledby="next-steps-title">
       <div className="next-steps-head">
-        <h2 id="next-steps-title">ממשיכים מכאן</h2>
+        <div className="next-steps-heading">
+          <span className="next-steps-eyebrow">
+            <span className="next-steps-eyebrow-dot" aria-hidden="true" />
+            השלב הבא
+          </span>
+          <h2 id="next-steps-title">ממשיכים מכאן</h2>
+        </div>
         <button type="button" className="ghost-button" onClick={() => onOpen("home")}>
           כל הכלים <ArrowLeft size={14} />
         </button>

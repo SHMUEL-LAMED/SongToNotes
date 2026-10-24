@@ -1,5 +1,5 @@
 import { Check, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
 import { FEEDBACK_KINDS, FEEDBACK_MAX, sendFeedback, type FeedbackKind } from "../lib/feedback";
 
@@ -53,7 +53,9 @@ function FeedbackSheet({ page, onClose }: { page: string; onClose: () => void })
         <button ref={closeRef} type="button" className="icon-button dialog-close" onClick={onClose} aria-label="סגירה">
           <X size={17} />
         </button>
-        <h2 id="feedback-title">משוב והצעות</h2>
+        <h2 id="feedback-title">
+          <span className="gradient-text">משוב</span> והצעות
+        </h2>
         {state === "sent" ? (
           <div className="feedback-sent" role="status">
             <span className="feedback-sent-mark">
@@ -67,7 +69,13 @@ function FeedbackSheet({ page, onClose }: { page: string; onClose: () => void })
         ) : (
           <form className="feedback-form" onSubmit={send}>
             <p>משהו לא עובד? יש רעיון לשיפור? ההודעה מגיעה ישר למי שבונה את האתר.</p>
-            <div className="segmented-control" role="group" aria-label="סוג ההודעה">
+            <div
+              className="segmented-control dialog-modes"
+              role="group"
+              aria-label="סוג ההודעה"
+              style={{ "--mode-index": FEEDBACK_KINDS.findIndex((item) => item.id === kind), "--mode-count": FEEDBACK_KINDS.length } as CSSProperties}
+            >
+              <span className="dialog-modes-thumb" aria-hidden="true" />
               {FEEDBACK_KINDS.map((item) => (
                 <button key={item.id} type="button" className={kind === item.id ? "active" : ""} aria-pressed={kind === item.id} onClick={() => setKind(item.id)}>
                   {item.label}

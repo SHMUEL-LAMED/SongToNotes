@@ -38,13 +38,15 @@ export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () 
         <button ref={closeRef} type="button" className="icon-button dialog-close" onClick={onClose} aria-label="סגירה">
           <X size={17} />
         </button>
-        <h2 id="shortcuts-title">קיצורי מקלדת</h2>
+        <h2 id="shortcuts-title">
+          קיצורי <span className="gradient-text">מקלדת</span>
+        </h2>
         <p>למי שמעדיף לא לעזוב את המקלדת.</p>
         <ul className="shortcut-list">
           {SHORTCUTS.map((item) => (
             <li key={item.label}>
-              <span>{item.label}</span>
-              <span>
+              <span className="shortcut-label">{item.label}</span>
+              <span className="shortcut-keys">
                 {item.keys.map((key, index) =>
                   key === "…" ? <span key={index}>…</span> : <kbd key={index}>{key}</kbd>,
                 )}
