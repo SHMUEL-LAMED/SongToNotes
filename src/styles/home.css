@@ -765,6 +765,7 @@
 /* Laid out by its own width, not the screen's: beside the sidebar a wide
    screen can leave it as narrow as a tablet's. */
 .aura-dock {
+  position: relative;
   container: dock / inline-size;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -774,6 +775,16 @@
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
   box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
+}
+/* The brand's colours, lit along its top edge, as each zone's own are along its. */
+.aura-dock::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  inset-inline: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--beam-a), var(--beam-b), transparent);
+  pointer-events: none;
 }
 .aura-dock.is-split { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 .aura-dock-pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px 20px; }
@@ -794,7 +805,18 @@
 /* Focus lands on it when the history is cleared (see Dock). */
 .aura-dock-head h2:focus { outline-offset: 4px; }
 .aura-dock-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; text-wrap: pretty; }
-.aura-dock-head .ghost-button { flex: none; min-height: 36px; font-size: 12.5px; }
+/* Its links as glass pills, in the top bar's language. */
+.aura-dock-head .ghost-button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-pill);
+  background: var(--tile);
+  font-size: 12.5px;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.aura-dock-head .ghost-button:hover { border-color: var(--line-strong); background: var(--tile); color: var(--text); transform: translateY(-1px); box-shadow: var(--tile-shadow); }
 
 /* The tool opened last: a card of its own, in its colour. */
 .aura-last {
@@ -932,7 +954,9 @@
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
   box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
 }
-.aura .aura-search { flex: 1 1 260px; height: 48px; border-radius: 17px; border-color: var(--glass-line); background: var(--tile); box-shadow: none; }
+.aura .aura-search { flex: 1 1 260px; height: 48px; border-radius: 17px; border-color: var(--glass-line); background: var(--tile); box-shadow: inset 0 1px 0 var(--glass-rim); }
+.aura .aura-search > svg { flex: none; transition: color 0.2s var(--ease); }
+.aura .aura-search:focus-within > svg { color: var(--accent); }
 /* The shared field's focus ring, which the line above would otherwise outweigh. */
 .aura .aura-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
 
@@ -981,9 +1005,10 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 0.25s var(--ease);
+  transition: color 0.25s var(--ease), background 0.2s var(--ease);
 }
 .aura-switch button:hover { color: var(--text); }
+.aura-switch button:hover:not(.active) { background: var(--surface-hover); }
 .aura-switch button.active { color: #fff; font-weight: 700; }
 .aura-switch button:focus-visible { outline-offset: -2px; }
 .aura-switch-count {
@@ -1762,38 +1787,125 @@
   border-top: 0;
 }
 
-/* ---- what comes next, at the foot of a tool ---- */
+/* ---- what comes next, at the foot of a tool ----
+   The how-to video, the tools that usually follow and the site's footer
+   read as one calm ending: a line in the tool's colour, fading out at its
+   ends, opens the foot, and from there only space separates the parts. */
 
-.tool-video {
+.tool-video,
+.next-steps {
+  position: relative;
+  isolation: isolate;
   width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
-  margin: 48px auto 0;
-  padding-top: 22px;
-  border-top: 1px solid var(--line);
+  margin: 56px auto 0;
+  padding-top: 28px;
+  background: linear-gradient(90deg, transparent, oklch(0.7 0.17 var(--accent-hue) / 0.45) 25%, oklch(0.7 0.17 var(--accent-hue) / 0.45) 75%, transparent) top / 100% 1px no-repeat;
 }
-.tool-video-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.tool-video-head > span:last-child { display: flex; flex-direction: column; min-width: 0; }
-.tool-video-head h2 { margin: 0; font-size: 18px; }
+/* Under the video the next steps follow on, with no line of their own. */
+.tool-video + .next-steps { margin-top: 44px; padding-top: 0; background: none; }
+
+/* The heads: a glowing tile or a lit eyebrow, and the title beside it. */
+.tool-video-head,
+.next-steps-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.next-steps-head { justify-content: space-between; }
+.tool-video-head > span:last-child,
+.next-steps-heading { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tool-video-head h2,
+.next-steps-head h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
 .tool-video-head small { font-size: 12.5px; color: var(--text-muted); }
-.tool-video-icon {
+/* The tool's name in its own colour. */
+.tool-video-name {
+  font-weight: inherit;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tool-video-icon,
+.next-step-icon {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--on-accent);
   background: var(--accent-grad);
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--accent) 13%, transparent),
+    0 10px 24px -8px oklch(0.6 0.2 var(--accent-hue) / 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
+.next-steps-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.next-steps-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent), 0 0 12px oklch(0.7 0.2 var(--accent-hue) / 0.7);
+}
+/* "All the tools": a glass pill, in the top bar's language. */
+.next-steps-head .ghost-button {
+  flex: none;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.next-steps-head .ghost-button:hover {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
+}
+.next-steps-head .ghost-button svg { color: var(--accent); transition: transform 0.2s var(--ease); }
+.next-steps-head .ghost-button:hover svg { transform: translateX(-3px); }
+
 /* The recording is the site itself, so it gets the column's full width —
-   smaller, its text is too small to read. */
+   smaller, its text is too small to read. A pool of the tool's colour
+   glows behind it. */
+.tool-video::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 60px 4% -30px;
+  background: radial-gradient(60% 60% at 50% 55%, oklch(0.62 0.2 var(--accent-hue) / 0.2), transparent 70%);
+  pointer-events: none;
+}
 .tool-video-frame {
   position: relative;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   overflow: hidden;
   background: var(--surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 34px 90px -34px oklch(0.6 0.22 var(--accent-hue) / 0.7);
+}
+/* Its lit top edge, over the still and the overlay alike. */
+.tool-video-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(0.82 0.14 var(--accent-hue) / 0.8), transparent);
+  pointer-events: none;
 }
 .tool-video-frame video {
   display: block;
@@ -1810,69 +1922,117 @@
   place-items: center;
   padding: 0;
   border: 0;
-  background: linear-gradient(180deg, rgba(10, 8, 20, 0.04), rgba(10, 8, 20, 0.28));
+  background:
+    radial-gradient(36% 46% at 50% 50%, oklch(0.6 0.2 var(--accent-hue) / 0.3), transparent 70%),
+    linear-gradient(180deg, rgba(10, 8, 20, 0.04), rgba(10, 8, 20, 0.34));
   cursor: pointer;
 }
 .tool-video-play-mark {
-  width: 76px;
-  height: 76px;
+  position: relative;
+  width: 84px;
+  height: 84px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   color: var(--on-accent);
   background: var(--accent-grad);
-  box-shadow: 0 0 0 10px var(--accent-ring), var(--shadow-lg);
-  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  box-shadow:
+    0 0 0 10px var(--accent-ring),
+    0 22px 50px -14px oklch(0.55 0.22 var(--accent-hue) / 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease);
+}
+/* A ring of light breathing out of the mark: the still is something that plays. */
+.tool-video-play-mark::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1.5px solid oklch(0.85 0.14 var(--accent-hue) / 0.7);
+  opacity: 0;
+  animation: video-ring 2.8s var(--ease) infinite;
+  pointer-events: none;
+}
+@keyframes video-ring {
+  0% { transform: scale(0.92); opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 /* The triangle points right on a Hebrew page too — it is the play mark, not an arrow. */
-.tool-video-play-mark svg { transform: translateX(2px); }
+.tool-video-play-mark svg { position: relative; transform: translateX(2px); }
 .tool-video-play:hover .tool-video-play-mark,
-.tool-video-play:focus-visible .tool-video-play-mark { transform: scale(1.07); box-shadow: 0 0 0 14px var(--accent-ring), var(--shadow-lg); }
+.tool-video-play:focus-visible .tool-video-play-mark {
+  transform: scale(1.07);
+  box-shadow:
+    0 0 0 14px var(--accent-ring),
+    0 26px 56px -14px oklch(0.55 0.22 var(--accent-hue) / 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
 .tool-video-play:focus-visible { outline-offset: -4px; }
-@media (max-width: 560px) {
-  .tool-video-frame { border-radius: var(--radius); }
-  .tool-video-play-mark { width: 60px; height: 60px; }
-}
 
-.next-steps {
-  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
-  margin: 48px auto 0;
-  padding-top: 22px;
-  border-top: 1px solid var(--line);
-}
-.next-steps-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.next-steps-head h2 { margin: 0; font-size: 18px; }
-.next-steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+/* The tools that come next: each card lit along its top in its own tool's colour. */
+.next-steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .next-step {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   padding: 12px;
-  border-radius: var(--radius);
+  padding-inline-end: 14px;
+  border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(120% 100% at 100% 0%, var(--accent-tint), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow-xs), var(--inner-highlight);
+  color: var(--text);
   text-align: start;
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+  transition: border-color 0.22s var(--ease), transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
-.next-step:hover { border-color: var(--accent-line); transform: translateY(-2px); }
-.next-step-icon {
+.next-step:hover,
+.next-step:focus-visible {
+  border-color: var(--accent-line);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-xs), 0 20px 44px -24px oklch(0.6 0.2 var(--accent-hue) / 0.6), var(--inner-highlight);
+}
+.next-step-icon { transition: transform 0.3s var(--ease-spring); }
+.next-step:hover .next-step-icon { transform: scale(1.06); }
+.next-step-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.next-step-text b { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
+.next-step-text small { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The arrow in a small disc, lit in the tool's colour when the card is. */
+.next-step-go {
   flex: none;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: var(--on-accent);
-  background: var(--accent-grad);
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  transition: transform 0.22s var(--ease), background 0.22s var(--ease), color 0.22s var(--ease);
 }
-.next-step-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.next-step-text b { font-size: 14.5px; }
-.next-step-text small { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.next-step-go { color: var(--text-muted); transition: transform 0.2s var(--ease); }
-.next-step:hover .next-step-go { transform: translateX(-3px); color: var(--accent-text); }
+.next-step:hover .next-step-go { transform: translateX(-3px); background: var(--accent-soft); color: var(--accent-text); }
 
-.tool-page .site-footer { margin-top: 32px; }
+/* The site's footer closes the page under the same kind of line, in the page's grey. */
+.tool-page .site-footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top-color: transparent;
+  background: linear-gradient(90deg, transparent, var(--line-strong) 25%, var(--line-strong) 75%, transparent) top / 100% 1px no-repeat;
+}
+
+@media (max-width: 560px) {
+  .tool-video,
+  .next-steps { margin-top: 44px; padding-top: 22px; }
+  .tool-video + .next-steps { margin-top: 34px; }
+  .tool-video-frame { border-radius: var(--radius); }
+  .tool-video-play-mark { width: 66px; height: 66px; }
+  .tool-page .site-footer { margin-top: 48px; }
+}
 
 @media (max-width: 960px) {
   .hub-hero { grid-template-columns: 1fr; min-height: 0; }
@@ -1973,4 +2133,13 @@
   .aura-eyebrow-dot::after,
   .aura-flow-steps::after,
   .staff-playhead { display: none; }
+
+  /* The foot of a tool page: the play mark's ring rests, and its hover states change at once. */
+  .tool-video-play-mark::before { animation: none; }
+  .next-step,
+  .next-step-icon,
+  .next-step-go,
+  .next-steps-head .ghost-button,
+  .next-steps-head .ghost-button svg,
+  .tool-video-play-mark { transition: none; }
 }

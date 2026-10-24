@@ -1,4 +1,103 @@
-/* ---- a page that did not load, or broke: what happened, and two ways on, side by side ---- */
+/* ==========================================================================
+   A page that did not load, or broke: a calm glass card in the middle of the
+   page that says what happened, with the two ways on side by side. The mark
+   glows in the page's colour, so even the failure looks like the site. The
+   card's bones are .site-closed (shell.css); only the error's own look is here.
+   ========================================================================== */
 
-.site-closed.is-error .tool-inline-actions { justify-content: center; }
-.site-closed.is-error .primary-button { width: auto; }
+.site-closed.is-error {
+  position: relative;
+  isolation: isolate;
+  gap: 8px;
+  padding: 44px 32px 36px;
+  border-color: var(--line-strong);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.75 0.18 var(--accent-hue) / 0.65), transparent) top / 100% 1px no-repeat,
+    radial-gradient(80% 60% at 100% 0%, oklch(0.7 0.2 var(--accent-hue) / 0.14), transparent 62%),
+    radial-gradient(70% 55% at 0% 100%, oklch(0.7 0.2 calc(var(--accent-hue) + 50) / 0.1), transparent 62%),
+    color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: var(--shadow-lg), 0 30px 80px -40px oklch(0.6 0.22 var(--accent-hue) / 0.55);
+}
+
+/* The mark: a gradient tile with a halo that breathes around it. */
+.site-closed.is-error .brand-mark {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  box-shadow:
+    0 0 0 6px oklch(0.77 0.15 var(--accent-hue) / 0.14),
+    0 16px 40px -8px oklch(0.62 0.22 var(--accent-hue) / 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.site-closed.is-error .brand-mark svg { width: 26px; height: 26px; }
+.site-closed.is-error .brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 26px;
+  border: 1px solid oklch(0.7 0.2 var(--accent-hue) / 0.45);
+  animation: page-error-halo 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes page-error-halo {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 0.15; transform: scale(1.14); }
+}
+
+.site-closed.is-error h1 {
+  margin: 12px 0 0;
+  width: fit-content;
+  font-size: clamp(22px, 3vw, 27px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  background: linear-gradient(100deg, var(--text) 35%, color-mix(in srgb, var(--accent) 70%, var(--text)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.site-closed.is-error p { margin: 0 0 14px; font-size: 15px; }
+
+/* The two ways on, side by side, as pills; the way forward in the page's colour. */
+.site-closed.is-error .tool-inline-actions { justify-content: center; gap: 10px; width: 100%; }
+.site-closed.is-error .primary-button,
+.site-closed.is-error .secondary-button {
+  width: auto;
+  flex: 0 1 auto;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  font-size: 14.5px;
+}
+.site-closed.is-error .primary-button {
+  gap: 8px;
+  background: var(--accent-grad);
+  box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.site-closed.is-error .secondary-button {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  box-shadow: none;
+}
+
+/* Outside the shell, the whole screen is the card's stage: a soft glow behind it. */
+.auth-screen:has(> .site-closed.is-error) {
+  padding: 20px;
+  background:
+    radial-gradient(60% 50% at 80% 0%, oklch(0.62 0.2 var(--accent-hue) / 0.16), transparent 70%),
+    radial-gradient(50% 45% at 10% 100%, oklch(0.62 0.2 calc(var(--accent-hue) + 50) / 0.12), transparent 70%),
+    var(--bg);
+}
+
+@media (max-width: 480px) {
+  .site-closed.is-error { padding: 36px 20px 28px; }
+  .site-closed.is-error .primary-button,
+  .site-closed.is-error .secondary-button { flex: 1 1 auto; padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-closed.is-error .brand-mark::after { animation: none; }
+}

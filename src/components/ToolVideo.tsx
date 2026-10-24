@@ -34,7 +34,9 @@ export function ToolVideo({ tool }: { tool: ToolDefinition }) {
           <PlayCircle size={18} aria-hidden="true" />
         </span>
         <span>
-          <h2 id="tool-video-title">איך משתמשים ב{tool.title}</h2>
+          <h2 id="tool-video-title">
+            איך משתמשים ב<b className="tool-video-name">{tool.title}</b>
+          </h2>
           <small>מדריך קצר בווידאו, פחות מדקה</small>
         </span>
       </div>

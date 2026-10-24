@@ -34,7 +34,9 @@ import {
   useCallback,
   useEffect,
   Fragment,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -1830,6 +1832,28 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     setTab("tools");
   }, []);
 
+  // The pill under the chosen tab is measured rather than computed: the tabs
+  // are as wide as their words, and the strip scrolls on a phone. It follows
+  // the tab when the words change width — the count beside "משוב" — too.
+  const tabsRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const strip = tabsRef.current;
+    if (!strip) return;
+    const place = () => {
+      const active = strip.querySelector<HTMLElement>(".admin-tab.active");
+      if (!active) return;
+      strip.style.setProperty("--thumb-x", `${active.offsetLeft}px`);
+      strip.style.setProperty("--thumb-w", `${active.offsetWidth}px`);
+      strip.dataset.thumb = "on";
+    };
+    place();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(place);
+    observer.observe(strip);
+    for (const button of strip.querySelectorAll<HTMLElement>(".admin-tab")) observer.observe(button);
+    return () => observer.disconnect();
+  }, [tab, allowed]);
+
   if (!allowed) {
     return (
       <div className="admin-page admin-locked">
@@ -1920,7 +1944,8 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
         </p>
       )}
 
-      <nav className="admin-tabs" role="tablist" aria-label="חלקי אזור הניהול">
+      <nav ref={tabsRef} className="admin-tabs has-thumb" role="tablist" aria-label="חלקי אזור הניהול">
+        <span className="admin-tabs-thumb" aria-hidden="true" />
         {TABS.map((item) => {
           const Icon = item.icon;
           return (

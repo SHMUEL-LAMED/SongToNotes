@@ -1,4 +1,4 @@
-import { Check, Copy, Heart, Mail, Share2, X, Zap } from "lucide-react";
+import { Check, Copy, Heart, Link2, Mail, Share2, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { referralLink } from "../lib/credits";
 import { useCredits } from "../lib/creditsContext";
@@ -176,7 +176,9 @@ function ShareSheet({ onClose, onOpenCredits }: { onClose: () => void; onOpenCre
         <button ref={closeRef} type="button" className="icon-button dialog-close" onClick={onClose} aria-label="סגירה">
           <X size={17} />
         </button>
-        <h2 id="share-site-title">שיתוף האתר</h2>
+        <h2 id="share-site-title">
+          שיתוף <span className="gradient-text">האתר</span>
+        </h2>
         <p>כל הכלים כאן חינמיים ורצים בדפדפן. שלחו את הקישור למי שמנגן, שר או מלמד מוזיקה.</p>
         {personal ? (
           <p className="share-site-credits">
@@ -219,6 +221,7 @@ function ShareSheet({ onClose, onOpenCredits }: { onClose: () => void; onOpenCre
         <ShareTargetButtons url={url} text={text} title={title} onShared={onClose} />
 
         <div className="share-site-link">
+          <Link2 size={16} aria-hidden="true" />
           <input
             ref={linkRef}
             className="field"

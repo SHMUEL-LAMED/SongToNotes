@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { currentOffer, sendOffer } from "../lib/currentFile";
 import { familyOf, findTool } from "../lib/tools";
 import "../styles/tool-tabs.css";
@@ -13,8 +13,28 @@ import "../styles/tool-tabs.css";
  */
 export function ToolTabs({ current }: { current: string }) {
   const [moving, setMoving] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+  // Where the pill under the chosen tab sits, measured rather than computed:
+  // the tabs are not all the same width, and on a phone the strip scrolls.
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
   const family = familyOf(current);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => {
+      const active = nav.querySelector<HTMLElement>(".tool-tab.is-active");
+      setThumb(active ? { x: active.offsetLeft, w: active.offsetWidth } : null);
+    };
+    measure();
+    // Fonts arriving and the window changing width both move the tabs.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(nav);
+    return () => observer?.disconnect();
+  }, [current]);
+
   if (!family) return null;
+  const currentTool = findTool(current);
 
   const open = (id: string) => {
     if (id === current || moving) return;
@@ -30,8 +50,16 @@ export function ToolTabs({ current }: { current: string }) {
     window.location.assign(`#/${id}`);
   };
 
+  const navStyle = {
+    "--accent-hue": currentTool?.hue,
+    "--tab-x": thumb ? `${thumb.x}px` : undefined,
+    "--tab-w": thumb ? `${thumb.w}px` : undefined,
+    "--tab-ready": thumb ? 1 : 0,
+  } as CSSProperties;
+
   return (
-    <nav className="tool-tabs" aria-label="חלקי הכלי">
+    <nav ref={navRef} className={`tool-tabs ${thumb ? "has-thumb" : ""}`} aria-label="חלקי הכלי" style={navStyle}>
+      <span className="tool-tabs-thumb" aria-hidden="true" />
       {family.tabs.map((tab) => {
         const tool = findTool(tab.id);
         if (!tool) return null;

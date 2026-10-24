@@ -103,7 +103,9 @@ function SignInSheet({ onClose }: { onClose: () => void }) {
         <span className="sign-in-badge" aria-hidden="true">
           <GoogleMark size={26} />
         </span>
-        <h2 id="sign-in-title">מתחברים עם Google?</h2>
+        <h2 id="sign-in-title">
+          <span className="gradient-text">מתחברים</span> עם Google?
+        </h2>
         <p>ההתחברות חינמית ולוקחת שתי שניות — בלי סיסמה ובלי הרשמה למלא.</p>
 
         <ul className="sign-in-perks">

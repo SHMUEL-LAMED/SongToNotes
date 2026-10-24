@@ -93,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <h1>{updating ? words.updatingTitle : missing ? words.missingTitle : words.crashTitle}</h1>
         <p>{updating ? words.updatingText : missing ? words.missingText : whole ? words.crashTextWhole : words.crashText}</p>
         {!updating && (
-          <div className="tool-inline-actions">
+          <div className="tool-inline-actions site-closed-actions">
             <button type="button" className="primary-button" onClick={() => window.location.reload()}>
               <RefreshCw size={16} /> {words.reload}
             </button>

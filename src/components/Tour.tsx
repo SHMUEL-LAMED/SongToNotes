@@ -30,6 +30,16 @@ function findTarget(selector: string | undefined): HTMLElement | null {
   return null;
 }
 
+/**
+ * The page's colour, read off the shell: a tool sets its hue there, and the
+ * tour — which sits on the body, outside the shell — wears the same one.
+ */
+function pageHue(): string {
+  const shell = document.querySelector<HTMLElement>(".app");
+  const hue = shell ? getComputedStyle(shell).getPropertyValue("--accent-hue").trim() : "";
+  return hue || "292";
+}
+
 function boxOf(element: HTMLElement): Box {
   const rect = element.getBoundingClientRect();
   return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
@@ -54,6 +64,7 @@ export function Tour({ steps: given, onClose }: { steps: TourStep[]; onClose: ()
   const [box, setBox] = useState<Box | null>(null);
   const [bubble, setBubble] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [view, setView] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [hue] = useState(pageHue);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const step = steps[index];
@@ -186,9 +197,10 @@ export function Tour({ steps: given, onClose }: { steps: TourStep[]; onClose: ()
   const arrow = hole ? Math.min(Math.max(hole.left + hole.width / 2 - left, 22), bubble.width - 22) : 0;
 
   // On the body, so nothing in the page column — its clipping, its stacking —
-  // can hold the dimming in.
+  // can hold the dimming in. The page's hue comes along, so the ring and the
+  // bubble are drawn in the tool's colour.
   return createPortal(
-    <div className="tour" data-placement={placement}>
+    <div className="tour" data-placement={placement} style={{ "--accent-hue": hue } as CSSProperties}>
       {/* Clicks on the dimmed page go nowhere: the tour is left with its own buttons or Esc. */}
       <div className="tour-shield" aria-hidden="true" />
       {/* The dimming, with the lit part cut out of it by a mask; a shadow
