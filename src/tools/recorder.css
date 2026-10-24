@@ -15,15 +15,21 @@
   flex-wrap: wrap;
   gap: 16px 18px;
   padding: 16px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: var(--surface-2);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.7 0.16 var(--accent-hue) / 0.5), transparent) top / 100% 1px no-repeat,
+    radial-gradient(60% 140% at 100% 50%, color-mix(in srgb, var(--danger) 10%, transparent), transparent 65%),
+    var(--surface-2);
+  box-shadow: var(--inner-highlight);
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
 .recorder-stage.is-countin,
 .recorder-stage.is-recording {
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
-  background: var(--danger-soft);
+  background:
+    radial-gradient(60% 140% at 100% 50%, color-mix(in srgb, var(--danger) 22%, transparent), transparent 70%),
+    var(--danger-soft);
 }
 
 .recorder-record {
@@ -35,8 +41,8 @@
   border: 0;
   border-radius: 50%;
   color: #fff;
-  background: var(--danger);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--danger) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--danger) 70%, white), var(--danger) 70%);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 12%, transparent), 0 8px 22px color-mix(in srgb, var(--danger) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   cursor: pointer;
   transition: transform 0.18s var(--ease), filter 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
@@ -84,6 +90,7 @@
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+  letter-spacing: -0.02em;
   text-align: start;
 }
 .recorder-clock small { font-size: 0.5em; font-weight: 600; color: var(--text-muted); }
@@ -93,7 +100,7 @@
 .recorder-meter {
   flex: 1 1 100%;
   height: 8px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -142,10 +149,13 @@
   border-radius: var(--radius);
   border: 1px solid var(--line);
   border-inline-start: 4px solid var(--track-color);
-  background: var(--surface);
+  background:
+    radial-gradient(50% 120% at 100% 0%, color-mix(in srgb, var(--track-color) 9%, transparent), transparent 70%),
+    var(--surface);
   box-shadow: var(--shadow-xs);
-  transition: opacity 0.18s var(--ease);
+  transition: opacity 0.18s var(--ease), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
 }
+.recorder-track:hover { box-shadow: var(--shadow-sm); border-color: var(--line-strong); border-inline-start-color: var(--track-color); }
 :root[data-theme="dark"] .recorder-track { --track-color: oklch(0.76 0.13 var(--track-hue)); }
 .recorder-track.is-silent { opacity: 0.55; }
 
@@ -242,11 +252,12 @@
   align-items: flex-start;
   gap: 12px;
   padding: 18px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   border: 1.5px dashed var(--line-strong);
+  background: radial-gradient(70% 120% at 100% 0%, var(--accent-tint), transparent 70%);
   color: var(--text-muted);
 }
-.recorder-empty svg { flex: none; color: var(--accent); margin-top: 2px; }
+.recorder-empty svg { flex: none; box-sizing: content-box; padding: 8px; border-radius: var(--radius-sm); color: var(--on-accent); background: var(--accent-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); margin-top: -4px; }
 .recorder-empty p { margin: 0; font-size: 14px; line-height: 1.65; }
 
 /* ---- settings ---- */
@@ -270,4 +281,7 @@
 @media (prefers-reduced-motion: reduce) {
   .recorder-record.is-live,
   .recorder-dot { animation: none; }
+  .recorder-stage,
+  .recorder-track,
+  .recorder-record { transition: none; }
 }

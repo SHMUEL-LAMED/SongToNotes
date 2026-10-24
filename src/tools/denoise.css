@@ -39,8 +39,11 @@
   padding: 6px 12px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--accent-line);
-  background: var(--accent-tint);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.7 0.16 var(--accent-hue) / 0.5), transparent) top / 100% 1px no-repeat,
+    var(--accent-tint);
   color: var(--accent-text);
+  box-shadow: var(--shadow-xs);
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
