@@ -7,6 +7,7 @@
 .visualizer-region.is-locked { opacity: 0.6; pointer-events: none; }
 .visualizer-region-head {
   display: flex;
+  letter-spacing: -0.01em;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
@@ -38,8 +39,12 @@
   place-items: center;
   padding: 12px;
   border-radius: var(--radius-lg);
-  background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 22px 22px;
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(70% 60% at 50% 40%, oklch(0.65 0.18 var(--accent-hue) / 0.18), transparent 72%),
+    repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 22px 22px;
   border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm), var(--inner-highlight);
   min-width: 0;
 }
 
@@ -54,7 +59,7 @@
   max-height: min(66vh, 620px);
   border-radius: var(--radius-sm);
   background: #07070b;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 18px 40px -20px oklch(0.6 0.2 var(--accent-hue) / 0.55);
 }
 
 .visualizer-stage-bar {
@@ -176,14 +181,27 @@ input.visualizer-hue[type="range"]::-webkit-slider-thumb { margin-top: -7px; }
   padding: 8px 6px 7px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
   color: var(--text);
   font: inherit;
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  box-shadow: var(--inner-highlight);
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease-spring), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
 }
-.visualizer-preset:hover { transform: translateY(-2px); border-color: var(--accent-line); }
-.visualizer-preset.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.visualizer-preset:hover { transform: translateY(-2px); border-color: var(--accent-line); box-shadow: 0 10px 22px -12px oklch(0.6 0.2 var(--accent-hue) / 0.5), var(--inner-highlight); }
+.visualizer-preset.active {
+  border-color: var(--accent);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.75 0.18 var(--accent-hue) / 0.7), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 80% at 50% 0%, oklch(0.7 0.18 var(--accent-hue) / 0.18), transparent 70%),
+    var(--surface-2);
+  box-shadow: 0 0 0 3px var(--accent-ring), var(--inner-highlight);
+}
+.visualizer-preset.active b { color: var(--accent-text); }
+@media (prefers-reduced-motion: reduce) {
+  .visualizer-preset { transition: none; }
+  .visualizer-preset:hover { transform: none; }
+}
 .visualizer-preset b { font-size: 12.5px; font-weight: 700; }
 .visualizer-preset small { font-size: 10.5px; color: var(--text-muted); }
 /* Every thumbnail stands on the same height, so their shapes read at a glance. */
