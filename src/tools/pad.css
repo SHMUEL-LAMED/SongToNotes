@@ -1,1 +1,108 @@
-.pad-tool{max-width:900px;margin:0 auto;padding:20px}.pad-actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.pad-actions button{display:inline-flex;align-items:center;gap:7px}.pad-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px;border-radius:24px;background:linear-gradient(135deg,#15152b,#24244b);box-shadow:0 18px 45px #10101e55}.pad{min-height:125px;border:0;border-radius:16px;background:linear-gradient(145deg,color-mix(in srgb,var(--pad-color) 90%,white),var(--pad-color));color:#fff;text-shadow:0 2px 3px #0008;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;box-shadow:inset 0 2px 0 #fff6,0 7px 0 color-mix(in srgb,var(--pad-color) 60%,#000);transition:transform .08s,filter .08s}.pad:hover{filter:brightness(1.12)}.pad:focus-visible{outline:3px solid #fff;outline-offset:3px}.pad:active,.pad.is-active{transform:translateY(6px);box-shadow:inset 0 2px 0 #fff6,0 1px 0 color-mix(in srgb,var(--pad-color) 60%,#000);filter:brightness(1.3)}.pad strong{font-size:18px}.pad kbd{font:600 13px monospace;padding:3px 8px;border-radius:6px;background:#0003}.pad-recording{display:flex;align-items:center;gap:8px;color:#d6455d}.pad-recording span{width:9px;height:9px;background:#e63956;border-radius:50%;animation:pad-pulse 1s infinite}@keyframes pad-pulse{50%{opacity:.25}}.pad-help{color:var(--text-muted);text-align:center}@media(max-width:600px){.pad-tool{padding:12px}.pad-grid{gap:8px;padding:10px}.pad{min-height:90px;border-radius:11px}.pad strong{font-size:14px}.pad kbd{font-size:11px}}
+/* ==========================================================================
+   DJ pads
+   A glowing pad board on a dark stage in both themes: the pads carry their
+   own colours, so the board around them stays night-dark and lets them shine.
+   ========================================================================== */
+
+.pad-tool { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+.pad-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+.pad-actions button { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; }
+
+/* The record button has no class of its own; it is the primary action. */
+.pad-actions > button:not(.secondary-button):not(.midi-button) {
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  font-weight: 700;
+  box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), filter 0.2s var(--ease);
+}
+.pad-actions > button:not(.secondary-button):not(.midi-button):hover { transform: translateY(-2px); filter: brightness(1.05); }
+.pad-actions > button:not(.secondary-button):not(.midi-button):focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
+
+.pad-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 18px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.8 0.14 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(70% 60% at 50% 0%, oklch(0.6 0.2 var(--accent-hue) / 0.28), transparent 70%),
+    radial-gradient(60% 50% at 50% 110%, oklch(0.55 0.2 calc(var(--accent-hue) + 60) / 0.2), transparent 70%),
+    linear-gradient(160deg, #17162a, #0d0c18);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pad {
+  min-height: 125px;
+  border: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--pad-color) 90%, white), var(--pad-color));
+  color: #fff;
+  text-shadow: 0 2px 3px #0008;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 2px 0 #fff6, 0 7px 0 color-mix(in srgb, var(--pad-color) 60%, #000);
+  transition: transform 0.08s, filter 0.08s, box-shadow 0.08s;
+}
+.pad:hover { filter: brightness(1.12); }
+.pad:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.pad:active,
+.pad.is-active {
+  transform: translateY(6px);
+  box-shadow:
+    inset 0 2px 0 #fff6,
+    0 1px 0 color-mix(in srgb, var(--pad-color) 60%, #000),
+    0 0 28px color-mix(in srgb, var(--pad-color) 70%, transparent);
+  filter: brightness(1.3);
+}
+.pad strong { font-size: 18px; letter-spacing: -0.01em; }
+.pad kbd { font: 600 13px var(--font-mono, monospace); padding: 3px 8px; border-radius: 6px; background: #0003; }
+
+.pad-recording {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+}
+.pad-recording span { width: 9px; height: 9px; background: var(--danger); border-radius: 50%; animation: pad-pulse 1s infinite; }
+@keyframes pad-pulse { 50% { opacity: 0.25; } }
+
+.pad-help { color: var(--text-muted); text-align: center; font-size: 13.5px; }
+
+@media (max-width: 600px) {
+  .pad-tool { padding: 12px; }
+  .pad-grid { gap: 8px; padding: 10px; border-radius: var(--radius-lg); }
+  .pad { min-height: 90px; border-radius: 11px; }
+  .pad strong { font-size: 14px; }
+  .pad kbd { font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pad,
+  .pad-actions > button { transition: none; }
+  .pad-actions > button:not(.secondary-button):not(.midi-button):hover { transform: none; }
+  .pad-recording span { animation: none; }
+}

@@ -23,7 +23,10 @@
   padding: 14px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: var(--surface);
+  background:
+    linear-gradient(90deg, transparent, oklch(0.7 0.16 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(80% 120% at 100% 0%, var(--accent-tint), transparent 60%),
+    var(--surface);
   box-shadow: var(--shadow-sm), var(--inner-highlight);
 }
 
@@ -42,15 +45,17 @@
   gap: 8px;
   min-height: 46px;
   padding: 0 18px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--text);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.12s var(--ease);
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
+.drumkit-record:hover,
+.drumkit-play:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-xs); }
 .drumkit-record:active,
 .drumkit-play:active:not(:disabled) { transform: scale(0.97); }
 .drumkit-record svg { color: var(--danger); }
@@ -65,9 +70,10 @@
 @keyframes drumkit-rec {
   50% { box-shadow: 0 0 0 6px var(--danger-soft); }
 }
-.drumkit-play { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: var(--shadow-accent); }
+.drumkit-play { background: var(--accent-grad); border-color: transparent; color: var(--on-accent); box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.drumkit-play:hover:not(:disabled) { box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
 .drumkit-play:hover:not(:disabled) { filter: brightness(1.06); }
-.drumkit-play:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.drumkit-play:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; filter: saturate(0.6); }
 .drumkit-play.is-playing { background: var(--surface-2); color: var(--text); border-color: var(--accent); box-shadow: none; }
 
 .drumkit-tempo {
@@ -75,7 +81,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   background: var(--surface-sunken);
 }
@@ -86,7 +92,7 @@
   min-height: 38px;
   padding: 0 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -110,14 +116,14 @@
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--text-soft);
   cursor: pointer;
 }
 .drumkit-bpm button:hover { background: var(--surface-hover); color: var(--text); }
 .drumkit-bpm span { display: flex; flex-direction: column; align-items: center; min-width: 38px; line-height: 1; }
-.drumkit-bpm b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.drumkit-bpm b { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .drumkit-bpm small { font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 2px; }
 
 .drumkit-edit { display: flex; gap: 6px; margin-inline-start: auto; }
@@ -127,9 +133,10 @@
 .drumkit-loopline {
   position: relative;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
   background: var(--surface-sunken);
   border: 1px solid var(--line);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
   overflow: hidden;
 }
 .drumkit-progress {
@@ -193,9 +200,11 @@
   padding: clamp(10px, 2vw, 22px);
   border-radius: var(--radius-xl);
   background:
+    radial-gradient(70% 55% at 50% 0%, oklch(0.65 0.18 var(--accent-hue) / 0.16), transparent 70%),
     radial-gradient(60% 70% at 50% 62%, rgba(255, 255, 255, 0.08), transparent 70%),
     repeating-linear-gradient(45deg, transparent 0 9px, var(--dk-stage-line) 9px 10px),
     linear-gradient(160deg, var(--dk-stage-1), var(--dk-stage-2));
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
@@ -510,4 +519,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .drumkit-record.is-recording { animation: none; }
+  .drumkit-record,
+  .drumkit-play { transition: none; }
+  .drumkit-record:hover,
+  .drumkit-play:hover:not(:disabled) { transform: none; }
 }

@@ -33,9 +33,11 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(70% 60% at 50% 40%, oklch(0.65 0.18 var(--accent-hue) / 0.16), transparent 72%),
     repeating-conic-gradient(var(--surface-sunken) 0 25%, transparent 0 50%) 0 0 / 22px 22px,
     var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), var(--inner-highlight);
   min-width: 0;
 }
 
@@ -48,7 +50,7 @@
   max-width: 100%;
   max-height: min(70vh, 760px);
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 18px 40px -20px oklch(0.6 0.2 var(--accent-hue) / 0.55);
 }
 .songcard-preview[data-size="post"] .songcard-canvas { max-height: min(62vh, 620px); }
 
@@ -58,6 +60,7 @@
   margin: 0;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
   background: var(--success-soft);
   color: var(--success);
   font-size: 13.5px;
@@ -78,6 +81,7 @@
 .songcard-chip {
   padding: 4px 11px;
   border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-line);
   background: var(--accent-soft);
   color: var(--accent-text);
   font-size: 13px;
