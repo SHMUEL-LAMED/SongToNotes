@@ -414,8 +414,8 @@ export function rememberReferral(code: string, now = Date.now()): PendingReferra
   return next;
 }
 
-export function updatePending(patch: Partial<Omit<PendingReferral, "code" | "at">>) {
-  const current = readPending();
+export function updatePending(patch: Partial<Omit<PendingReferral, "code" | "at">>, now = Date.now()) {
+  const current = readPending(now);
   if (current) writePending({ ...current, ...patch });
 }
 
