@@ -1,32 +1,32 @@
 import type { ReactNode } from "react";
-import { useIdleOffscreen } from "../lib/useIdleOffscreen";
 
 /**
- * The head of a section on the home page: a beam of light falling from the
- * section above onto a small label, then the title. The beams are what tie
- * the page together under the hero, so every section starts with one.
+ * The head of a section on the home page: a small label, the title, a line
+ * under it and, at the end, what the section offers to do. The title carries
+ * the id the section is labelled by.
  */
 export function SectionHead({
   id,
-  eyebrow,
+  kicker,
   title,
   children,
+  actions,
 }: {
   id: string;
-  eyebrow: string;
+  kicker?: string;
   title: string;
+  /** The lead: a short paragraph under the title. */
   children?: ReactNode;
+  actions?: ReactNode;
 }) {
-  const idle = useIdleOffscreen<HTMLElement>();
   return (
-    <header className="aura-head" ref={idle}>
-      <span className="aura-beam" aria-hidden="true" />
-      <span className="aura-eyebrow">
-        <span className="aura-eyebrow-dot" aria-hidden="true" />
-        {eyebrow}
-      </span>
-      <h2 id={id}>{title}</h2>
-      {children}
+    <header className="section-head aura-head">
+      <div className="section-head-copy">
+        {kicker && <p className="section-kicker">{kicker}</p>}
+        <h2 id={id}>{title}</h2>
+        {children && <div className="section-lead">{children}</div>}
+      </div>
+      {actions && <div className="section-actions">{actions}</div>}
     </header>
   );
 }

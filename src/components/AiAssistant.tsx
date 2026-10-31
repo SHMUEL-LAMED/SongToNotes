@@ -60,6 +60,12 @@ type Props = {
   /** The tool the visitor is on, so the assistant can be asked "how do I use this?". */
   toolId?: string | null;
   toolTitle: string | null;
+  /**
+   * Whether to draw the floating launcher while the panel is closed. On a
+   * phone the shell's tab bar carries the way in (and the launcher's class),
+   * so the shell turns this one off there.
+   */
+  launcher?: boolean;
 };
 
 /**
@@ -285,7 +291,7 @@ export function AiAssistant(props: Props) {
 
 type Confirmation = { call: ActionCall; spec: ActionSpec; resolve: (approved: boolean) => void };
 
-function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle }: Props) {
+function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle, launcher = true }: Props) {
   const { user, signInWithGoogle } = useAuth();
   const { rules: creditRules } = useCredits();
   const userId = user?.id ?? null;
@@ -916,7 +922,7 @@ function AssistantConversation({ open, onClose, onOpen, toolId = null, toolTitle
 
   return (
     <>
-      {!open && (
+      {!open && launcher && (
         <button type="button" className="assistant-launcher" onClick={onOpen} aria-label="פתח את העוזר" title="העוזר (Ctrl+J)">
           <span className="assistant-launcher-orb" aria-hidden="true">
             <Sparkles size={17} />

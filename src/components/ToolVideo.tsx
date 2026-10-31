@@ -8,10 +8,10 @@ function toolVideoUrl(id: string, extension: "mp4" | "webp"): string {
 }
 
 /**
- * A short how-to video under the tool, for the tools that have one. It shows
- * a still from the video with a large play button, and nothing of the video
- * itself downloads until the button is pressed; then it plays in place, the
- * column's full width, with the browser's own controls.
+ * A short how-to video at the foot of the tool, for the tools that have one.
+ * It shows a still from the video with a large play button, and nothing of
+ * the video itself downloads until the button is pressed; then it plays in
+ * place, the panel's full width, with the browser's own controls.
  */
 export function ToolVideo({ tool }: { tool: ToolDefinition }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,23 +24,22 @@ export function ToolVideo({ tool }: { tool: ToolDefinition }) {
   };
 
   return (
-    <section
-      className="tool-video"
-      aria-labelledby="tool-video-title"
-      style={{ "--accent-hue": tool.hue } as CSSProperties}
-    >
-      <div className="tool-video-head">
-        <span className="tool-video-icon">
-          <PlayCircle size={18} aria-hidden="true" />
+    <section className="panel tool-video" aria-labelledby="tool-video-title" style={{ "--accent-hue": tool.hue } as CSSProperties}>
+      <header className="panel-head tool-video-head">
+        <span className="panel-num" aria-hidden="true" />
+        <span className="panel-icon tool-video-icon" aria-hidden="true">
+          <PlayCircle size={16} />
         </span>
-        <span>
-          <h2 id="tool-video-title">
-            איך משתמשים ב<b className="tool-video-name">{tool.title}</b>
+        <div className="panel-heading">
+          <h2 className="panel-title" id="tool-video-title">
+            איך זה עובד
           </h2>
-          <small>מדריך קצר בווידאו, פחות מדקה</small>
-        </span>
-      </div>
-      <div className={`tool-video-frame${started ? " is-started" : ""}`}>
+          <p className="panel-hint">
+            איך משתמשים ב<b className="tool-video-name">{tool.title}</b> — מדריך קצר בווידאו, פחות מדקה
+          </p>
+        </div>
+      </header>
+      <figure className={`tool-video-frame${started ? " is-started" : ""}`}>
         <video
           ref={videoRef}
           src={toolVideoUrl(tool.id, "mp4")}
@@ -55,11 +54,11 @@ export function ToolVideo({ tool }: { tool: ToolDefinition }) {
         {!started && (
           <button type="button" className="tool-video-play" onClick={start} aria-label={`הפעלת הסרטון: איך משתמשים ב${tool.title}`}>
             <span className="tool-video-play-mark">
-              <Play size={30} fill="currentColor" aria-hidden="true" />
+              <Play size={26} fill="currentColor" aria-hidden="true" />
             </span>
           </button>
         )}
-      </div>
+      </figure>
     </section>
   );
 }
