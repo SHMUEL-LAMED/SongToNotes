@@ -191,7 +191,7 @@ describe("the invitation, remembered", () => {
     const now = Date.parse("2026-09-25T12:00:00Z");
     expect(rememberReferral("aaaa2222", now)?.code).toBe("aaaa2222");
     expect(rememberReferral("bbbb3333", now + 1000)?.code).toBe("aaaa2222");
-    updatePending({ visited: true, name: "דני" });
+    updatePending({ visited: true, name: "דני" }, now + 1500);
     expect(readPending(now + 2000)).toMatchObject({ code: "aaaa2222", visited: true, name: "דני", dismissed: false });
   });
 
