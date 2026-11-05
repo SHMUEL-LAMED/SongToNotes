@@ -89,9 +89,11 @@ for (const id of TOOLS) {
   await page.waitForTimeout(500);
   // The frame writes the tool's name in the masthead; the tool's own body
   // has to be there under it too.
-  await page.waitForSelector(".tool-frame .tool-body", { timeout: 30_000 }).catch(() => {});
+  // The transcriber lays its steps out as sections rather than one body.
+  const BODY = ".tool-frame .tool-body, .tool-frame .workspace-section";
+  await page.waitForSelector(BODY, { timeout: 30_000 }).catch(() => {});
   const heading = await page.locator(".tool-masthead h1").first().textContent().catch(() => null);
-  const body = await page.locator(".tool-frame .tool-body").count();
+  const body = await page.locator(BODY).count();
   log(Boolean(heading) && body > 0, `tool "${id}" renders`, heading ? `${heading}, body ${body}` : "no heading");
 }
 
@@ -144,7 +146,13 @@ log(Number(endAfter) < Number(endBefore), "waveform: the end handle moves indepe
 // a plain click slides the ringtone rather than wiping the selection
 const lengthBeforeClick = Number(await endField.inputValue()) - Number(await startField.inputValue());
 const strip = page.locator(".waveform svg");
+// Centred on screen, so a notice floating at the foot of the window is not
+// what the click lands on.
+await strip.evaluate((element) => element.scrollIntoView({ block: "center" }));
+await page.waitForTimeout(200);
 const box = await strip.boundingBox();
+const under = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("svg") ? "svg" : document.elementFromPoint(x, y)?.className, [box.x + box.width * 0.5, box.y + box.height / 2]);
+if (under !== "svg") console.log(`  (the click point is covered by ${under})`);
 await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
 await page.waitForTimeout(300);
 const startAfterClick = Number(await startField.inputValue());
@@ -660,7 +668,10 @@ log((await page.locator(".tool-card", { hasText: "מזהה שיר" }).count()) =
 await page.goto(`${BASE}#/identify`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
 await page.waitForSelector(".identify-tool", { timeout: 10_000 }).catch(() => {});
-log(await page.locator(".identify-tool h1", { hasText: "מזהה שיר" }).isVisible(), "identify: its address opens the tool");
+log(
+  (await page.locator(".identify-tool").count()) > 0 && (await page.locator(".tool-masthead h1", { hasText: "מזהה שיר" }).isVisible()),
+  "identify: its address opens the tool",
+);
 log(await page.locator(".identify-tool .transcript-signin").isVisible(), "identify: recognition asks for a sign-in");
 
 // --- transcript extras: a reopened transcript has search with jump and a speakers button ---
