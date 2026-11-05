@@ -1,4 +1,4 @@
-import { Download, FileAudio, Headphones, Layers, Mic, Play, Square, Timer, Trash2, Volume2, VolumeX } from "lucide-react";
+import { Download, FileAudio, Headphones, Layers, Mic, Play, Square, Timer, Trash2, Voicemail, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { openAudioFile } from "../components/AudioPicker";
 import { downloadFile } from "../lib/export";
@@ -816,6 +816,16 @@ export function RecorderTool() {
 
   return (
     <section className="tool-body recorder-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Voicemail size={26} />
+        </span>
+        <div>
+          <h1>מקליט רב־ערוצי</h1>
+          <p>מקליטים ערוץ אחרי ערוץ ושומעים בזמן ההקלטה את כל מה שכבר הוקלט — עם מטרונום, ספירה לאחור ותיקון השהיה. הכול נשאר במחשב שלך.</p>
+        </div>
+      </div>
+
       {!supported && (
         <div className="error-message" role="alert">
           הדפדפן הזה אינו תומך בהקלטה מהמיקרופון (או שהאתר לא נפתח בחיבור מאובטח). אפשר עדיין לייבא קבצים, לערבב ולייצא.

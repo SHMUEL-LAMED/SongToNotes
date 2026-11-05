@@ -1,0 +1,120 @@
+/* ---- carrying a file on to the next tool ---- */
+
+.send-file {
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  margin: 40px auto 0;
+  padding: 18px;
+  border-radius: var(--radius-lg, var(--radius));
+  border: 1px solid var(--accent-line, var(--line));
+  background: var(--surface);
+}
+.send-file-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.send-file-head h2 { margin: 0; font-size: 17px; }
+.send-file-head p { margin: 2px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.send-file-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.send-file-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.send-file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.send-file-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.send-file-target:hover:not(:disabled) { border-color: var(--accent-line); transform: translateY(-1px); }
+.send-file-target:disabled { cursor: progress; opacity: 0.7; }
+.send-file-target.is-sending { opacity: 1; border-color: var(--accent-line); }
+.send-file-target-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--on-accent);
+  background: var(--accent-grad);
+}
+.send-file-target-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.send-file-target-text b { font-size: 13.5px; }
+.send-file-target-text small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.send-file-go { flex: none; color: var(--text-muted); }
+.send-file-target:hover .send-file-go { color: var(--accent-text); }
+
+/* The small menu beside a loaded file. */
+.send-file-menu { position: relative; flex: 0 0 auto; }
+.send-file-popover {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: min(260px, calc(100vw - 32px));
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg, 0 16px 40px rgb(0 0 0 / 0.25));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.send-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.send-file-item svg { color: var(--accent-text); flex: none; }
+.send-file-item:hover:not(:disabled),
+.send-file-item:focus-visible { background: var(--accent-soft); }
+.send-file-item:disabled { cursor: progress; }
+.send-file-popover .error-message { margin: 6px 4px 2px; font-size: 12.5px; }
+
+@media (max-width: 560px) {
+  .send-file { padding: 14px; }
+  .send-file-grid { grid-template-columns: 1fr 1fr; }
+  .send-file-target-text small { display: none; }
+  /* On a phone the menu opens under the file row, across its width. */
+  .send-file-menu { position: static; }
+  .selected-file:has(.send-file-menu) { position: relative; }
+  .send-file-popover { inset-inline: 0; width: auto; }
+}
+
+@media print {
+  .send-file, .send-file-menu { display: none; }
+}

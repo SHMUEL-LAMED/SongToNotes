@@ -293,6 +293,16 @@ export function ChordsTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body chords-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Guitar size={26} />
+        </span>
+        <div>
+          <h1>מזהה אקורדים לגיטרה</h1>
+          <p>בחר שיר וקבל את האקורדים לאורך הזמן, עם דיאגרמות אחיזה.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

@@ -1,4 +1,4 @@
-import { Dices, Download, NotebookPen, Pause, Play, RefreshCw, Timer } from "lucide-react";
+import { Dices, Download, Music4, NotebookPen, Pause, Play, RefreshCw, Timer } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { downloadFile, notesToMidi } from "../lib/export";
 import {
@@ -230,6 +230,16 @@ export function ProgressionTool() {
 
   return (
     <section className="tool-body progression-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Music4 size={26} />
+        </span>
+        <div>
+          <h1>מחולל מהלכי אקורדים</h1>
+          <p>בוחרים סולם ואווירה ומקבלים מהלך שמתנגן בלולאה עם ליווי ובס. לחיצה על אקורד מחליפה אותו.</p>
+        </div>
+      </div>
+
       <div className="settings-panel prog-setup">
         <div className="setting-field">
           <span>אווירה</span>

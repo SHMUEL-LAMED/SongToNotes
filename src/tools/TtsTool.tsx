@@ -1,4 +1,4 @@
-import { Download, Pause, Play, Square, Volume2, Wand2 } from "lucide-react";
+import { Download, Pause, Play, Speech, Square, Volume2, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CreditCost } from "../components/CreditCost";
 import { SaveButton } from "../components/SaveButton";
@@ -288,6 +288,16 @@ export function TtsTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body tts-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Speech size={26} />
+        </span>
+        <div>
+          <h1>טקסט לדיבור</h1>
+          <p>מקלידים טקסט ושומעים אותו — בעברית ובשפות נוספות, בקול של המכשיר.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <textarea
           className="transcript-text tts-text"

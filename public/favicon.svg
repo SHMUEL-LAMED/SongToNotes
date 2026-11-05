@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="1" y="1" width="30" height="30" rx="8" fill="#1f5fc4"/><g stroke="#fff" stroke-width="1.4" stroke-linecap="round" opacity=".35"><path d="M6 13.5h20M6 19.5h20"/></g><path d="M17.6 21.6V7.8c3.6 1 6 3.6 5.2 7.6" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><ellipse cx="13.6" cy="22" rx="5" ry="3.7" transform="rotate(-22 13.6 22)" fill="#f2a24a"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a66bff"/>
+      <stop offset="0.55" stop-color="#f0569a"/>
+      <stop offset="1" stop-color="#ffab5c"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#g)"/>
+  <g transform="translate(8 8)" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round">
+    <path d="M7 27v-6"/>
+    <path d="M15 33V15"/>
+    <path d="M23 26v-4"/>
+    <path d="M37.2 34.4V8.4c3.2 1.4 6 3.8 6 8"/>
+  </g>
+  <ellipse cx="39.8" cy="43.2" rx="6" ry="4.8" transform="rotate(-18 39.8 43.2)" fill="#fff"/>
+</svg>

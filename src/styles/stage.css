@@ -1,661 +1,178 @@
 /* ==========================================================================
-   Decks
-   An instrument is a deck: a near-black plate in both themes, its readouts
-   lit in the tool's hue — the one place on the page where the colour glows.
-   The deck redefines the tokens its children read (tokens.css), so buttons,
-   fields and chips set on it need no rules of their own.
-
-   The legacy instrument surfaces (.metronome-stage, .tuner-stage,
-   .ear-stage, .piano-stage, .pad-grid, the drum machine, .drumkit-stage,
-   .theory-circle, .setlist-stage) are drawn as decks here until their tools
-   render <Deck>. Their own sheets (tools.css, studio.css and the tools'
-   code-split CSS) load later and still paint glass and gradients, so the
-   rules below double a class or name a parent to outrank them whatever the
-   order the sheets arrive in.
+   The stage, everywhere
+   The home page's night stage, carried onto every page that is built from
+   the shared parts, lightly: each tool's header is lit a little more in the
+   tool's own colour over a faint grid floor, the file picker gets a ring of
+   light, and the cards a lit edge. Only the look changes; the markup and
+   the layout are the same.
    ========================================================================== */
 
-/* ---- the plate ---- */
-
-.deck,
-.metronome-stage.metronome-stage,
-.tuner-stage.tuner-stage,
-.ear-stage.ear-stage,
-.piano-stage.piano-stage,
-.pad-grid.pad-grid,
-.beat-deck.beat-deck,
-.beat-grid-wrap.beat-grid-wrap,
-.drumkit-stage.drumkit-stage,
-.theory-circle.theory-circle,
-.setlist-stage.setlist-stage {
-  background: var(--deck-bg);
-  color: var(--deck-text);
-  border: 1px solid var(--deck-line);
-  border-radius: var(--r-4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color-scheme: dark;
-}
-.deck,
-.metronome-stage.metronome-stage,
-.tuner-stage.tuner-stage,
-.ear-stage.ear-stage { padding: 24px; }
-@media (max-width: 599.98px) {
-  .deck,
-  .metronome-stage.metronome-stage,
-  .tuner-stage.tuner-stage,
-  .ear-stage.ear-stage { padding: 16px; }
-}
-.deck::before,
-.deck::after,
-.metronome-stage::before,
-.metronome-stage::after,
-.tuner-stage::before,
-.tuner-stage::after,
-.drumkit-stage::before,
-.pad-grid::before { content: none; }
-/* The stage mode of the set list fills the screen: a plate without edges. */
-.setlist-stage.setlist-stage,
-.setlist-stage.setlist-stage:fullscreen {
-  background: var(--deck-bg);
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+@property --stage-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
-/* ---- the deck's head: a kicker, and a live LED at the far end ---- */
+/* ---- the page: a glow in the tool's colour behind the top ---- */
 
-.deck { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.deck-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 24px;
-}
-.deck-kicker {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  line-height: var(--lh-label);
-  color: var(--deck-muted);
-}
-.deck-status { display: inline-flex; align-items: center; gap: 10px; margin-inline-start: auto; }
-.deck-led {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-pill);
-  background: var(--led-dim);
-  transition: background-color var(--dur-1) linear, box-shadow var(--dur-1) linear;
-}
-.deck[data-running="true"] .deck-led { background: var(--led); box-shadow: var(--led-glow); }
-.deck-live {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  color: var(--deck-muted);
-}
-.deck[data-running="true"] .deck-live { color: var(--led-text); }
-.deck-actions { display: inline-flex; align-items: center; gap: 6px; }
-.deck-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-
-/* ---- controls on a deck: 48px to the touch, 56 for the main action ---- */
-
-:is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .beat-deck, .drumkit-stage, .setlist-stage) :is(.btn, .secondary-button, .transport-button, .chip-toggle) { min-height: 48px; }
-:is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .beat-deck) :is(.btn-lg, .primary-button) { min-height: 56px; font-size: 16px; }
-:is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage) .btn-sm { min-height: 40px; }
-
-/* ---- readouts: mono, LED ink; the value carries dir="ltr" ---- */
-
-.readout { display: inline-flex; flex-direction: column; gap: 6px; min-width: 0; }
-.readout-label {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  line-height: var(--lh-label);
-  color: var(--text-muted);
-}
-.readout-line { display: inline-flex; align-items: baseline; gap: 6px; }
-.readout-value {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.readout-unit { font-family: var(--font-mono); font-size: var(--fs-read-sm); font-weight: 500; color: var(--text-muted); }
-.readout-xl .readout-value { font-size: var(--fs-read-xl); }
-.readout-lg .readout-value { font-size: var(--fs-read-lg); }
-.readout-md .readout-value { font-size: var(--fs-read-md); font-weight: 500; }
-.readout-sm .readout-value { font-size: var(--fs-read-sm); font-weight: 500; }
-.readout.is-live .readout-value { color: var(--accent-text); }
-/* On a deck the value is an LED. */
-:is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .beat-deck, .setlist-stage) .readout-value {
-  color: var(--led-text);
-  text-shadow: 0 0 18px oklch(0.82 0.14 var(--accent-hue) / 0.35);
-}
-@media (max-width: 599.98px) {
-  .readout-xl .readout-value { font-size: 48px; }
+.tool-page {
+  background:
+    radial-gradient(60% 420px at 85% -80px, oklch(0.62 0.2 var(--accent-hue) / 0.14), transparent 70%),
+    radial-gradient(50% 380px at 10% -60px, oklch(0.62 0.2 calc(var(--accent-hue) + 50) / 0.1), transparent 70%);
+  background-repeat: no-repeat;
 }
 
-/* ---- LED bars: 3×14 in a hue, lit when current ---- */
+/* ---- headers: the same banner, lit a little more in the tool's colour ---- */
 
-.led {
-  display: inline-block;
-  flex: none;
-  width: 3px;
-  height: 14px;
-  border-radius: 1.5px;
-  background: var(--led);
-  opacity: 0.35;
-  transition: opacity var(--dur-1) linear, box-shadow var(--dur-1) linear;
-}
-.led.is-on { opacity: 1; box-shadow: var(--led-glow); }
-
-/* ---- the fader on a deck: the cap goes dark, the slot lighter ---- */
-
-:is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .beat-deck, .beat-grid-wrap, .drumkit-stage) input[type="range"] { --range-track: rgba(255, 255, 255, 0.07); }
-
-/* ==========================================================================
-   Metronome — no pendulum: the BPM, − and +, the fader, the beat LEDs
-   ========================================================================== */
-
-.metronome-stage.metronome-stage {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  transition: border-color var(--dur-2) var(--ease-out);
-}
-.metronome-stage.metronome-stage[data-running="true"] { border-color: var(--deck-line-strong); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
-.metronome-stage .pendulum-frame { display: none; }
-
-.metronome-stage .bpm-readout { display: flex; align-items: center; justify-content: center; gap: 20px; direction: ltr; }
-.metronome-stage .bpm-step,
-.beat-deck .bpm-step {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--deck-line-strong);
-  background: var(--deck-2);
-  color: var(--deck-text);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  cursor: pointer;
-  transition: border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
-}
-.metronome-stage .bpm-step:hover,
-.beat-deck .bpm-step:hover { border-color: var(--led); color: var(--led-text); background: var(--deck-2); transform: none; box-shadow: none; }
-.metronome-stage .bpm-step:active,
-.beat-deck .bpm-step:active { transform: translateY(1px); }
-.beat-deck .bpm-step { width: 44px; height: 44px; }
-.metronome-stage .bpm-value { text-align: center; min-width: 180px; }
-.metronome-stage .bpm-value strong,
-.metronome-stage.metronome-stage[data-running="true"] .bpm-value strong,
-.beat-deck .beat-tempo-value strong {
-  display: block;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  color: var(--led-text);
-  text-shadow: 0 0 18px oklch(0.82 0.14 var(--accent-hue) / 0.35);
-  animation: none;
-}
-.beat-deck .beat-tempo-value strong { font-size: 44px; }
-.metronome-stage .bpm-value strong { font-size: clamp(48px, 9vw, 72px); }
-/* The tempo marking under the number. */
-.metronome-stage .bpm-value span,
-.beat-deck .beat-tempo-value span {
-  display: block;
-  margin-top: 8px;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  color: var(--deck-muted);
-}
-.metronome-stage .bpm-slider { width: 100%; max-width: 440px; }
-
-.metronome-stage .beat-dots { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 16px; }
-.metronome-stage .beat-dot {
-  width: 12px;
-  height: 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--led-dim);
-  box-shadow: none;
-  transform: none;
-  transition: background-color var(--dur-1) linear, box-shadow var(--dur-1) linear;
-}
-.metronome-stage .beat-dot.is-accent { width: 16px; height: 16px; border: 0; background: var(--led-dim); }
-.metronome-stage .beat-dot.is-active,
-.metronome-stage .beat-dot.is-accent.is-active {
-  background: var(--led);
-  border: 0;
-  transform: none;
-  box-shadow: var(--led-glow);
+.tool-intro,
+.tool-hero,
+.me-hero,
+.credits-hero {
+  background:
+    radial-gradient(55% 130% at 100% 0%, oklch(0.66 0.2 var(--accent-hue) / 0.2), transparent 65%),
+    radial-gradient(45% 120% at 0% 100%, oklch(0.66 0.2 calc(var(--accent-hue) + 50) / 0.13), transparent 70%),
+    var(--surface);
+  box-shadow: var(--shadow-sm), 0 24px 60px -34px oklch(0.55 0.2 var(--accent-hue) / 0.5), var(--inner-highlight);
 }
 
-.metronome-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
-.metronome-actions .primary-button { width: auto; min-width: 190px; }
-.metronome-stage .metronome-actions .primary-button { min-height: 56px; }
-
-/* ==========================================================================
-   Tuner — the gauge on a plate; in tune, the needle and the note go green
-   ========================================================================== */
-
-.tuner-stage.tuner-stage {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  transition: border-color var(--dur-2) var(--ease-out);
-}
-.tuner-stage.tuner-stage.has-signal { border-color: var(--deck-line-strong); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
-.tuner-stage.tuner-stage.is-in-tune {
-  background: var(--deck-bg);
-  border-color: color-mix(in srgb, var(--success) 60%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px color-mix(in srgb, var(--success) 35%, transparent);
-}
-.tuner-stage .tuner-gauge { width: min(360px, 100%); height: auto; filter: none; }
-.tuner-stage .tuner-needle { stroke: var(--led); fill: var(--led); transition: transform var(--dur-2) var(--ease-out); }
-.tuner-stage.is-in-tune .tuner-needle { stroke: var(--success); fill: var(--success); }
-.tuner-stage:not(.has-signal) .tuner-needle { opacity: 0.3; }
-.tuner-stage .tuner-readout { text-align: center; margin-top: -14px; }
-.tuner-stage .tuner-note,
-.tuner-stage.has-signal .tuner-note:not(.placeholder),
-.tuner-stage.is-in-tune .tuner-note {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--fs-read-xl);
-  font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: 0;
-  direction: ltr;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  color: var(--led-text);
-  text-shadow: 0 0 18px oklch(0.82 0.14 var(--accent-hue) / 0.35);
-}
-.tuner-stage .tuner-note.placeholder { color: var(--deck-muted); opacity: 0.5; text-shadow: none; }
-.tuner-stage.is-in-tune .tuner-note { color: var(--success); text-shadow: 0 0 18px oklch(0.76 0.14 150 / 0.4); }
-.tuner-stage .tuner-hebrew { display: block; font-size: 14px; color: var(--deck-text); opacity: 0.8; }
-.tuner-stage .tuner-cents { display: block; margin-top: 4px; font-family: var(--font-mono); font-size: 13px; color: var(--deck-muted); direction: ltr; }
-.tuner-stage .tuner-hint { display: block; margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--led-text); }
-.tuner-stage.is-in-tune .tuner-hint { color: var(--success); }
-.tuner-stage .tuner-level { width: min(280px, 100%); }
-
-/* The strings to tune by: chips on the paper below the plate. */
-.string-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.string-row .string-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: var(--r-1);
-  border: var(--hair-strong);
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 13.5px;
-  font-weight: 600;
-  box-shadow: none;
-  direction: ltr;
-  cursor: pointer;
-  transition: border-color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
-}
-.string-row .string-chip:hover { border-color: var(--accent); background: var(--surface); transform: none; }
-.string-row .string-chip:active { transform: translateY(1px); }
-.string-row .string-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); box-shadow: none; }
-.string-row .string-chip.is-detected { border-color: var(--success); background: var(--success-soft); color: var(--success); box-shadow: none; }
-.string-row .string-chip.active.is-detected { background: var(--success); border-color: var(--success); color: var(--surface); }
-
-/* ==========================================================================
-   Ear trainer — the question on the plate; right and wrong light it
-   ========================================================================== */
-
-.ear-stage.ear-stage { display: flex; flex-direction: column; gap: 20px; margin-top: 0; }
-.ear-stage .ear-empty { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 16px 0 8px; text-align: center; }
-.ear-stage .ear-empty p { margin: 0; color: var(--deck-text); font-size: 15px; }
-.ear-stage .ear-empty .primary-button,
-.ear-stage .ear-playback .primary-button { width: auto; min-width: 220px; }
-.ear-stage .ear-playback { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.ear-stage.ear-stage[data-playing="true"] .ear-playback .primary-button { animation: none; box-shadow: var(--led-glow); }
-.ear-stage .ear-hint { color: var(--deck-muted); font-size: 12.5px; text-align: center; }
-
-.ear-stage .ear-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
-.ear-stage .ear-choice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 0 14px;
-  border: 1px solid var(--deck-line);
-  border-radius: var(--r-2);
-  background: var(--deck-2);
-  color: var(--deck-text);
-  font-weight: 500;
-  box-shadow: none;
-  cursor: pointer;
-  transition: border-color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
-}
-.ear-stage .ear-choice:hover:not(:disabled) { transform: none; border-color: var(--led); box-shadow: none; }
-.ear-stage .ear-choice:active:not(:disabled) { transform: translateY(1px); }
-.ear-stage .ear-choice b {
-  flex: none;
-  min-width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  padding: 0 6px;
-  border-radius: var(--r-1);
-  border: 1px solid var(--deck-line-strong);
-  border-bottom-width: 2px;
-  background: transparent;
-  color: var(--deck-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-}
-.ear-stage .ear-choice:hover:not(:disabled) b { background: transparent; color: var(--led-text); border-color: var(--led-dim); }
-.ear-stage .ear-choice b:empty { background: none; border: 0; }
-.ear-stage .ear-choice span { flex: 1; text-align: start; }
-.ear-stage .ear-choice:disabled { cursor: default; opacity: 0.55; }
-.ear-stage .ear-choice.is-right,
-.ear-stage .ear-choice.is-wrong { opacity: 1; box-shadow: none; }
-.ear-stage .ear-choice.is-right { border-color: var(--success); background: var(--success-soft); color: var(--success); }
-.ear-stage .ear-choice.is-right b { background: var(--success); border-color: var(--success); color: #0b0b0e; }
-.ear-stage .ear-choice.is-wrong { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
-.ear-stage .ear-choice.is-wrong b { background: var(--danger); border-color: var(--danger); color: #0b0b0e; }
-/* The plate's edge flashes with the verdict. */
-.ear-stage.ear-stage:has(.ear-choice.is-wrong) { border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
-.ear-stage.ear-stage:has(.ear-verdict .is-right) { border-color: color-mix(in srgb, var(--success) 55%, transparent); }
-
-.ear-stage .ear-verdict { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; min-height: 48px; text-align: center; }
-.ear-stage .ear-verdict strong { font-size: 18px; font-weight: 600; letter-spacing: 0; }
-.ear-stage .ear-verdict strong.is-right { color: var(--success); }
-.ear-stage .ear-verdict strong.is-wrong { color: var(--danger); }
-.ear-stage .ear-verdict span { color: var(--deck-text); font-size: 14px; direction: ltr; }
-.ear-stage .ear-waiting { color: var(--deck-muted); }
-
-/* The score: plain stat tiles on the paper under the plate. */
-.ear-training .ear-score {
-  margin-top: 0;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 8px;
-  border: var(--hair);
-  border-radius: var(--r-3);
-  background: var(--surface);
-  box-shadow: var(--shadow-panel);
-}
-.ear-training .ear-score > div {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--r-2);
-  border: var(--hair);
-  background: var(--surface-2);
-}
-.ear-training .ear-score strong {
-  font-family: var(--font-mono);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: 0;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  color: var(--text);
-}
-.ear-training .ear-score span { color: var(--text-muted); font-size: 12px; font-weight: 500; letter-spacing: 0; }
-.ear-training .ear-score .link-button { justify-self: center; align-self: center; }
-
-/* ==========================================================================
-   Piano — ivory and ebony on the plate; the LED marks the scale and the
-   key that is down
-   ========================================================================== */
-
-.piano-stage.piano-stage { display: flex; flex-direction: column; padding: 12px; overflow: hidden; }
-.piano-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: 40px; padding: 0 4px; }
-.piano-status .piano-held { font-family: var(--font-mono); font-size: 20px; font-weight: 600; letter-spacing: 0; direction: ltr; color: var(--accent-text); }
-
-.piano-stage .piano-keys {
-  position: relative;
-  height: clamp(170px, 26vw, 240px);
-  display: flex;
-  padding: 0;
-  border-radius: var(--r-2);
-  background: #0b0b0d;
-  box-shadow: none;
-  overflow: hidden;
-  touch-action: none;
-  user-select: none;
-}
-.piano-stage .piano-keys::before { content: none; }
-.piano-stage.has-lesson .piano-keys { border-radius: 0 0 var(--r-2) var(--r-2); }
-.piano-keys .piano-key { border: 0; padding: 0; cursor: pointer; transition: background-color var(--dur-1) linear, box-shadow var(--dur-1) linear; }
-.piano-keys .piano-key.white {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 18px;
-  border-inline-end: 1px solid #0e0e11;
-  border-radius: 0 0 6px 6px;
-  background: #f4f3ef;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08);
-  transform: none;
-}
-.piano-keys .piano-key.white:hover { background: #ebe9e4; }
-/* A key of the scale: a 6px LED dot at its foot. */
-.piano-keys .piano-key.white.in-scale { background: radial-gradient(circle at 50% calc(100% - 8px), var(--led) 3px, transparent 3.5px), #f4f3ef; }
-.piano-keys .piano-key.white.is-root { background: radial-gradient(circle at 50% calc(100% - 8px), var(--led) 4px, transparent 4.5px), #f4f3ef; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08), inset 0 -3px 0 var(--led-dim); }
-/* Down: pressed into the bed, with the LED bar along its foot. */
-.piano-keys .piano-key.white.is-active,
-.piano-keys .piano-key.white.in-scale.is-active,
-.piano-keys .piano-key.white.is-root.is-active {
-  background: #d9d7d1;
-  box-shadow: var(--shadow-key), inset 0 -4px 0 var(--led);
-  transform: none;
-}
-.piano-keys .piano-key.black {
+/* The grid floor running to the horizon, as on the home stage. */
+.tool-intro::before,
+.tool-hero::before,
+.me-hero::before,
+.credits-hero::before {
+  content: "";
   position: absolute;
-  top: 0;
-  z-index: 2;
-  width: calc(100% / var(--white-count) * 0.6);
-  height: 60%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 12px;
-  border-radius: 0 0 5px 5px;
-  background: #141417;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), inset 0 -3px 0 rgba(255, 255, 255, 0.05);
-}
-.piano-keys .piano-key.black:hover { background: #1d1e22; }
-.piano-keys .piano-key.black.in-scale { background: radial-gradient(circle at 50% calc(100% - 6px), var(--led) 3px, transparent 3.5px), #141417; }
-.piano-keys .piano-key.black.is-root { background: radial-gradient(circle at 50% calc(100% - 6px), var(--led) 4px, transparent 4.5px), #141417; box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5); }
-.piano-keys .piano-key.black.is-active,
-.piano-keys .piano-key.black.in-scale.is-active,
-.piano-keys .piano-key.black.is-root.is-active {
-  background: #2a2c33;
-  box-shadow: var(--shadow-key), inset 0 -4px 0 var(--led);
-}
-/* The lesson's guide: the next key to press, in amber. */
-.piano-keys .piano-key.white.is-guide { background: #ffd79a; box-shadow: inset 0 -4px 0 #ff9f1c; }
-.piano-keys .piano-key.black.is-guide { background: #c87412; box-shadow: inset 0 -4px 0 #ffb44d; }
-.piano-keys .piano-key.is-guide.is-active { filter: saturate(1.2) brightness(0.95); }
-.piano-keys .piano-key-name {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  color: #7d7c77;
+  z-index: -1;
+  inset-inline: -40%;
+  bottom: -30%;
+  height: 90%;
+  background-image:
+    linear-gradient(to right, oklch(0.7 0.16 var(--accent-hue) / 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.7 0.16 var(--accent-hue) / 0.16) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(300px) rotateX(64deg);
+  transform-origin: 50% 0%;
+  mask-image: linear-gradient(to bottom, transparent, #000 45%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%, transparent);
+  animation: stage-floor 4s linear infinite;
   pointer-events: none;
-  direction: ltr;
 }
-.piano-keys .piano-key.black .piano-key-name { color: rgba(255, 255, 255, 0.5); }
-.piano-keys .piano-key-name small { font-size: 9px; opacity: 0.8; }
-.piano-stage .piano-lesson-canvas { border-radius: var(--r-2) var(--r-2) 0 0; background: #0b0b0d; }
+@keyframes stage-floor { to { background-position: 0 44px; } }
 
-/* The controls under the keys: one flat bar on the paper. */
-.tool-body .piano-controls,
-.tool-body .piano-lesson-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  padding: 8px;
-  border-radius: var(--r-3);
-  border: var(--hair);
-  background: var(--surface);
-  box-shadow: var(--shadow-panel);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+/* The equaliser along the far edge: brighter, and breathing. */
+.tool-intro::after,
+.tool-hero::after {
+  background: linear-gradient(to top, var(--accent), oklch(0.72 0.18 calc(var(--accent-hue) + 50)) 70%, transparent 115%);
+  transform-origin: bottom;
+  animation: stage-eq 2.6s ease-in-out infinite alternate;
 }
-.piano-stage .piano-lesson-bar { background: var(--deck-2); border-color: var(--deck-line); box-shadow: none; }
-
-/* ==========================================================================
-   Pads, the drum machine and the drum kit
-   Cells sit on the plate; pressed, they sink a pixel and light.
-   ========================================================================== */
-
-.pad-grid.pad-grid { padding: 16px; gap: 10px; }
-.pad-grid .pad {
-  min-height: 112px;
-  border: 1px solid var(--deck-line);
-  border-radius: var(--r-2);
-  background: var(--deck-2);
-  color: var(--deck-text);
-  text-shadow: none;
-  /* The pad's own colour, quietened, as a bar along its foot. */
-  box-shadow: inset 0 -4px 0 color-mix(in oklab, var(--pad-color) 70%, var(--deck-2));
-  transform: none;
-  filter: none;
-  transition: background-color var(--dur-1) linear, box-shadow var(--dur-1) linear, transform var(--dur-1) linear;
-}
-.pad-grid .pad:hover { filter: none; background: #1c1c21; }
-.pad-grid .pad:focus-visible { outline: 2px solid var(--led); outline-offset: 2px; }
-.pad-grid .pad:active,
-.pad-grid .pad.is-active {
-  transform: translateY(1px);
-  filter: none;
-  background: color-mix(in oklab, var(--pad-color) 20%, var(--deck-2));
-  box-shadow: var(--shadow-key), inset 0 -4px 0 var(--pad-color), 0 0 14px color-mix(in oklab, var(--pad-color) 45%, transparent);
-}
-.pad-grid .pad strong { font-size: 16px; font-weight: 600; letter-spacing: 0; }
-.pad-grid .pad kbd { background: transparent; border-color: var(--deck-line-strong); color: var(--deck-muted); font-family: var(--font-mono); }
-@media (max-width: 599.98px) {
-  .pad-grid.pad-grid { padding: 10px; gap: 8px; }
-  .pad-grid .pad { min-height: 84px; }
+@keyframes stage-eq {
+  from { transform: scaleY(0.85); opacity: 0.2; }
+  to { transform: scaleY(1.02); opacity: 0.3; }
 }
 
-/* The drum machine: the deck and the grid are plates. */
-.beat-deck.beat-deck { padding: 20px; }
-.beat-grid-wrap.beat-grid-wrap { padding: 14px; overflow-x: auto; }
-.beat-deck .beat-play {
-  width: 88px;
-  height: 88px;
-  border-radius: var(--r-pill);
-  background: var(--led);
-  color: #0b0b0e;
-  box-shadow: none;
-  transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) linear;
-}
-.beat-deck .beat-play:hover { transform: none; box-shadow: var(--led-glow); }
-.beat-deck .beat-play:active { transform: translateY(1px); }
-.beat-deck .beat-play.is-playing { animation: none; box-shadow: var(--led-glow); }
-.beat-grid-wrap .beat-steps .beat-cell {
-  border: 1px solid var(--deck-line);
-  border-radius: var(--r-1);
-  background: var(--deck-2);
-  box-shadow: none;
-  transform: none;
-  transition: background-color var(--dur-1) linear, box-shadow var(--dur-1) linear, transform var(--dur-1) linear;
-}
-.beat-grid-wrap .beat-steps .beat-cell.is-odd { background: #131317; }
-/* The first step of each beat: a stronger hairline before it. */
-.beat-grid-wrap .beat-steps .beat-cell:nth-child(4n + 1) { box-shadow: -1px 0 0 0 var(--deck-line-strong); }
-.beat-grid-wrap .beat-steps .beat-cell:hover { border-color: var(--led-dim); background: var(--deck-2); }
-.beat-grid-wrap .beat-steps .beat-cell:active { transform: translateY(1px); box-shadow: var(--shadow-key); }
-.beat-grid-wrap .beat-steps .beat-cell.is-on { background: color-mix(in oklab, var(--led) 70%, var(--deck-2)); border-color: transparent; box-shadow: none; }
-.beat-grid-wrap .beat-steps .beat-cell.is-accent { background: var(--led); border-color: transparent; box-shadow: var(--led-glow); }
-.beat-grid-wrap .beat-steps .beat-cell.is-accent::after { inset: 34%; background: rgba(11, 11, 14, 0.55); box-shadow: none; }
-/* The playhead's column: a wash over the plate. */
-.beat-grid-wrap .beat-steps .beat-cell.is-now { border-color: rgba(255, 255, 255, 0.35); box-shadow: none; }
-.beat-grid-wrap .beat-steps .beat-cell.is-now:not(.is-on):not(.is-accent) { background: rgba(255, 255, 255, 0.08); }
-.beat-grid-wrap .beat-steps .beat-cell.is-now.is-on,
-.beat-grid-wrap .beat-steps .beat-cell.is-now.is-accent { transform: none; box-shadow: var(--led-glow); }
-.beat-grid-wrap .beat-ruler .beat-steps i { font-family: var(--font-mono); font-weight: 500; color: var(--deck-muted); }
-.beat-grid-wrap .beat-ruler .beat-steps i.is-beat { color: var(--deck-text); }
-.beat-grid-wrap .beat-ruler .beat-steps i.is-now { background: var(--led); color: #0b0b0e; box-shadow: none; }
+.me-hero,
+.credits-hero { isolation: isolate; }
+.me-hero > *,
+.credits-hero > * { position: relative; }
 
-/* The drum kit keeps its drawn drums; the stage under them is the plate. */
-.drumkit-stage.drumkit-stage { background: var(--deck-bg); }
-.drumkit-tool .drumkit-deck {
-  border: var(--hair);
-  border-radius: var(--r-3);
-  background: var(--surface);
-  box-shadow: var(--shadow-panel);
+/* The tool's mark glows, with a slow ring of light around it. */
+.tool-intro-icon {
+  position: relative;
+  box-shadow:
+    0 0 0 6px oklch(0.77 0.15 var(--accent-hue) / 0.14),
+    0 14px 40px -6px oklch(0.62 0.22 var(--accent-hue) / 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.tool-intro-icon::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 24px;
+  padding: 1.5px;
+  background: conic-gradient(from var(--stage-angle), transparent 0 60%, oklch(0.85 0.15 var(--accent-hue)), transparent 95%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: stage-spin 5s linear infinite;
+  pointer-events: none;
+}
+@keyframes stage-spin { to { --stage-angle: 360deg; } }
+
+/* ---- the file picker: a ring of light instead of a dashed line ---- */
+
+.drop-zone {
+  isolation: isolate;
+  border: 1.5px solid transparent;
+  background:
+    radial-gradient(80% 100% at 50% 0%, oklch(0.7 0.2 var(--accent-hue) / 0.16), transparent 70%),
+    radial-gradient(60% 80% at 50% 120%, oklch(0.7 0.2 calc(var(--accent-hue) + 50) / 0.1), transparent 70%),
+    var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.drop-zone::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--stage-angle), transparent 0 55%, var(--accent), oklch(0.75 0.19 calc(var(--accent-hue) + 50)), transparent 95%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.8;
+  animation: stage-spin 6s linear infinite;
+  pointer-events: none;
+}
+.drop-zone:hover,
+.drop-zone.is-dragging {
+  background:
+    radial-gradient(80% 100% at 50% 0%, oklch(0.7 0.2 var(--accent-hue) / 0.26), transparent 75%),
+    radial-gradient(60% 80% at 50% 120%, oklch(0.7 0.2 calc(var(--accent-hue) + 50) / 0.16), transparent 70%),
+    var(--surface-2);
+}
+.drop-zone:hover::before,
+.drop-zone.is-dragging::before { opacity: 1; animation-duration: 2.4s; }
+.upload-icon {
+  box-shadow: 0 0 0 8px oklch(0.77 0.15 var(--accent-hue) / 0.12), 0 16px 36px -8px oklch(0.6 0.22 var(--accent-hue) / 0.7);
+  animation: stage-bob 3.2s ease-in-out infinite;
+}
+@keyframes stage-bob { 50% { translate: 0 -5px; } }
+
+/* ---- cards: a lit top edge and a glow in the tool's colour ---- */
+
+.card,
+.workspace-card,
+.settings-panel,
+.refine-panel,
+.playback-card,
+.downloads-card,
+.processing-box,
+.chroma-card,
+.metronome-stage,
+.tuner-stage,
+.stat-card,
+.ear-stage {
+  background:
+    linear-gradient(90deg, transparent, oklch(0.72 0.18 var(--accent-hue) / 0.55), transparent) top / 100% 1px no-repeat,
+    radial-gradient(90% 70% at 100% 0%, var(--accent-tint), transparent 60%),
+    var(--surface);
 }
 
-/* ==========================================================================
-   The set list's stage mode: the song on a full-screen plate
-   ========================================================================== */
-
-.setlist-stage .setlist-stage-label { font-size: clamp(14px, 2.4vw, 20px); font-weight: 600; letter-spacing: var(--track-label); color: var(--led-text); }
-.setlist-stage .setlist-stage-title { font-weight: 700; letter-spacing: -0.015em; color: var(--deck-text); }
-.setlist-stage.is-break .setlist-stage-title { color: var(--deck-muted); }
-.setlist-stage .setlist-stage-meta { font-family: var(--font-mono); font-weight: 600; }
-.setlist-stage .setlist-stage-key { color: var(--led-text); text-shadow: 0 0 18px oklch(0.82 0.14 var(--accent-hue) / 0.35); }
-.setlist-stage .setlist-stage-bpm small,
-.setlist-stage .setlist-stage-length { color: var(--deck-muted); }
-.setlist-stage .setlist-stage-dot { background: var(--led); box-shadow: var(--led-glow); }
-.setlist-stage .setlist-stage-position { font-family: var(--font-mono); font-weight: 600; color: var(--deck-muted); }
-.setlist-stage .setlist-stage-chip {
-  border-radius: var(--r-2);
-  border-color: var(--deck-line-strong);
-  background: var(--deck-2);
-  color: var(--deck-text);
-  box-shadow: none;
+.step-number {
+  background: var(--accent-grad);
+  box-shadow: 0 6px 18px -4px oklch(0.6 0.2 var(--accent-hue) / 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
-.setlist-stage .setlist-stage-chip:hover:not(:disabled) { border-color: var(--led); transform: none; }
-.setlist-stage .setlist-stage-chip.is-on,
-.setlist-stage .setlist-stage-chip[aria-pressed="true"] { border-color: var(--led); background: var(--accent-soft); color: var(--led-text); }
-.setlist-stage .setlist-stage-lyrics { border-radius: var(--r-3); border-color: var(--deck-line); background: var(--deck-2); }
-.setlist-stage .setlist-stage-notes { color: var(--deck-text); opacity: 0.85; }
-
-/* ==========================================================================
-   Reduced motion: LEDs change state without pulsing
-   ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .deck-led,
-  .led,
-  .metronome-stage .beat-dot,
-  .beat-grid-wrap .beat-steps .beat-cell,
-  .pad-grid .pad { transition: none; }
-  .setlist-stage .setlist-stage-dot { animation: none; }
+  .tool-intro::before,
+  .tool-hero::before,
+  .me-hero::before,
+  .credits-hero::before,
+  .tool-intro::after,
+  .tool-hero::after,
+  .tool-intro-icon::after,
+  .drop-zone::before,
+  .upload-icon { animation: none; }
 }
-.piano-status .piano-held.is-idle { font-family: var(--font-sans); font-size: 13px; font-weight: 400; color: var(--text-muted); direction: rtl; }

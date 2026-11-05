@@ -2,6 +2,7 @@ import { ArrowLeft, ChevronDown, FileAudio, Forward, Loader2, Sparkles } from "l
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { receivingTools, sendOffer, useFileOffer, type FileOffer } from "../lib/currentFile";
 import { currentRoute } from "../lib/router";
+import "../styles/send-file.css";
 
 const FAILED = "לא הצלחנו להעביר את הקובץ. אפשר להוריד אותו ולבחור אותו בכלי הבא.";
 
@@ -34,21 +35,18 @@ export function SendFileSection({ disabledTools = [] }: { disabledTools?: readon
   const isResult = offer.kind === "result";
 
   return (
-    <section className="panel send-file" aria-labelledby="send-file-title">
-      <span className="panel-num" aria-hidden="true" />
-      <header className="panel-head">
-        <span className="panel-icon send-file-icon" aria-hidden="true">
-          {isResult ? <Sparkles size={16} /> : <FileAudio size={16} />}
+    <section className="send-file" aria-labelledby="send-file-title">
+      <div className="send-file-head">
+        <span className="send-file-icon" aria-hidden="true">
+          {isResult ? <Sparkles size={18} /> : <FileAudio size={18} />}
         </span>
-        <div className="panel-heading">
-          <h2 className="panel-title" id="send-file-title">
-            ממשיכים עם {isResult ? "התוצאה" : "הקובץ"}
-          </h2>
-          <p className="panel-hint">
+        <div>
+          <h2 id="send-file-title">ממשיכים עם {isResult ? "התוצאה" : "הקובץ"}</h2>
+          <p>
             <bdi className="send-file-name">{offer.name}</bdi> עובר לכלי הבא כמו שהוא, בלי להעלות אותו שוב.
           </p>
         </div>
-      </header>
+      </div>
       <div className="send-file-grid">
         {targets.map((tool) => {
           const Icon = tool.icon;
@@ -61,14 +59,14 @@ export function SendFileSection({ disabledTools = [] }: { disabledTools?: readon
               onClick={() => send(offer, tool.id)}
               disabled={Boolean(sending)}
             >
-              <span className="send-file-target-icon" aria-hidden="true">
+              <span className="send-file-target-icon">
                 {sending === tool.id ? <Loader2 size={16} className="spin" /> : <Icon size={16} />}
               </span>
               <span className="send-file-target-text">
                 <b>{tool.quick}</b>
                 <small>{tool.title}</small>
               </span>
-              <ArrowLeft size={16} className="send-file-go" aria-hidden="true" />
+              <ArrowLeft size={14} className="send-file-go" aria-hidden="true" />
             </button>
           );
         })}

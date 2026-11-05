@@ -759,6 +759,16 @@ export function JoinerTool() {
 
   return (
     <section className="tool-body joiner-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Combine size={26} />
+        </span>
+        <div>
+          <h1>חיבור וחיתוך קבצים</h1>
+          <p>כמה קבצי שמע לקובץ אחד — מסדרים, חותכים כל אחד, בוחרים מעבר רך או שקט ביניהם, ומורידים WAV או MP3.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <div
           className={`drop-zone joiner-drop ${clips.length ? "is-compact" : ""} ${dropping ? "is-dragging" : ""}`}

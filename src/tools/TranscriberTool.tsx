@@ -899,6 +899,16 @@ export function TranscriberTool({ initial }: Props) {
 
   return (
     <>
+      <section className="tool-hero">
+        <div className="hero-glow hero-glow-one" />
+        <div className="hero-glow hero-glow-two" />
+        <div className="eyebrow">
+          <FileMusic size={16} /> זיהוי תווים חכם
+        </div>
+        <h1>שיר לתווים</h1>
+        <p>בחר שיר או הקלט מנגינה ליצירת תווים.</p>
+      </section>
+
       <section className="workspace-section">
         <div className="workspace-card">
           <div className="workspace-heading">

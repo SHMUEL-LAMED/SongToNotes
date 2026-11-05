@@ -10,6 +10,7 @@ import {
   CopyPlus,
   FolderOpen,
   GripVertical,
+  ListMusic,
   Maximize,
   MessageCircle,
   Minimize,
@@ -432,6 +433,16 @@ export function SetlistTool({ onOpenWork }: Props) {
 
   return (
     <section className="tool-body setlist-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <ListMusic size={26} />
+        </span>
+        <div>
+          <h1>סט־ליסט להופעה</h1>
+          <p>בונים את רשימת השירים של הערב, רואים כמה זמן היא נמשכת, ועוברים בין השירים על הבמה במסך מלא.</p>
+        </div>
+      </div>
+
       <div className="settings-panel setlist-manage">
         <div className="setlist-manage-row" data-tour="setlist-sets">
           <label className="setlist-field setlist-field-grow">

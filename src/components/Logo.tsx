@@ -1,48 +1,30 @@
-import type { CSSProperties } from "react";
-
 /**
- * The mark: an eighth note on a sapphire tile. The tile is the brand's
- * colour, the note is light with an amber head, and two faint staff lines
- * run behind it. At 16px it still reads as one note, not as stripes. `mono`
- * draws an outlined tile and the note in currentColor (the footer); so does a
- * `.is-mono` ancestor, through `--logo-tile` / `--logo-note`.
+ * The mark: a few bars of sound that turn into a note — what the site does,
+ * in one glyph. Drawn in currentColor so it sits on the brand gradient.
  */
-export function LogoGlyph({ size = 24, mono = false }: { size?: number; mono?: boolean }) {
-  const tile: CSSProperties = mono
-    ? { fill: "none", stroke: "currentColor", strokeWidth: 1.5 }
-    : { fill: "var(--logo-tile, var(--brand))" };
-  const ink = mono ? "currentColor" : "var(--logo-ink, #fff)";
-  const head = mono ? "currentColor" : "var(--logo-note, var(--brand-2))";
+export function LogoGlyph({ size = 24 }: { size?: number }) {
   return (
-    <svg
-      className={`logo-glyph${mono ? " is-mono" : ""}`}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect x="1.5" y="1.5" width="29" height="29" rx="8" style={tile} />
-      <g stroke={ink} strokeWidth="1.2" strokeLinecap="round" opacity={mono ? 0.45 : 0.3}>
-        <path d="M6 13.5h20" />
-        <path d="M6 19.5h20" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
+        <path d="M3.5 13.5v-3" />
+        <path d="M7.5 16.5v-9" />
+        <path d="M11.5 13v-2" />
+        <path d="M18.6 17.2V4.2c1.6.7 3 1.9 3 4" />
       </g>
-      <path d="M17.6 21.6V7.8c3.6 1 6 3.6 5.2 7.6" stroke={ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <ellipse className="logo-notehead" cx="13.6" cy="22" rx="4.6" ry="3.4" transform="rotate(-22 13.6 22)" fill={head} />
+      <ellipse cx="15.9" cy="17.6" rx="3" ry="2.4" transform="rotate(-18 15.9 17.6)" fill="currentColor" />
     </svg>
   );
 }
 
-/** The lockup: the mark, the name and, unless compact, the line under it. */
-export function Logo({ compact = false, mono = false }: { compact?: boolean; mono?: boolean }) {
+export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <>
-      <span className={`brand-mark${mono ? " is-mono" : ""}`}>
-        <LogoGlyph size={28} mono={mono} />
+      <span className="brand-mark">
+        <LogoGlyph />
       </span>
       <span className="brand-text">
         <strong>כלי מוזיקה</strong>
-        {!compact && <small>סטודיו בדפדפן</small>}
+        {!compact && <small>הסטודיו שלך בדפדפן</small>}
       </span>
     </>
   );

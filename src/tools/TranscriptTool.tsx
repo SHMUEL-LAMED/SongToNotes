@@ -663,6 +663,16 @@ export function TranscriptTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body transcript-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Captions size={26} />
+        </span>
+        <div>
+          <h1>תמלול לטקסט</h1>
+          <p>בחר הקלטה או הקלט, וקבל את הדיבור כטקסט עם חותמות זמן.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

@@ -56,14 +56,6 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acc
 // Counting the voices the synth starts is the only way from outside the page
 // to tell one playback from two overlapping ones.
 await page.addInitScript(() => {
-  // The invitation to open an account comes up a few seconds into a visit
-  // and sits over the page; the checks below are about the tools, so it is
-  // marked as already shown.
-  try {
-    sessionStorage.setItem("musictools.sign-in-prompt.shown.v1", "1");
-  } catch {
-    // No storage: the invitation may appear.
-  }
   window.__oscillators = 0;
   const create = AudioContext.prototype.createOscillator;
   AudioContext.prototype.createOscillator = function countingCreateOscillator() {
@@ -95,14 +87,10 @@ const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "pi
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
-  // The frame writes the tool's name in the masthead; the tool's own body
-  // has to be there under it too.
-  // The transcriber lays its steps out as sections rather than one body.
-  const BODY = ".tool-frame .tool-body, .tool-frame .workspace-section";
-  await page.waitForSelector(BODY, { timeout: 30_000 }).catch(() => {});
-  const heading = await page.locator(".tool-masthead h1").first().textContent().catch(() => null);
-  const body = await page.locator(BODY).count();
-  log(Boolean(heading) && body > 0, `tool "${id}" renders`, heading ? `${heading}, body ${body}` : "no heading");
+  // The pads are a full-bleed board of their own, outside .tool-body.
+  await page.waitForSelector(".tool-body h1, .tool-hero h1, .pad-tool h1", { timeout: 30_000 }).catch(() => {});
+  const heading = await page.locator(".tool-body h1, .tool-hero h1, .pad-tool h1").first().textContent().catch(() => null);
+  log(Boolean(heading), `tool "${id}" renders`, heading ?? "no heading");
 }
 
 // --- unknown route falls back to hub ---
@@ -154,13 +142,7 @@ log(Number(endAfter) < Number(endBefore), "waveform: the end handle moves indepe
 // a plain click slides the ringtone rather than wiping the selection
 const lengthBeforeClick = Number(await endField.inputValue()) - Number(await startField.inputValue());
 const strip = page.locator(".waveform svg");
-// Centred on screen, so a notice floating at the foot of the window is not
-// what the click lands on.
-await strip.evaluate((element) => element.scrollIntoView({ block: "center" }));
-await page.waitForTimeout(200);
 const box = await strip.boundingBox();
-const under = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("svg") ? "svg" : document.elementFromPoint(x, y)?.className, [box.x + box.width * 0.5, box.y + box.height / 2]);
-if (under !== "svg") console.log(`  (the click point is covered by ${under})`);
 await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
 await page.waitForTimeout(300);
 const startAfterClick = Number(await startField.inputValue());
@@ -676,10 +658,7 @@ log((await page.locator(".tool-card", { hasText: "מזהה שיר" }).count()) =
 await page.goto(`${BASE}#/identify`, { waitUntil: "load" });
 await page.reload({ waitUntil: "load" });
 await page.waitForSelector(".identify-tool", { timeout: 10_000 }).catch(() => {});
-log(
-  (await page.locator(".identify-tool").count()) > 0 && (await page.locator(".tool-masthead h1", { hasText: "מזהה שיר" }).isVisible()),
-  "identify: its address opens the tool",
-);
+log(await page.locator(".identify-tool h1", { hasText: "מזהה שיר" }).isVisible(), "identify: its address opens the tool");
 log(await page.locator(".identify-tool .transcript-signin").isVisible(), "identify: recognition asks for a sign-in");
 
 // --- transcript extras: a reopened transcript has search with jump and a speakers button ---

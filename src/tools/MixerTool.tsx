@@ -354,6 +354,16 @@ export function MixerTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body mixer-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Layers size={26} />
+        </span>
+        <div>
+          <h1>מיקסר ולופר</h1>
+          <p>כמה קבצים יחד — עוצמה ופאן לכל אחד, לולאה על קטע, ומיקס אחד להורדה.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <div className="mixer-add">
           <input ref={inputRef} type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.webm" multiple className="native-file-input" onChange={(event) => void addFiles(event.target.files)} aria-label="הוסף ערוצים" disabled={loading || tracks.length >= MAX_TRACKS} />

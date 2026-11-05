@@ -716,6 +716,16 @@ export function VocalsTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body vocals-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <MicVocal size={26} />
+        </span>
+        <div>
+          <h1>הסרת שירה</h1>
+          <p>בחר שיר והפרד בין השירה לליווי.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

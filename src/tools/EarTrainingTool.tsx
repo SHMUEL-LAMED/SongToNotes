@@ -1,4 +1,4 @@
-import { Check, Play, RotateCcw, SkipForward, X } from "lucide-react";
+import { Check, Ear, Play, RotateCcw, SkipForward, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
 import {
@@ -21,7 +21,6 @@ import { NotePlayer } from "../lib/synth";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
-import { ToolActions } from "../components/ToolFrame";
 
 const SETTINGS_KEY = "musictools.eartraining.v1";
 
@@ -361,9 +360,18 @@ export function EarTrainingTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body ear-training" ref={rootRef}>
-      <ToolActions>
-        <SaveButton state={saving.state} onSave={() => void saveSession()} disabled={stats.asked === 0} label="שמור את האימון" message={saving.message} compact />
-      </ToolActions>
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Ear size={26} />
+        </span>
+        <div>
+          <h1>מאמן שמיעה</h1>
+          <p>{MODE_HINTS[mode]}</p>
+        </div>
+        <div className="tool-intro-side">
+          <SaveButton state={saving.state} onSave={() => void saveSession()} disabled={stats.asked === 0} label="שמור את האימון" message={saving.message} compact />
+        </div>
+      </div>
 
       <div className="settings-panel">
         <div className="settings-grid">

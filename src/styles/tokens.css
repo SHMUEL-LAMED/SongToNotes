@@ -1,205 +1,85 @@
 /* ==========================================================================
-   Design tokens — "Console"
+   Design tokens
    Every colour in the interface resolves through this layer. The two themes
    are two value sets, and each tool tints the same components by setting one
    number — its hue. Accents are computed in OKLCH, so a yellow tool and a
    blue tool reach the eye at the same brightness instead of one glaring and
    the other sinking into the page.
-
-   The page is matte paper (warm light / near-black dark); instruments are
-   decks — near-black plates in both themes — where the tool's colour is an
-   LED. index.html stamps `data-theme` on <html> before the first paint, so
-   the dark block below is in place before anything is drawn.
    ========================================================================== */
 
-/* Registered so a conic sweep can turn (the personal area still animates it). */
-@property --stage-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
 :root {
-  /* The brand's own hue (sapphire), used wherever no tool has set one. */
-  --accent-hue: 250;
-  --brand-hue: 250;
-  --brand-warm-hue: 55;
+  /* The brand's own hue, used wherever no tool has set one. */
+  --accent-hue: 292;
 
-  /* Which way "forward" runs: 1 on a right-to-left page, -1 left to right
-     (ltr.css). Translations that slide something in from the start edge
-     multiply by it. */
-  --dir: 1;
-
-  /* ---- type ---- */
   --font-sans: "Rubik Variable", "Rubik", "Heebo", "Segoe UI", system-ui, "Arial Hebrew", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  --fs-display: clamp(36px, 2.2vw + 22px, 52px);
-  --fs-h1: clamp(26px, 1vw + 19px, 32px);
-  --fs-h2: 21px;
-  --fs-h3: 16.5px;
-  --fs-body: 15.5px;
-  --fs-ui: 14px;
-  --fs-small: 13px;
-  --fs-label: 11.5px;
-  --fs-read-xl: 56px;
-  --fs-read-lg: 30px;
-  --fs-read-md: 18px;
-  --fs-read-sm: 12.5px;
-  --lh-display: 1.06;
-  --lh-h1: 1.15;
-  --lh-h2: 1.25;
-  --lh-h3: 1.35;
-  --lh-body: 1.6;
-  --lh-ui: 1.4;
-  --lh-small: 1.5;
-  --lh-label: 1.3;
-  --track-display: -0.015em;
-  --track-h1: -0.01em;
-  --track-h2: -0.005em;
-  --track-label: 0.04em;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 30px;
+  --radius-pill: 999px;
 
-  /* ---- space ---- */
-  --s-1: 4px;
-  --s-2: 8px;
-  --s-3: 12px;
-  --s-4: 16px;
-  --s-5: 20px;
-  --s-6: 24px;
-  --s-7: 32px;
-  --s-8: 40px;
-  --s-9: 48px;
-  --s-10: 64px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* ---- widths ---- */
-  --gutter: clamp(16px, 3vw, 32px);
-  --tool-w: 1040px;
-  --content-w: 1200px;
-  --read-w: 66ch;
-  --margin-col: 56px;
+  --sidebar-w: 276px;
+  --topbar-h: 64px;
+  --content-w: 1140px;
+  --tool-w: 980px;
+  --gutter: clamp(16px, 3vw, 36px);
 
-  /* ---- shell ---- */
-  --sidebar-w: 248px;
-  --rail-w: 64px;
-  --topbar-h: 56px;
-  --tabbar-h: 56px;
-  --tooltabs-h: 40px;
-
-  /* ---- radii ---- */
-  --r-1: 6px;   /* kbd, chips, LED bars, inner controls */
-  --r-2: 10px;  /* buttons, inputs, nav items */
-  --r-3: 14px;  /* panels, cards, dialogs */
-  --r-4: 18px;  /* decks, hero panel, sheets */
-  --r-pill: 999px;
-
-  /* ---- motion ---- */
-  --dur-1: 90ms;   /* press, LED */
-  --dur-2: 160ms;  /* hover, colour */
-  --dur-3: 240ms;  /* reveal, sheet, drawer, rail */
-  --dur-4: 360ms;  /* page enter */
-  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-spring: cubic-bezier(0.3, 1.35, 0.5, 1); /* segmented thumb and tab underline only */
-
-  /* ---- layers ---- */
-  --z-sticky: 10;
-  --z-sidebar: 20;
-  --z-topbar: 30;
-  --z-tabbar: 40;
-  --z-assistant: 50;
-  --z-notices: 60;
-  --z-sheet: 70;
-  --z-dialog: 80;
-  --z-palette: 90;
-  --z-tour: 100;
-  --z-skip: 110;
-
-  /* ---- the deck: dark in both themes ---- */
-  --deck-bg: #0e0e11;
-  --deck-2: #16161a;
-  --deck-line: rgba(255, 255, 255, 0.10);
-  --deck-line-strong: rgba(255, 255, 255, 0.18);
-  --deck-text: #f2f1ee;
-  --deck-muted: #8d8c87;
-
-  /* Sheet music is printed on paper whatever the theme: the engraver draws
-     in currentColor, so the staff keeps its own dark ink. */
-  --paper: #ffffff;
-  --paper-ink: #15161a;
+  /* The signature gradient: the brand mark, the hero, the home page. */
+  --brand-1: oklch(0.7 0.21 292);
+  --brand-2: oklch(0.7 0.22 345);
+  --brand-3: oklch(0.8 0.16 55);
+  --brand-gradient: linear-gradient(120deg, var(--brand-1), var(--brand-2) 55%, var(--brand-3));
 
   /* ---- light theme ---- */
-  --bg: #f6f5f2;
-  --bg-deep: #eeece8;
+  --bg: #f5f4f0;
+  --bg-deep: #eceae4;
   --surface: #ffffff;
-  --surface-2: #f1f0ec;
-  --surface-3: #e9e7e2;
-  --surface-sunken: rgba(21, 22, 26, 0.045);
-  --surface-hover: rgba(21, 22, 26, 0.05);
-  --text: #15161a;
-  --text-soft: #44464e;
-  --text-muted: #6f727b;
-  --ink: #15161a;
-  --on-ink: #f6f5f2;
-  --line: rgba(21, 22, 26, 0.10);
-  --line-strong: rgba(21, 22, 26, 0.20);
+  --surface-solid: #ffffff;
+  --surface-2: #faf9f6;
+  --surface-3: #f1efea;
+  --surface-sunken: rgba(28, 24, 40, 0.045);
+  --surface-hover: rgba(28, 24, 40, 0.06);
+  --sidebar-bg: rgba(250, 249, 246, 0.86);
+  --line: rgba(28, 24, 40, 0.09);
+  --line-strong: rgba(28, 24, 40, 0.17);
+  --text: #18161f;
+  --text-soft: #4b4857;
+  --text-muted: #7b7887;
+  --ink: #18161f;
+  --on-ink: #ffffff;
 
-  --success: oklch(0.55 0.14 150);
-  --success-soft: oklch(0.55 0.14 150 / 0.12);
-  --warning: oklch(0.62 0.14 70);
-  --warning-soft: oklch(0.62 0.14 70 / 0.14);
-  --danger: oklch(0.55 0.19 25);
-  --danger-soft: oklch(0.55 0.19 25 / 0.10);
-  --on-danger: #ffffff;
+  --success: oklch(0.58 0.15 155);
+  --success-soft: oklch(0.58 0.15 155 / 0.12);
+  --warning: oklch(0.62 0.15 70);
+  --warning-soft: oklch(0.75 0.15 75 / 0.16);
+  --danger: oklch(0.58 0.21 20);
+  --danger-soft: oklch(0.58 0.21 20 / 0.1);
+  --mint: oklch(0.62 0.12 180);
 
-  --brand: oklch(0.52 0.17 250);
-  --brand-2: oklch(0.72 0.14 55);
-  --scrim: rgba(21, 22, 26, 0.48);
-  --sidebar-bg: var(--bg);
+  --shadow-xs: 0 1px 2px rgba(20, 16, 36, 0.06);
+  --shadow-sm: 0 1px 2px rgba(20, 16, 36, 0.05), 0 4px 12px rgba(20, 16, 36, 0.05);
+  --shadow-md: 0 2px 6px rgba(20, 16, 36, 0.05), 0 14px 34px rgba(20, 16, 36, 0.08);
+  --shadow-lg: 0 8px 20px rgba(20, 16, 36, 0.08), 0 30px 70px rgba(20, 16, 36, 0.14);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 
-  --fader-cap: #fdfdfc;
-
-  --shadow-panel: 0 1px 0 var(--line-strong);
-  --shadow-raised: 0 1px 2px rgba(21, 22, 26, 0.06), 0 6px 16px -8px rgba(21, 22, 26, 0.14);
-  --shadow-overlay: 0 12px 40px -12px rgba(21, 22, 26, 0.30);
-  --shadow-key: inset 0 2px 3px rgba(0, 0, 0, 0.22);
-  --shadow-cap: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-
-  --hair: 1px solid var(--line);
-  --hair-strong: 1px solid var(--line-strong);
-
-  /* The piano roll and the waveform, re-derived from the palette. */
-  --roll-row-black: #ecebe6;
-  --roll-row-odd: #f4f3ef;
-  --roll-row-even: #fafaf8;
-  --roll-grid-line: var(--line);
-  --roll-bar-line: var(--line-strong);
-  --roll-gutter: var(--surface-2);
-  --roll-key-black: #2a2b31;
+  --roll-row-black: #ecebf2;
+  --roll-row-odd: #f6f5f9;
+  --roll-row-even: #fcfbfe;
+  --roll-grid-line: rgba(30, 24, 60, 0.09);
+  --roll-bar-line: rgba(30, 24, 60, 0.26);
+  --roll-label: #837f95;
+  --roll-gutter: #f1eff5;
+  --roll-key-black: #2c2838;
   --roll-key-white: #ffffff;
-  --roll-label: var(--text-muted);
   --roll-playhead: var(--danger);
-  --wave-bg: var(--surface-sunken);
 
-  /* ---- compatibility aliases: keep until the last legacy rule is gone ---- */
-  --surface-solid: var(--surface);
-  --shadow-accent: none;
-  --inner-highlight: 0 0 0 0 transparent;
-  --brand-1: var(--brand);
-  --brand-2-legacy: var(--brand-2);
-  --brand-3: var(--brand-2);
-  --brand-gradient: linear-gradient(135deg, var(--brand), var(--brand-2));
-  --radius-xs: var(--r-1);
-  --radius-sm: var(--r-2);
-  --radius: var(--r-3);
-  --radius-lg: var(--r-4);
-  --radius-xl: var(--r-4);
-  --radius-pill: 999px;
-  --shadow-xs: none;
-  --shadow-sm: var(--shadow-panel);
-  --shadow-md: var(--shadow-raised);
-  --shadow-lg: var(--shadow-overlay);
-  --ease: var(--ease-out);
-  --mint: var(--success);
+  --wave-bg: rgba(28, 24, 40, 0.04);
 
   font-family: var(--font-sans);
   color: var(--text);
@@ -212,93 +92,77 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #111216;
-  --bg-deep: #0c0d10;
-  --surface: #17191e;
-  --surface-2: #1d2026;
-  --surface-3: #242830;
-  --surface-sunken: rgba(255, 255, 255, 0.04);
-  --surface-hover: rgba(255, 255, 255, 0.05);
-  --text: #eeeef1;
-  --text-soft: #b6b8c0;
-  --text-muted: #858891;
-  --ink: #eeeef1;
-  --on-ink: #111216;
-  --line: rgba(238, 238, 241, 0.09);
-  --line-strong: rgba(238, 238, 241, 0.17);
+  --bg: #09090d;
+  --bg-deep: #050508;
+  --surface: #111117;
+  --surface-solid: #15151c;
+  --surface-2: #17171e;
+  --surface-3: #1d1d25;
+  --surface-sunken: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-bg: rgba(13, 13, 18, 0.82);
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #f3f2f8;
+  --text-soft: #b6b4c4;
+  --text-muted: #817f91;
+  --ink: #f3f2f8;
+  --on-ink: #0b0b10;
 
-  --success: oklch(0.76 0.14 150);
-  --success-soft: oklch(0.76 0.14 150 / 0.14);
-  --warning: oklch(0.82 0.13 80);
-  --warning-soft: oklch(0.82 0.13 80 / 0.14);
-  --danger: oklch(0.72 0.17 25);
-  --danger-soft: oklch(0.72 0.17 25 / 0.14);
-  --on-danger: #111216;
+  --success: oklch(0.78 0.16 155);
+  --success-soft: oklch(0.78 0.16 155 / 0.13);
+  --warning: oklch(0.83 0.14 80);
+  --warning-soft: oklch(0.83 0.14 80 / 0.13);
+  --danger: oklch(0.72 0.18 20);
+  --danger-soft: oklch(0.72 0.18 20 / 0.13);
+  --mint: oklch(0.8 0.12 180);
 
-  --brand: oklch(0.78 0.13 250);
-  --brand-2: oklch(0.84 0.14 60);
-  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  --deck-bg: #08080a;
-  --deck-2: #0f0f12;
+  --roll-row-black: #0e0e14;
+  --roll-row-odd: #13131a;
+  --roll-row-even: #17171f;
+  --roll-grid-line: rgba(255, 255, 255, 0.06);
+  --roll-bar-line: rgba(255, 255, 255, 0.2);
+  --roll-label: #807e92;
+  --roll-gutter: #0b0b10;
+  --roll-key-black: #1c1c25;
+  --roll-key-white: #e4e3ec;
 
-  --fader-cap: #30333b;
-
-  --shadow-panel: 0 1px 0 rgba(0, 0, 0, 0.6);
-  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.35), 0 10px 24px -10px rgba(0, 0, 0, 0.5);
-  --shadow-overlay: 0 20px 60px -16px rgba(0, 0, 0, 0.7);
-  --shadow-key: inset 0 2px 4px rgba(0, 0, 0, 0.6);
-  --shadow-cap: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-
-  --roll-row-black: #15171b;
-  --roll-row-odd: #1a1c21;
-  --roll-row-even: #1e2026;
-  --roll-key-black: #0c0d10;
-  --roll-key-white: #e4e4e8;
+  --wave-bg: rgba(0, 0, 0, 0.3);
 
   color-scheme: dark;
-}
-
-/* The phone's top bar is a little shorter. */
-@media (max-width: 719.98px) {
-  :root { --topbar-h: 52px; }
 }
 
 /* The accent family. A custom property resolves var() where it is declared,
    so anything that sets its own hue — a tool page, a card, a row in a chart,
    any element given `--accent-hue` inline — re-derives the whole family from
-   it, and nothing sits half in one colour and half in another. The accent
-   lock in shell.css must mirror this selector list. */
+   it, and nothing sits half in one colour and half in another. */
 :root,
 .tool-page,
 .tool-card,
 .admin-page,
 .me-tile,
-.deck,
 [style*="--accent-hue"] {
-  --accent: oklch(0.54 0.15 var(--accent-hue));
-  --accent-strong: oklch(0.46 0.15 var(--accent-hue));
-  --accent-soft: oklch(0.95 0.03 var(--accent-hue));
-  --accent-tint: oklch(0.54 0.15 var(--accent-hue) / 0.09);
-  --accent-ring: oklch(0.54 0.15 var(--accent-hue) / 0.38);
-  --accent-text: oklch(0.43 0.13 var(--accent-hue));
-  --accent-line: oklch(0.54 0.15 var(--accent-hue) / 0.42);
+  --accent: oklch(0.57 0.2 var(--accent-hue));
+  --accent-strong: oklch(0.5 0.19 var(--accent-hue));
+  --accent-soft: oklch(0.95 0.035 var(--accent-hue));
+  --accent-tint: oklch(0.57 0.2 var(--accent-hue) / 0.08);
+  --accent-ring: oklch(0.6 0.2 var(--accent-hue) / 0.26);
+  --accent-text: oklch(0.45 0.16 var(--accent-hue));
+  --accent-line: oklch(0.57 0.2 var(--accent-hue) / 0.35);
   --on-accent: #ffffff;
-  /* Was a gradient; now the flat fill (compatibility). */
-  --accent-grad: var(--accent);
-
-  /* The LED family: the same in both themes, used inside decks and for the
-     3×14 bars that mark a tool in the navigation. */
-  --led: oklch(0.82 0.14 var(--accent-hue));
-  --led-dim: oklch(0.82 0.14 var(--accent-hue) / 0.30);
-  --led-glow: 0 0 10px oklch(0.82 0.14 var(--accent-hue) / 0.55);
-  --led-text: oklch(0.88 0.10 var(--accent-hue));
-
-  --roll-note-top: oklch(0.66 0.14 var(--accent-hue));
-  --roll-note-bottom: oklch(0.56 0.14 var(--accent-hue));
-  --roll-note-edge: oklch(0.80 0.10 var(--accent-hue));
-  --wave-body: oklch(0.60 0.12 var(--accent-hue));
-  --wave-selected: oklch(0.54 0.15 var(--accent-hue));
+  --accent-grad: linear-gradient(135deg, oklch(0.64 0.2 var(--accent-hue)), oklch(0.55 0.21 calc(var(--accent-hue) + 35)));
+  --shadow-accent: 0 10px 28px oklch(0.55 0.2 var(--accent-hue) / 0.28);
+  --roll-note-top: oklch(0.68 0.18 var(--accent-hue));
+  --roll-note-bottom: oklch(0.56 0.2 var(--accent-hue));
+  --roll-note-edge: oklch(0.8 0.12 var(--accent-hue));
+  --wave-body: oklch(0.64 0.17 var(--accent-hue));
+  --wave-selected: oklch(0.55 0.2 var(--accent-hue));
 }
 
 :root[data-theme="dark"],
@@ -306,85 +170,20 @@
 :root[data-theme="dark"] .tool-card,
 :root[data-theme="dark"] .admin-page,
 :root[data-theme="dark"] .me-tile,
-:root[data-theme="dark"] .deck,
 :root[data-theme="dark"] [style*="--accent-hue"] {
-  --accent: oklch(0.78 0.12 var(--accent-hue));
-  --accent-strong: oklch(0.84 0.11 var(--accent-hue));
-  --accent-soft: oklch(0.30 0.05 var(--accent-hue));
-  --accent-tint: oklch(0.78 0.12 var(--accent-hue) / 0.10);
-  --accent-ring: oklch(0.78 0.12 var(--accent-hue) / 0.45);
-  --accent-text: oklch(0.84 0.10 var(--accent-hue));
-  --accent-line: oklch(0.78 0.12 var(--accent-hue) / 0.42);
-  --on-accent: oklch(0.17 0.03 var(--accent-hue));
-
-  --roll-note-top: oklch(0.80 0.14 var(--accent-hue));
-  --roll-note-bottom: oklch(0.68 0.14 var(--accent-hue));
-  --roll-note-edge: oklch(0.90 0.08 var(--accent-hue));
-  --wave-body: oklch(0.72 0.12 var(--accent-hue));
-  --wave-selected: oklch(0.82 0.12 var(--accent-hue));
-}
-
-/* A deck is a dark plate in both themes and redefines the tokens its
-   children read, so a button, a field or a chip set on it needs no rules of
-   its own: the surfaces go dark, the ink goes light and the accent becomes
-   the LED. The selectors carry `:root` (and `:root[data-theme]`) so they
-   outrank both derivation blocks above, including on an element inside the
-   deck that sets its own hue. The legacy instrument classes are listed
-   until every tool renders <Deck>. `.beat-steps` (a row of the drum grid)
-   only takes the tokens; the plate is drawn on the grid around it. */
-:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
-:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"],
-:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
-:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"] {
-  --bg: var(--deck-bg);
-  --surface: var(--deck-2);
-  --surface-2: var(--deck-2);
-  --surface-3: #1f1f24;
-  --surface-sunken: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.06);
-  --surface-solid: var(--deck-2);
-  --text: var(--deck-text);
-  --text-soft: var(--deck-text);
-  --text-muted: var(--deck-muted);
-  --ink: var(--deck-text);
-  --on-ink: var(--deck-bg);
-  --line: var(--deck-line);
-  --line-strong: var(--deck-line-strong);
-
-  --accent: var(--led);
-  --accent-strong: var(--led-text);
-  --accent-text: var(--led-text);
-  --accent-soft: oklch(0.82 0.14 var(--accent-hue) / 0.16);
-  --accent-tint: var(--led-dim);
-  --accent-ring: oklch(0.82 0.14 var(--accent-hue) / 0.5);
-  --accent-line: oklch(0.82 0.14 var(--accent-hue) / 0.42);
-  --accent-grad: var(--accent);
-  --on-accent: #0b0b0e;
-
-  /* The status colours at their night values, so they read on the plate. */
-  --success: oklch(0.76 0.14 150);
-  --success-soft: oklch(0.76 0.14 150 / 0.16);
-  --warning: oklch(0.82 0.13 80);
-  --warning-soft: oklch(0.82 0.13 80 / 0.16);
-  --danger: oklch(0.72 0.17 25);
-  --danger-soft: oklch(0.72 0.17 25 / 0.16);
-  --on-danger: #0b0b0e;
-
-  --fader-cap: #34363d;
-  --shadow-key: inset 0 2px 4px rgba(0, 0, 0, 0.6);
-  --shadow-cap: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --shadow-panel: none;
-  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.45);
-  --wave-bg: var(--surface-sunken);
-}
-
-/* Reduced motion: every duration collapses (base.css also overrides any
-   literal timing that does not go through these tokens). */
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --dur-1: 1ms;
-    --dur-2: 1ms;
-    --dur-3: 1ms;
-    --dur-4: 1ms;
-  }
+  --accent: oklch(0.77 0.15 var(--accent-hue));
+  --accent-strong: oklch(0.71 0.16 var(--accent-hue));
+  --accent-soft: oklch(0.34 0.07 var(--accent-hue) / 0.5);
+  --accent-tint: oklch(0.77 0.15 var(--accent-hue) / 0.07);
+  --accent-ring: oklch(0.77 0.15 var(--accent-hue) / 0.3);
+  --accent-text: oklch(0.85 0.11 var(--accent-hue));
+  --accent-line: oklch(0.77 0.15 var(--accent-hue) / 0.35);
+  --on-accent: #0b0b10;
+  --accent-grad: linear-gradient(135deg, oklch(0.82 0.14 var(--accent-hue)), oklch(0.72 0.17 calc(var(--accent-hue) + 35)));
+  --shadow-accent: 0 12px 34px oklch(0.6 0.18 var(--accent-hue) / 0.3);
+  --roll-note-top: oklch(0.8 0.14 var(--accent-hue));
+  --roll-note-bottom: oklch(0.66 0.17 var(--accent-hue));
+  --roll-note-edge: oklch(0.9 0.08 var(--accent-hue));
+  --wave-body: oklch(0.74 0.14 var(--accent-hue));
+  --wave-selected: oklch(0.82 0.15 var(--accent-hue));
 }

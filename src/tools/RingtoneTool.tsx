@@ -101,6 +101,16 @@ export function RingtoneTool() {
 
   return (
     <section className="tool-body ringtone-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Smartphone size={26} />
+        </span>
+        <div>
+          <h1>יצירת צלצול</h1>
+          <p>בחר שיר וחתוך ממנו צלצול.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

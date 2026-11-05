@@ -1,4 +1,4 @@
-import { Captions, Download, FileAudio, ScanSearch, Wand2, X } from "lucide-react";
+import { AudioLines, Captions, Download, FileAudio, ScanSearch, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile, type LoadedAudio } from "../components/AudioPicker";
 import { Transport } from "../components/Transport";
@@ -362,6 +362,16 @@ export function DenoiseTool() {
 
   return (
     <section className="tool-body denoise-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <AudioLines size={26} />
+        </span>
+        <div>
+          <h1>ניקוי רעשים</h1>
+          <p>מסירים רחש רקע, זמזום חשמל וקליקים מהקלטה, ומשווים לפני ואחרי. הכול קורה בדפדפן — הקובץ לא יוצא מהמכשיר.</p>
+        </div>
+      </div>
+
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

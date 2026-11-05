@@ -1,4 +1,4 @@
-import { Circle, Download, Keyboard, Layers, LoaderCircle, Minus, Play, Plus, Square, Timer, Trash2, Undo2, Volume2 } from "lucide-react";
+import { Circle, Download, Drum, Keyboard, Layers, LoaderCircle, Minus, Play, Plus, Square, Timer, Trash2, Undo2, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { MidiButton } from "../components/MidiButton";
 import {
@@ -762,6 +762,19 @@ export function DrumKitTool() {
 
   return (
     <section className="tool-body drumkit-tool">
+      <div className="tool-intro">
+        <span className="tool-intro-icon">
+          <Drum size={26} />
+        </span>
+        <div>
+          <h1>תופים אלקטרוניים</h1>
+          <p>
+            מנגנים באצבעות, בעכבר או במקלדת — כמה אצבעות יחד. מכה במרכז התוף חזקה יותר, בשוליים רכה יותר, ובמרכז המצילה נשמע הפעמון. אפשר
+            להקליט לולאה ולנגן מעליה.
+          </p>
+        </div>
+      </div>
+
       <div className="drumkit-deck">
         <div className="drumkit-transport">
           <button
