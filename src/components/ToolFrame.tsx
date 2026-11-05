@@ -146,7 +146,11 @@ export function ToolFrame({ tool, current, onOpen, onFeedback, disabledTools = [
  * first visit, closed on the visits after, and from then on as it was left.
  */
 function MastheadMore({ tool }: { tool: ToolDefinition }) {
-  const [open, setOpen] = useState(() => readHelp()[tool.id] ?? true);
+  const [open, setOpen] = useState(
+    // On a phone the description would push the tool itself below the fold,
+    // so there it starts folded even on the first visit.
+    () => readHelp()[tool.id] ?? !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 719px)").matches),
+  );
 
   // The first visit is remembered as seen, so the next one opens folded.
   useEffect(() => {

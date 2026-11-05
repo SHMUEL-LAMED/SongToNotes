@@ -1,4 +1,4 @@
-import { Gauge, Mic, MicOff, Volume2 } from "lucide-react";
+import { Mic, MicOff, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
 import { centsOff, detectPitch, frequencyToMidi, midiToFrequency } from "../lib/dsp";
@@ -7,6 +7,7 @@ import { parseNoteName } from "../lib/noteNames";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
+import { ToolActions } from "../components/ToolFrame";
 
 type Preset = { id: string; label: string; strings: number[] | null };
 
@@ -356,18 +357,9 @@ export function TunerTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body tuner">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Gauge size={26} />
-        </span>
-        <div>
-          <h1>מכוון כלים</h1>
-          <p>נגן צליל ליד המיקרופון כדי לכוון את הכלי.</p>
-        </div>
-        <div className="tool-intro-side">
-          <SaveButton state={saving.state} onSave={() => void saveSetup()} label="שמור את הכיוון" message={saving.message} compact />
-        </div>
-      </div>
+      <ToolActions>
+        <SaveButton state={saving.state} onSave={() => void saveSetup()} label="שמור את הכיוון" message={saving.message} compact />
+      </ToolActions>
 
       <div className={`tuner-stage ${inTune ? "is-in-tune" : ""} ${display ? "has-signal" : ""}`}>
         <svg viewBox="0 0 320 190" className="tuner-gauge" aria-hidden="true">

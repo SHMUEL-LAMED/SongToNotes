@@ -3,7 +3,6 @@ import {
   Dices,
   Download,
   Eraser,
-  Grid3x3,
   Layers,
   LoaderCircle,
   Minus,
@@ -357,16 +356,6 @@ export function BeatMakerTool() {
 
   return (
     <section className="tool-body beats-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Grid3x3 size={26} />
-        </span>
-        <div>
-          <h1>מכונת תופים</h1>
-          <p>לוחצים על משבצת כדי להוסיף מכה. לחיצה שנייה מדגישה אותה, ושלישית מוחקת. רווח מפעיל ועוצר.</p>
-        </div>
-      </div>
-
       <div className="beat-deck">
         <button type="button" className={`beat-play ${playing ? "is-playing" : ""}`} onClick={toggle} aria-pressed={playing}>
           {playing ? <Square size={22} fill="currentColor" /> : <Play size={24} fill="currentColor" />}

@@ -278,16 +278,6 @@ export function SpeedTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body speed-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Snail size={26} />
-        </span>
-        <div>
-          <h1>מאט ומאיץ</h1>
-          <p>שנה את המהירות והטון של השיר.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

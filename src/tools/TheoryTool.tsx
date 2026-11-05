@@ -1,4 +1,4 @@
-import { Compass, Guitar, Pause, Piano as PianoIcon, Play, Repeat } from "lucide-react";
+import { Guitar, Pause, Piano as PianoIcon, Play, Repeat } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
 import {
@@ -240,16 +240,6 @@ export function TheoryTool() {
 
   return (
     <section className="tool-body theory-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Compass size={26} />
-        </span>
-        <div>
-          <h1>סייר תאוריה</h1>
-          <p>בוחרים טוניקה וסולם — על מעגל הקווינטות או מהרשימה — ורואים ושומעים את התווים, המרווחים והאקורדים.</p>
-        </div>
-      </div>
-
       <div className="theory-top">
         <div className="circle-card">
           <svg viewBox={`0 0 ${size} ${size}`} className="fifths" role="group" aria-label="מעגל הקווינטות">

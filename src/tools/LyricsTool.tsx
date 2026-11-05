@@ -1,4 +1,4 @@
-import { Captions, Download, FileText, LogIn, Mic2, Wand2, X } from "lucide-react";
+import { Captions, Download, FileText, LogIn, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { CreditCost } from "../components/CreditCost";
@@ -236,16 +236,6 @@ export function LyricsTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body lyrics-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Mic2 size={26} />
-        </span>
-        <div>
-          <h1>מילים מסונכרנות</h1>
-          <p>המילים של השיר עם הזמנים — קריוקי שנדלק מילה אחר מילה, וקובץ LRC.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

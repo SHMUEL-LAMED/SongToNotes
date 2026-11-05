@@ -1,4 +1,4 @@
-import { BellRing, Download, Layers, Loader2, MessageCircleHeart, Music2, SlidersHorizontal, Square, Trash2 } from "lucide-react";
+import { BellRing, Download, Layers, Loader2, Music2, SlidersHorizontal, Square, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AudioPicker, useAudioFile } from "../components/AudioPicker";
 import { ShareButton } from "../components/ShareButton";
@@ -349,16 +349,6 @@ export function SpeechSongTool() {
 
   return (
     <section className="tool-body speechsong-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <MessageCircleHeart size={26} />
-        </span>
-        <div>
-          <h1>דיבור לשיר</h1>
-          <p>אומרים משפט — ומקבלים אותו בחזרה מושר, כראפ על ביט או כפזמון שחוזר.</p>
-        </div>
-      </div>
-
       <div className="speechsong-modes" role="radiogroup" aria-label="מה לעשות עם הדיבור" data-tour="speechsong-modes">
         {SPEECH_SONG_MODES.map((item) => (
           <button

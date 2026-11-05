@@ -646,16 +646,6 @@ export function SongCardTool() {
 
   return (
     <section className="tool-body songcard-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Share2 size={26} />
-        </span>
-        <div>
-          <h1>כרטיס שיר לשיתוף</h1>
-          <p>ממלאים שם, אמן, סולם ואקורדים ומקבלים תמונה מעוצבת לפוסט או לסטורי — עם קישור לאתר — להורדה או לשליחה בוואטסאפ.</p>
-        </div>
-      </div>
-
       <div className="songcard-layout">
         <div className="songcard-preview-column">
           <div className="songcard-preview" data-size={fields.size}>

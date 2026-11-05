@@ -1,4 +1,4 @@
-import { Dices, Download, History, Lock, LockOpen, Music, Pause, Piano, Play, Repeat, Shuffle, WandSparkles } from "lucide-react";
+import { Dices, Download, History, Lock, LockOpen, Music, Pause, Piano, Play, Repeat, Shuffle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { downloadFile } from "../lib/export";
 import {
@@ -409,16 +409,6 @@ export function MelodyTool() {
 
   return (
     <section className="tool-body melody-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <WandSparkles size={26} />
-        </span>
-        <div>
-          <h1>מחולל מנגינות</h1>
-          <p>בוחרים סולם, אווירה וקצב ומקבלים מנגינה מקורית על מהלך אקורדים — עם מוטיב שחוזר וסיום שנוחת בבית. אפשר לשמור את הקצב ולהחליף רק את התווים, או להפך.</p>
-        </div>
-      </div>
-
       <div className="settings-panel melody-setup">
         <div className="setting-field melody-field-wide">
           <span>אווירה</span>

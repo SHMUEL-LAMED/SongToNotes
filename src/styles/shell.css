@@ -69,7 +69,7 @@
 }
 .brand-mark svg { width: 28px; height: 28px; }
 /* Drawn in one ink (the footer). */
-.brand-mark.is-mono { --logo-note: currentColor; --logo-stem: currentColor; color: var(--text-soft); }
+.brand-mark.is-mono { --logo-tile: currentColor; --logo-ink: var(--bg); --logo-note: var(--bg); color: var(--text-soft); }
 .brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .brand-text strong { font-size: 17px; font-weight: 600; white-space: nowrap; }
 .brand-text small {

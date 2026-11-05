@@ -1,15 +1,18 @@
 import type { CSSProperties } from "react";
 
 /**
- * The mark: the first note on the staff. Five staff lines in ink (they flip
- * with the theme, through currentColor), an amber notehead on the fourth
- * line and a sapphire stem with its flag. `mono` draws the whole mark in
- * currentColor; so does a `.is-mono` ancestor (the footer), through the
- * `--logo-note` / `--logo-stem` properties.
+ * The mark: an eighth note on a sapphire tile. The tile is the brand's
+ * colour, the note is light with an amber head, and two faint staff lines
+ * run behind it. At 16px it still reads as one note, not as stripes. `mono`
+ * draws an outlined tile and the note in currentColor (the footer); so does a
+ * `.is-mono` ancestor, through `--logo-tile` / `--logo-note`.
  */
 export function LogoGlyph({ size = 24, mono = false }: { size?: number; mono?: boolean }) {
-  const note: CSSProperties = { fill: mono ? "currentColor" : "var(--logo-note, var(--brand-2))" };
-  const stem: CSSProperties = { stroke: mono ? "currentColor" : "var(--logo-stem, var(--brand))" };
+  const tile: CSSProperties = mono
+    ? { fill: "none", stroke: "currentColor", strokeWidth: 1.5 }
+    : { fill: "var(--logo-tile, var(--brand))" };
+  const ink = mono ? "currentColor" : "var(--logo-ink, #fff)";
+  const head = mono ? "currentColor" : "var(--logo-note, var(--brand-2))";
   return (
     <svg
       className={`logo-glyph${mono ? " is-mono" : ""}`}
@@ -19,18 +22,13 @@ export function LogoGlyph({ size = 24, mono = false }: { size?: number; mono?: b
       fill="none"
       aria-hidden="true"
     >
-      <g className="logo-staff" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round">
-        <path d="M3 9h26" />
-        <path d="M3 13h26" />
-        <path d="M3 17h26" />
-        <path d="M3 21h26" />
-        <path d="M3 25h26" />
+      <rect x="1.5" y="1.5" width="29" height="29" rx="8" style={tile} />
+      <g stroke={ink} strokeWidth="1.2" strokeLinecap="round" opacity={mono ? 0.45 : 0.3}>
+        <path d="M6 13.5h20" />
+        <path d="M6 19.5h20" />
       </g>
-      <ellipse className="logo-notehead" cx="12.5" cy="21" rx="4.4" ry="3.1" transform="rotate(-22 12.5 21)" style={note} />
-      <g className="logo-stem" strokeWidth="2" strokeLinecap="round" fill="none" style={stem}>
-        <path d="M16.4 20V6.5" />
-        <path d="M16.4 6.5c4.2 1.2 6.6 4.4 5.2 8.6" />
-      </g>
+      <path d="M17.6 21.6V7.8c3.6 1 6 3.6 5.2 7.6" stroke={ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <ellipse className="logo-notehead" cx="13.6" cy="22" rx="4.6" ry="3.4" transform="rotate(-22 13.6 22)" fill={head} />
     </svg>
   );
 }

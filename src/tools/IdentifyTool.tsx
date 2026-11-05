@@ -1,4 +1,4 @@
-import { Disc3, ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
+import { ExternalLink, FileAudio, LogIn, Mic, Play, RefreshCw, Search, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { openAudioFile } from "../components/AudioPicker";
 import { CreditCost } from "../components/CreditCost";
@@ -428,16 +428,6 @@ export function IdentifyTool({ initial = null }: { initial?: SavedWork | null } 
 
   return (
     <section className="tool-body identify-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Disc3 size={26} />
-        </span>
-        <div>
-          <h1>מזהה שיר</h1>
-          <p>מה השיר הזה? מקליטים כמה שניות, או מעלים קובץ, ומקבלים את השם והאמן. מקובץ נבדקים עד שלושה קטעים שונים.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         {configured === false && (
           <div className="notice-message" role="status">

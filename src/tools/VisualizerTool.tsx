@@ -1,6 +1,5 @@
 import { loadArtwork, readVisualizerMedia, seekVideo, waitForVideo } from "../lib/visualizerMedia";
 import {
-  AudioWaveform,
   Clapperboard,
   Download,
   ImagePlus,
@@ -971,16 +970,6 @@ export function VisualizerTool() {
 
   return (
     <section className="tool-body visualizer-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <AudioWaveform size={26} />
-        </span>
-        <div>
-          <h1>סרטון ותמונה לשיתוף</h1>
-          <p>מעלים שיר והעטיפה שלו נשלפת אוטומטית, או מעלים סרטון ומשתמשים בו כבסיס. מוסיפים עיצוב ושומרים סרטון או תמונה לשיתוף.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

@@ -1,4 +1,4 @@
-import { Drum, Hand, Play, RotateCcw, Square, Timer } from "lucide-react";
+import { Hand, Play, RotateCcw, Square, Timer } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
 import {
@@ -17,6 +17,7 @@ import {
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
+import { ToolActions } from "../components/ToolFrame";
 
 const SETTINGS_KEY = "musictools.rhythm.v1";
 const PROGRESS_KEY = "musictools.rhythm.progress.v1";
@@ -333,20 +334,11 @@ export function RhythmTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body rhythm-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Drum size={26} />
-        </span>
-        <div>
-          <h1>מאמן קצב</h1>
-          <p>מתופפים על המקלדת או על המסך לפי תבנית, והאתר מודד את הדיוק.</p>
-        </div>
+      <ToolActions>
         {score && (
-          <div className="tool-intro-side">
-            <SaveButton state={saving.state} onSave={() => void save()} label="שמור את התוצאה" message={saving.message} compact />
-          </div>
+          <SaveButton state={saving.state} onSave={() => void save()} label="שמור את התוצאה" message={saving.message} compact />
         )}
-      </div>
+      </ToolActions>
 
       <div className="workspace-card">
         <div className="settings-panel">

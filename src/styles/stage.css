@@ -658,3 +658,4 @@
   .pad-grid .pad { transition: none; }
   .setlist-stage .setlist-stage-dot { animation: none; }
 }
+.piano-status .piano-held.is-idle { font-family: var(--font-sans); font-size: 13px; font-weight: 400; color: var(--text-muted); direction: rtl; }
