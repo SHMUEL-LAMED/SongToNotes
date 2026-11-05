@@ -922,19 +922,16 @@ export function TranscriberTool({ initial }: Props) {
             onPick={pickFile}
             onClear={reset}
             allowRecording
+            extraSources={
+              <button className="secondary-button" onClick={() => void loadDemo()} type="button">
+                <Wand2 size={17} /> נסה מנגינת דוגמה
+              </button>
+            }
           >
             {audio && (
               <audio controls src={audio.url} preload="metadata" aria-label={`השמעת ${audio.file.name}`} />
             )}
           </AudioPicker>
-
-          {!audio && (
-            <div className="source-alternatives">
-              <button className="secondary-button" onClick={() => void loadDemo()} type="button">
-                <Wand2 size={17} /> נסה מנגינת דוגמה
-              </button>
-            </div>
-          )}
 
           {peaks && audio && (
             <Waveform
