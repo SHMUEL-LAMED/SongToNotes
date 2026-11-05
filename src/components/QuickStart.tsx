@@ -1,4 +1,4 @@
-import { ArrowLeft, Clapperboard, FileAudio, RotateCcw, UploadCloud } from "lucide-react";
+import { ChevronLeft, Clapperboard, FileAudio, RotateCcw, Search, UploadCloud } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type DragEvent } from "react";
 import { deleteFile, getFile } from "../lib/fileStore";
 import { handOffTo } from "../lib/handoff";
@@ -14,13 +14,23 @@ function isVideo(file: File) {
   return file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(file.name);
 }
 
+/** The formats named under the drop zone (any audio or video is taken). */
+const FORMATS = "MP3 · WAV · M4A · FLAC · MP4 · MOV";
+
 /**
- * The home page's front door: drop any song, recording or video and pick
- * what to do with it. The file is handed to the chosen tool through the
- * same hand-off the tools use among themselves; it waits on the device
- * until a tool is chosen.
+ * The home page's front door, a deck beside the headline: drop any song,
+ * recording or video and pick what to do with it. The file is handed to the
+ * chosen tool through the same hand-off the tools use among themselves; it
+ * waits on the device until a tool is chosen.
  */
-export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] }) {
+export function QuickStart({
+  disabledTools = [],
+  onOther,
+}: {
+  disabledTools?: string[];
+  /** "כלי אחר…": the search, for a tool that is not in the list. */
+  onOther?: () => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -90,19 +100,31 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
     ...TOOLS.filter((tool) => tool.quick).map((tool) => ({ id: tool.id, title: tool.title, quick: tool.quick!, icon: tool.icon, hue: tool.hue })),
   ].filter((action) => !disabledTools.includes(action.id));
 
+  const head = (
+    <div className="deck-head">
+      <span className="deck-kicker">התחלה מהירה</span>
+    </div>
+  );
+
   if (file) {
     return (
-      <div className="quick-start is-chosen">
+      <div className="quick-start deck is-chosen" data-running="true">
+        {head}
         <div className="quick-file">
-          <span className="quick-file-icon">{video ? <Clapperboard size={20} /> : <FileAudio size={20} />}</span>
-          <div>
+          <span className="quick-file-icon" aria-hidden="true">
+            {video ? <Clapperboard size={20} /> : <FileAudio size={20} />}
+          </span>
+          <div className="quick-file-text">
             <strong>{file.name}</strong>
             <small>
               {/* A Latin unit in a Hebrew line has to be isolated, or it reads "KB 5". */}
-              <bdi dir="ltr">{formatBytes(file.size)}</bdi> · {video ? "סרטון" : "קובץ שמע"} · מחכה במכשיר עד שתבחרו
+              <bdi dir="ltr" className="quick-file-size">
+                {formatBytes(file.size)}
+              </bdi>{" "}
+              · {video ? "סרטון" : "קובץ שמע"} · מחכה במכשיר עד שתבחרו
             </small>
           </div>
-          <button type="button" className="icon-button" onClick={() => setFile(null)} aria-label="בחירת קובץ אחר" title="קובץ אחר">
+          <button type="button" className="icon-button quick-file-change" onClick={() => setFile(null)} aria-label="בחירת קובץ אחר" title="קובץ אחר">
             <RotateCcw size={16} />
           </button>
         </div>
@@ -119,25 +141,42 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
                 onClick={() => send(action.id)}
                 disabled={Boolean(sending)}
               >
-                <span className="quick-action-icon">
-                  <Icon size={17} />
+                <span className="led quick-action-led" aria-hidden="true" />
+                <span className="quick-action-icon" aria-hidden="true">
+                  <Icon size={18} />
                 </span>
                 <span className="quick-action-text">
                   <b>{action.quick}</b>
                   <small>{action.title}</small>
                 </span>
-                <ArrowLeft size={15} className="quick-action-go" aria-hidden="true" />
+                <ChevronLeft size={16} className="quick-action-go" aria-hidden="true" />
               </button>
             );
           })}
+          {onOther && (
+            <button type="button" className="quick-action quick-other" onClick={onOther} disabled={Boolean(sending)}>
+              <span className="quick-action-icon" aria-hidden="true">
+                <Search size={18} />
+              </span>
+              <span className="quick-action-text">
+                <b>כלי אחר…</b>
+              </span>
+              <ChevronLeft size={16} className="quick-action-go" aria-hidden="true" />
+            </button>
+          )}
         </div>
-        {error && <p className="error-message" role="alert">{error}</p>}
+        {error && (
+          <p className="error-message" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="quick-start">
+    <div className="quick-start deck">
+      {head}
       <label
         className={`quick-drop ${dragging ? "is-dragging" : ""}`}
         onDragOver={(event) => {
@@ -152,15 +191,13 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
         }}
         onDrop={onDrop}
       >
-        <span className="quick-drop-icon">
-          <UploadCloud size={26} />
+        <span className="quick-drop-icon" aria-hidden="true">
+          <UploadCloud size={22} />
         </span>
-        <strong>גררו לכאן שיר, הקלטה או סרטון</strong>
+        <strong>גררו שיר, הקלטה או סרטון לכאן</strong>
         <span>או לחצו לבחירת קובץ — ונציע מה אפשר לעשות איתו</span>
-        <span className="quick-formats" aria-hidden="true">
-          {["MP3", "WAV", "M4A", "FLAC", "MP4", "MOV"].map((format) => (
-            <i key={format}>{format}</i>
-          ))}
+        <span className="quick-formats" dir="ltr" aria-hidden="true">
+          {FORMATS}
         </span>
         <input
           className="native-file-input"
@@ -173,7 +210,11 @@ export function QuickStart({ disabledTools = [] }: { disabledTools?: string[] })
           }}
         />
       </label>
-      {error && <p className="error-message" role="alert">{error}</p>}
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

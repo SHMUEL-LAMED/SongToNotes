@@ -4,39 +4,45 @@
    these are the few places that move or point in a physical direction.
    ========================================================================== */
 
+/* "Forward" runs the other way: anything that slides in from the start edge
+   (the drawer, a sheet from the side, the indeterminate progress bar)
+   multiplies its translation by this. */
+:root[dir="ltr"] { --dir: -1; }
+
 /* The "forward" and "back" arrows were drawn for a right-to-left page. */
 :root[dir="ltr"] .lucide-chevron-left,
 :root[dir="ltr"] .lucide-chevron-right,
 :root[dir="ltr"] .lucide-arrow-left,
-:root[dir="ltr"] .lucide-arrow-right {
+:root[dir="ltr"] .lucide-arrow-right,
+:root[dir="ltr"] .lucide-corner-down-left {
   transform: scaleX(-1);
 }
-:root[dir="ltr"] .quick-action:hover .quick-action-go { transform: translateX(3px) scaleX(-1); }
-:root[dir="ltr"] .tool-card:hover .tool-card-arrow { transform: translateX(4px) scaleX(-1); }
-:root[dir="ltr"] .next-step:hover .next-step-go { transform: translateX(3px) scaleX(-1); }
 
-/* The routes' steps: the band sweeps in from the left now, and the number leaves the other way. */
-:root[dir="ltr"] .aura-flow-steps button::before {
-  background: linear-gradient(to right, color-mix(in oklab, var(--accent) 34%, transparent), color-mix(in oklab, var(--accent) 10%, transparent));
-  transform-origin: 0 50%;
+/* The fader's travelled part starts from the left. The second rule covers a
+   range set inside a left-to-right box on a right-to-left page (a separate
+   rule: a browser without :dir() would drop the whole list). */
+:root[dir="ltr"] input[type="range"]:not(.is-vertical)::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(to right, var(--range-done) var(--range-fill, 0%), transparent var(--range-fill, 0%)),
+    var(--range-track);
 }
-:root[dir="ltr"] .aura-step-arrow { transform: translateX(-10px); }
-:root[dir="ltr"] .aura-flow-steps button:hover:enabled .aura-step-num,
-:root[dir="ltr"] .aura-flow-steps button:focus-visible .aura-step-num { transform: translateX(10px); }
-:root[dir="ltr"] .aura-flow-steps button:hover:enabled .aura-step-arrow,
-:root[dir="ltr"] .aura-flow-steps button:focus-visible .aura-step-arrow { transform: none; }
-/* An English quotation opens with the mark turned the other way up. */
-:root[dir="ltr"] .aura-pledge-mark { rotate: 180deg; }
-
-/* The phone menu hides off the start edge, which is now the left. */
-@media (max-width: 960px) {
-  :root[dir="ltr"] .sidebar { transform: translateX(-105%); }
-  :root[dir="ltr"] .app[data-nav-open="true"] .sidebar { transform: none; }
+input[type="range"]:dir(ltr):not(.is-vertical)::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(to right, var(--range-done) var(--range-fill, 0%), transparent var(--range-fill, 0%)),
+    var(--range-track);
 }
 
+/* A vertical fader's minimum is at the bottom: in a vertical writing mode
+   that is the "right to left" inline direction, whichever way the page reads. */
+:root[dir="ltr"] .fader.is-vertical { direction: rtl; }
+
+/* Labels and kickers are set in capitals with a little air when the page is
+   in a Latin script; Hebrew has no case. */
+:root[dir="ltr"] :is(.t-label, .deck-kicker, .deck-live, .masthead-kicker, .section-kicker, .nav-heading, .palette-group, .readout-label, .ledger-format) {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* The personal area's drawer still slides in from its own keyframes. */
 :root[dir="ltr"] .account-drawer { animation-name: drawer-in-ltr; }
 @keyframes drawer-in-ltr { from { transform: translateX(100%); } to { transform: none; } }
-:root[dir="ltr"] .marquee-chip { direction: ltr; }
-
-/* The sidebar's section headings: the hairline runs out from the word, which now sits on the left. */
-:root[dir="ltr"] .nav-heading::after { background: linear-gradient(to right, var(--line-strong), transparent); }

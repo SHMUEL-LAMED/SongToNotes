@@ -1,18 +1,22 @@
-/* The stylesheet, in the order the layers build on one another. */
+/* The stylesheet, in the order the layers build on one another (SPEC §1):
+   the tokens, the reset, the primitives, the shell, the tool frame, the
+   instrument decks, then the pages; the legacy per-tool sheets (tools.css,
+   studio.css) until every tool owns its rules; the left-to-right exceptions
+   last. */
 @import "./tokens.css";
 @import "./base.css";
+@import "./ui.css";
 @import "./shell.css";
-@import "./controls.css";
+@import "./frame.css";
+@import "./stage.css";
 @import "./home.css";
-@import "./tools.css";
-@import "./studio.css";
 @import "./me.css";
 @import "./charts.css";
 @import "./admin.css";
 @import "./assistant.css";
 @import "./credits.css";
-@import "./tool-promo.css";
 @import "./tour.css";
 @import "./page-error.css";
-@import "./stage.css";
+@import "./tools.css";
+@import "./studio.css";
 @import "./ltr.css";

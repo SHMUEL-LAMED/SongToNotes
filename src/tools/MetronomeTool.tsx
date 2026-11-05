@@ -1,9 +1,10 @@
-import { Minus, Pause, Play, Plus, Timer, Volume2 } from "lucide-react";
+import { Minus, Pause, Play, Plus, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SaveButton } from "../components/SaveButton";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
+import { ToolActions } from "../components/ToolFrame";
 
 type SoundKind = "click" | "wood" | "beep";
 
@@ -409,18 +410,9 @@ export function MetronomeTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body metronome">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Timer size={26} />
-        </span>
-        <div>
-          <h1>מטרונום</h1>
-          <p>בחר קצב ולחץ על הפעל.</p>
-        </div>
-        <div className="tool-intro-side">
-          <SaveButton state={saving.state} onSave={() => void savePreset()} label="שמור את הקצב" message={saving.message} compact />
-        </div>
-      </div>
+      <ToolActions>
+        <SaveButton state={saving.state} onSave={() => void savePreset()} label="שמור את הקצב" message={saving.message} compact />
+      </ToolActions>
 
       <div className="metronome-stage" data-running={running}>
         <div className="pendulum-frame" aria-hidden="true">

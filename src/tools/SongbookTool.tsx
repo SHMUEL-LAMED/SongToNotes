@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, Languages, Minus, Pause, Play, Plus, Printer, Type, Wand2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Check, Download, FolderOpen, Languages, Minus, Pause, Play, Plus, Printer, Type, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
 import { CreditCost } from "../components/CreditCost";
@@ -354,16 +354,6 @@ export function SongbookTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body songbook-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <BookOpen size={26} />
-        </span>
-        <div>
-          <h1>שירון</h1>
-          <p>מילים עם אקורדים מעליהן, לתרגול ולהופעה.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <div className="songbook-toolbar">
           <input className="songbook-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="שם השיר" aria-label="שם השיר" dir="auto" />
