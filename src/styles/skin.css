@@ -647,3 +647,31 @@ input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-t
 .save-work-button:not(.is-saved):not(.is-failed) { background: var(--accent-grad); border: 0; color: var(--on-accent); box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
 .save-work-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .save-work-button:disabled { opacity: 0.5; box-shadow: none; }
+
+/* ---- the file drop: one compact row, not a tall box ----
+   The icon on the start side, the line and the formats beside it; the
+   other ways in (record, a sample) on one row under it. */
+.drop-zone {
+  min-height: 0;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 2px;
+  align-items: center;
+  justify-items: start;
+  text-align: start;
+}
+.drop-zone .upload-icon {
+  grid-row: 1 / span 2;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  border-radius: 14px;
+}
+.drop-zone .upload-icon svg { width: 24px; height: 24px; }
+.drop-zone strong { font-size: 15.5px; align-self: end; }
+.drop-zone > span:not(.upload-icon) { align-self: start; font-size: 13px; color: var(--text-muted); }
+.source-alternatives { justify-content: flex-start; gap: 8px; }
+.source-alternatives .secondary-button { min-height: 38px; font-size: 13.5px; }

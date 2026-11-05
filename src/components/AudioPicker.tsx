@@ -291,6 +291,8 @@ type PickerProps = {
   /** Shown under the headline of the drop zone. */
   hint?: string;
   allowRecording?: boolean;
+  /** Other ways in, shown beside "record" under the drop zone before a file is chosen (a sample, say). */
+  extraSources?: React.ReactNode;
   /** Extra controls rendered beside the file once one is loaded. */
   children?: React.ReactNode;
 };
@@ -304,6 +306,7 @@ export function AudioPicker({
   onClear,
   hint,
   allowRecording = false,
+  extraSources = null,
   children,
 }: PickerProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -491,11 +494,14 @@ export function AudioPicker({
           aria-label="בחירת קובץ שמע"
         />
       </label>
-      {allowRecording && isRecordingSupported() && (
+      {((allowRecording && isRecordingSupported()) || extraSources) && (
         <div className="source-alternatives">
-          <button className="secondary-button" onClick={startRecording} type="button">
-            <Mic size={17} /> הקלט מהמיקרופון
-          </button>
+          {allowRecording && isRecordingSupported() && (
+            <button className="secondary-button" onClick={startRecording} type="button">
+              <Mic size={17} /> הקלט מהמיקרופון
+            </button>
+          )}
+          {extraSources}
         </div>
       )}
       {recordError && (
