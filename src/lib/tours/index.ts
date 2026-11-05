@@ -58,7 +58,8 @@ const FRAME: TourStep[] = [
 function toolTour(tool: ToolDefinition): TourStep[] {
   const family = familyOf(tool.id);
   const opening: TourStep[] = [
-    { target: ".tool-intro, .tool-hero", title: tool.title, text: tool.description },
+    // The masthead the frame draws over every tool: its name, what it does, its actions.
+    { target: ".tool-masthead", title: tool.title, text: tool.description },
   ];
   if (family) {
     const labels = family.tabs.map((tab) => `„${tab.label}”`).join(", ");

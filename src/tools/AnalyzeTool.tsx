@@ -287,16 +287,6 @@ export function AnalyzeTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body analyze-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Activity size={26} />
-        </span>
-        <div>
-          <h1>מזהה קצב וסולם</h1>
-          <p>בחר שיר לזיהוי הקצב והסולם.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

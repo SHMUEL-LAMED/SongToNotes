@@ -1,47 +1,67 @@
 /* ==========================================================================
    Base
+   The reset, the body, headings, focus, scrollbars, the type roles, the
+   keyframes and the two global switches (reduced motion, print).
    ========================================================================== */
 
 *,
 *::before,
 *::after { box-sizing: border-box; }
 
-/* Scrolled to or tabbed to, nothing stops under the sticky top bar (or, on
-   a phone, the tab bar: see shell.css). */
-html { scroll-behavior: smooth; scroll-padding-block: calc(var(--topbar-h) + 16px) 16px; -webkit-text-size-adjust: 100%; }
+/* Scrolled to or tabbed to, nothing stops under the sticky top bar and the
+   family tabs under it (or, on a phone, the tab bar at the bottom). */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-block: calc(var(--topbar-h) + var(--tooltabs-h) + 16px) 16px;
+  -webkit-text-size-adjust: 100%;
+}
+@media (max-width: 719.98px) {
+  /* The family tabs are not sticky on a phone; the tab bar is. */
+  html { scroll-padding-block: calc(var(--topbar-h) + 16px) calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom, 0px)); }
+}
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-variant-numeric: tabular-nums;
   overflow-x: hidden;
 }
 
-h1, h2, h3, h4 { letter-spacing: -0.02em; line-height: 1.2; font-weight: 700; }
+/* Headings in ink, never coloured, never heavier than 700; Hebrew tracking
+   never tighter than -0.015em. */
+h1, h2, h3, h4 { color: var(--text); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+h1 { letter-spacing: var(--track-h1); }
+h3, h4 { font-weight: 600; letter-spacing: 0; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
+select { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
-img, svg, video { max-width: 100%; }
-audio { max-width: 100%; }
+img, svg, video, audio { max-width: 100%; }
 
-kbd {
+code, pre, samp { font-family: var(--font-mono); }
+
+kbd,
+.kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  border: var(--hair-strong);
   border-bottom-width: 2px;
   background: var(--surface-2);
   color: var(--text-soft);
   font: 600 11px/1 var(--font-sans);
+  white-space: nowrap;
   direction: ltr;
 }
 
@@ -50,7 +70,6 @@ kbd {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 /* Thin, quiet scrollbars that pick up the theme. */
@@ -76,62 +95,111 @@ kbd {
   border: 0;
 }
 
-/* Off screen until it takes focus, then the first thing on the page. */
+/* Off screen until it takes focus, then the first thing on the page: an ink
+   slip. It is a button, not a link — it moves focus to the content itself,
+   because a hash link would be read by the router as an address. */
 .skip-link {
   position: fixed;
   inset-inline-start: 16px;
   top: -80px;
-  z-index: 200;
-  padding: 11px 20px;
+  z-index: var(--z-skip);
+  min-height: 40px;
+  padding: 0 16px;
   border: 0;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 700;
+  border-radius: var(--r-2);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  box-shadow: var(--shadow-raised);
   cursor: pointer;
-  transition: top 0.2s var(--ease);
+  transition: top var(--dur-2) var(--ease-out);
 }
-.skip-link:focus { top: 0; }
+.skip-link:focus { top: 8px; }
+.skip-link:focus-visible { outline-offset: 3px; }
 
-.gradient-text {
-  background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+/* Legacy: dialog titles marked a word with the brand gradient. Headings are
+   ink now; the class stays so the markup keeps working. */
+.gradient-text { color: inherit; }
 
 .spin,
 .is-spinning { animation: spin 0.9s linear infinite; }
 
+/* ---- type roles ---- */
+
+.t-display { font-size: var(--fs-display); line-height: var(--lh-display); font-weight: 700; letter-spacing: var(--track-display); }
+.t-h1 { font-size: var(--fs-h1); line-height: var(--lh-h1); font-weight: 700; letter-spacing: var(--track-h1); }
+.t-h2 { font-size: var(--fs-h2); line-height: var(--lh-h2); font-weight: 700; letter-spacing: var(--track-h2); }
+.t-h3 { font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; letter-spacing: 0; }
+.t-body { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 400; }
+.t-ui { font-size: var(--fs-ui); line-height: var(--lh-ui); font-weight: 500; }
+.t-small { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 400; }
+.t-label { font-size: var(--fs-label); line-height: var(--lh-label); font-weight: 600; letter-spacing: var(--track-label); }
+/* Readouts: mono, tabular; the value element carries dir="ltr". */
+.t-read-xl,
+.t-read-lg,
+.t-read-md,
+.t-read-sm { font-family: var(--font-mono); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.t-read-xl { font-size: var(--fs-read-xl); font-weight: 600; }
+.t-read-lg { font-size: var(--fs-read-lg); font-weight: 600; }
+.t-read-md { font-size: var(--fs-read-md); font-weight: 500; }
+.t-read-sm { font-size: var(--fs-read-sm); font-weight: 500; }
+.t-muted { color: var(--text-muted); }
+.t-soft { color: var(--text-soft); }
+
+/* ---- keyframes ---- */
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
+/* The indeterminate bar: a segment that runs from the start edge to the
+   end edge (--dir turns it round on a left-to-right page). */
+@keyframes sweep {
+  from { transform: translateX(calc(100% * var(--dir))); }
+  to { transform: translateX(calc(-340% * var(--dir))); }
+}
+/* An LED that blinks: the recording dot, the loading mark's notehead. */
+@keyframes led-blink { 50% { opacity: 0.25; } }
+
+/* Legacy names other sheets still call (personal area, admin, assistant,
+   home); kept quiet until those sheets are rebuilt. */
 @keyframes pop-in {
-  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 var(--danger-soft), 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
-  70% { box-shadow: 0 0 0 0 transparent, 0 0 0 12px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
-}
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 @keyframes shimmer {
   from { background-position: 100% 0; }
   to { background-position: -100% 0; }
 }
+@keyframes stage-spin { to { --stage-angle: 360deg; } }
 
+/* ---- reduced motion ----
+   The tokens collapse in tokens.css; this catches every literal timing. LEDs
+   still change state, they just do not pulse. */
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
 }
 
+/* ---- print: the result, without the chrome around it ---- */
+@media print {
+  .sidebar, .topbar, .tabbar, .sidebar-scrim, .tool-tabs, .masthead-actions,
+  .downloads-card, .ledger, .settings-panel, .refine-panel, .playback-card,
+  .result-toolbar, .site-footer, .next-steps, .send-file, .tool-video,
+  .assistant-launcher, .assistant-panel, .skip-link, .app-notices,
+  .palette-overlay, .dialog-overlay, .sheet-overlay { display: none !important; }
+  .app { display: block; }
+  body { background: #fff; color: #000; }
+  .panel, .deck { box-shadow: none; break-inside: avoid; }
+}

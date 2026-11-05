@@ -2,7 +2,6 @@ import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { currentOffer, sendOffer } from "../lib/currentFile";
 import { familyOf, findTool } from "../lib/tools";
-import "../styles/tool-tabs.css";
 
 /**
  * The tabs of a tool that brings several together. Each tab is a tool with an
@@ -14,8 +13,9 @@ import "../styles/tool-tabs.css";
 export function ToolTabs({ current }: { current: string }) {
   const [moving, setMoving] = useState<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
-  // Where the pill under the chosen tab sits, measured rather than computed:
-  // the tabs are not all the same width, and on a phone the strip scrolls.
+  // Where the underline under the chosen tab sits, measured rather than
+  // computed: the tabs are not all the same width, and on a phone the strip
+  // scrolls. (Styled in frame.css.)
   const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
   const family = familyOf(current);
 

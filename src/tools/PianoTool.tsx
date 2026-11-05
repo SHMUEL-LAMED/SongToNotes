@@ -1,4 +1,4 @@
-import { Circle, Download, GraduationCap, Piano, Square } from "lucide-react";
+import { Circle, Download, GraduationCap, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MidiButton } from "../components/MidiButton";
 import { PianoLesson } from "../components/PianoLesson";
@@ -12,6 +12,7 @@ import { clearPianoLesson, fitKeyboard, readPianoLesson } from "../lib/pianoLess
 import type { DetectedNote } from "../lib/types";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
+import { ToolActions } from "../components/ToolFrame";
 
 type Timbre = "piano" | "organ" | "synth";
 
@@ -552,23 +553,14 @@ export function PianoTool() {
 
   return (
     <section className="tool-body piano-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Piano size={26} />
-        </span>
-        <div>
-          <h1>פסנתר וירטואלי</h1>
-          <p>נגן בעכבר, במגע או במקלדת.</p>
-        </div>
+      <ToolActions>
         {!recording && recorded.length > 0 && (
-          <div className="tool-intro-side">
-            <SaveButton state={saving.state} onSave={() => void saveRecording()} label="שמור את ההקלטה" message={saving.message} compact />
-          </div>
+          <SaveButton state={saving.state} onSave={() => void saveRecording()} label="שמור את ההקלטה" message={saving.message} compact />
         )}
-      </div>
+      </ToolActions>
 
       <div className="piano-status" aria-live="polite">
-        <span className="piano-held">{heldNames.length ? heldNames.join("  ") : "—"}</span>
+        {heldNames.length ? <span className="piano-held">{heldNames.join("  ")}</span> : <span className="piano-held is-idle">לוחצים על מקש — שם הצליל יופיע כאן</span>}
         {recording && <span className="recording-chip"><span className="recording-dot small" /> מקליט · {recorded.length} תווים</span>}
       </div>
 

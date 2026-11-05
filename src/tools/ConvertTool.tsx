@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Captions, Download, FileAudio, FileMusic, Smartphone, Wand2, X } from "lucide-react";
+import { Captions, Download, FileAudio, FileMusic, Smartphone, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioPicker, formatBytes, useAudioFile } from "../components/AudioPicker";
 import { SaveButton } from "../components/SaveButton";
@@ -194,16 +194,6 @@ export function ConvertTool({ initial = null }: Props) {
 
   return (
     <section className="tool-body convert-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <ArrowLeftRight size={26} />
-        </span>
-        <div>
-          <h1>המרת פורמטים</h1>
-          <p>MP3, WAV, M4A, OGG, FLAC ועוד — לקובץ MP3 או WAV באיכות שתבחר, בדפדפן.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         <AudioPicker
           audio={audio}

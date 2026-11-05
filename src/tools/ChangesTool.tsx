@@ -1,4 +1,4 @@
-import { Play, RotateCcw, Shuffle, Square, Trophy, Volume2 } from "lucide-react";
+import { Play, RotateCcw, Square, Trophy, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChordDiagram } from "../components/ChordDiagram";
 import {
@@ -184,16 +184,6 @@ export function ChangesTool() {
 
   return (
     <section className="tool-body changes-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Shuffle size={26} />
-        </span>
-        <div>
-          <h1>מאמן מעברים בין אקורדים</h1>
-          <p>בוחרים שני אקורדים ומתחילים. בכל פעם שהיד נוחתת נקי על האקורד השני, לוחצים על הכפתור הגדול או על רווח. המטרה: לשפר את השיא.</p>
-        </div>
-      </div>
-
       <div className="settings-panel changes-setup">
         <div className="setting-field">
           <span>זוגות מומלצים</span>

@@ -207,16 +207,6 @@ export function VideoTool() {
 
   return (
     <section className="tool-body video-tool">
-      <div className="tool-intro">
-        <span className="tool-intro-icon">
-          <Clapperboard size={26} />
-        </span>
-        <div>
-          <h1>המרת וידאו לאודיו</h1>
-          <p>מוציאים את הצליל מסרטון, ומשם לכל כלי באתר — הכול בדפדפן.</p>
-        </div>
-      </div>
-
       <div className="workspace-card">
         {!extracted ? (
           <label
