@@ -1,0 +1,649 @@
+/* ==========================================================================
+   Skin — "Aurora Studio"
+   The visual layer over the structure: a night sky of slow aurora behind
+   glass panels, every tool lit in a two-tone gradient of its own hue, glowing
+   actions and neon instrument decks. Loaded after the structural sheets, so
+   it only paints: the class names, the layout and the behaviour underneath
+   stay what they are. Light theme: the same idea at dawn.
+   ========================================================================== */
+
+/* ---- tokens: the night ---- */
+:root {
+  --brand-hue: 285;
+  --brand: oklch(0.62 0.24 285);
+  --brand-2: oklch(0.72 0.2 340);
+  --brand-3: oklch(0.82 0.15 70);
+  --brand-gradient: linear-gradient(120deg, oklch(0.66 0.24 285), oklch(0.7 0.24 335) 55%, oklch(0.82 0.16 65));
+
+  --r-2: 12px;
+  --r-3: 18px;
+  --r-4: 24px;
+
+  /* Light: dawn. */
+  --bg: #f6f4fc;
+  --bg-deep: #eeeaf8;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(255, 255, 255, 0.6);
+  --surface-3: rgba(245, 242, 252, 0.9);
+  --surface-solid: #ffffff;
+  --surface-sunken: rgba(60, 40, 120, 0.05);
+  --surface-hover: rgba(90, 60, 180, 0.07);
+  --text: #16132a;
+  --text-soft: #46415e;
+  --text-muted: #736d8c;
+  --line: rgba(70, 50, 140, 0.11);
+  --line-strong: rgba(70, 50, 140, 0.2);
+  --glass-edge: rgba(255, 255, 255, 0.85);
+  --glass-blur: blur(22px) saturate(1.5);
+  --aurora-a: oklch(0.8 0.14 285 / 0.55);
+  --aurora-b: oklch(0.84 0.12 340 / 0.45);
+  --aurora-c: oklch(0.88 0.1 200 / 0.45);
+  --aurora-d: oklch(0.9 0.1 70 / 0.35);
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 10px 30px -18px rgba(60, 30, 140, 0.35);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 20px 50px -22px rgba(60, 30, 140, 0.45);
+  --shadow-overlay: 0 30px 80px -24px rgba(40, 20, 100, 0.45);
+  --sidebar-bg: rgba(255, 255, 255, 0.55);
+}
+
+:root[data-theme="dark"] {
+  --bg: #07060f;
+  --bg-deep: #05040b;
+  --surface: rgba(24, 20, 44, 0.55);
+  --surface-2: rgba(32, 27, 58, 0.55);
+  --surface-3: rgba(42, 36, 74, 0.6);
+  --surface-solid: #141127;
+  --surface-sunken: rgba(255, 255, 255, 0.045);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --text: #f4f2ff;
+  --text-soft: #c4bfdc;
+  --text-muted: #8e88aa;
+  --line: rgba(200, 185, 255, 0.1);
+  --line-strong: rgba(200, 185, 255, 0.2);
+  --glass-edge: rgba(255, 255, 255, 0.08);
+  --aurora-a: oklch(0.45 0.22 285 / 0.55);
+  --aurora-b: oklch(0.45 0.22 335 / 0.42);
+  --aurora-c: oklch(0.5 0.15 210 / 0.38);
+  --aurora-d: oklch(0.55 0.15 60 / 0.22);
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 20px 50px -28px rgba(0, 0, 0, 0.9);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 30px 70px -30px rgba(0, 0, 0, 0.95);
+  --shadow-overlay: 0 40px 100px -30px rgba(0, 0, 0, 0.95);
+  --sidebar-bg: rgba(12, 10, 26, 0.6);
+  --deck-bg: #06050c;
+  --deck-2: #100d1d;
+}
+
+/* The accent, brighter and two-toned: every tool is a gradient of its hue
+   and a neighbour forty degrees on. */
+:root,
+.tool-page,
+.tool-card,
+.admin-page,
+.me-tile,
+.deck,
+[style*="--accent-hue"] {
+  --accent: oklch(0.58 0.2 var(--accent-hue));
+  --accent-strong: oklch(0.5 0.2 var(--accent-hue));
+  --accent-2: oklch(0.62 0.22 calc(var(--accent-hue) + 40));
+  --accent-soft: oklch(0.93 0.05 var(--accent-hue) / 0.8);
+  --accent-tint: oklch(0.6 0.2 var(--accent-hue) / 0.1);
+  --accent-ring: oklch(0.62 0.2 var(--accent-hue) / 0.4);
+  --accent-text: oklch(0.46 0.19 var(--accent-hue));
+  --accent-line: oklch(0.62 0.2 var(--accent-hue) / 0.45);
+  --accent-grad: linear-gradient(135deg, oklch(0.66 0.21 var(--accent-hue)), oklch(0.58 0.24 calc(var(--accent-hue) + 40)));
+  --accent-glow: 0 10px 30px -8px oklch(0.6 0.22 var(--accent-hue) / 0.55);
+  --shadow-accent: var(--accent-glow);
+  --on-accent: #ffffff;
+}
+:root[data-theme="dark"],
+:root[data-theme="dark"] .tool-page,
+:root[data-theme="dark"] .tool-card,
+:root[data-theme="dark"] .admin-page,
+:root[data-theme="dark"] .me-tile,
+:root[data-theme="dark"] .deck,
+:root[data-theme="dark"] [style*="--accent-hue"] {
+  --accent: oklch(0.76 0.17 var(--accent-hue));
+  --accent-strong: oklch(0.84 0.14 var(--accent-hue));
+  --accent-2: oklch(0.72 0.2 calc(var(--accent-hue) + 40));
+  --accent-soft: oklch(0.35 0.1 var(--accent-hue) / 0.45);
+  --accent-tint: oklch(0.76 0.17 var(--accent-hue) / 0.1);
+  --accent-ring: oklch(0.76 0.17 var(--accent-hue) / 0.45);
+  --accent-text: oklch(0.86 0.12 var(--accent-hue));
+  --accent-line: oklch(0.76 0.17 var(--accent-hue) / 0.45);
+  --accent-grad: linear-gradient(135deg, oklch(0.8 0.16 var(--accent-hue)), oklch(0.68 0.22 calc(var(--accent-hue) + 40)));
+  --accent-glow: 0 12px 36px -8px oklch(0.7 0.2 var(--accent-hue) / 0.6);
+  --on-accent: #0b0816;
+}
+
+/* ---- the sky ---- */
+body { background: var(--bg); }
+.app { position: relative; isolation: isolate; }
+.app::before,
+.app::after {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  pointer-events: none;
+}
+/* Four slow lights drifting across the night. */
+.app::before {
+  background:
+    radial-gradient(38vmax 30vmax at 18% 12%, var(--aurora-a), transparent 70%),
+    radial-gradient(34vmax 28vmax at 82% 18%, var(--aurora-b), transparent 70%),
+    radial-gradient(40vmax 30vmax at 70% 85%, var(--aurora-c), transparent 70%),
+    radial-gradient(30vmax 24vmax at 20% 80%, var(--aurora-d), transparent 70%);
+  filter: blur(20px);
+  animation: aurora-drift 38s ease-in-out infinite alternate;
+}
+/* A fine grid of stars over it, fading out toward the foot. */
+.app::after {
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1.4px);
+  background-size: 34px 34px;
+  opacity: 0.08;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 75%);
+  mask-image: linear-gradient(to bottom, #000, transparent 75%);
+}
+:root:not([data-theme="dark"]) .app::after { background-image: radial-gradient(rgba(70, 40, 160, 0.6) 1px, transparent 1.4px); opacity: 0.06; }
+/* A tool page tints the sky with its own colour. */
+.tool-page.app::before {
+  background:
+    radial-gradient(40vmax 30vmax at 75% 8%, oklch(0.6 0.2 var(--accent-hue) / 0.4), transparent 70%),
+    radial-gradient(34vmax 26vmax at 15% 20%, var(--aurora-a), transparent 70%),
+    radial-gradient(40vmax 30vmax at 60% 90%, oklch(0.6 0.2 calc(var(--accent-hue) + 40) / 0.3), transparent 70%),
+    radial-gradient(30vmax 24vmax at 15% 85%, var(--aurora-c), transparent 70%);
+}
+:root:not([data-theme="dark"]) .tool-page.app::before {
+  background:
+    radial-gradient(40vmax 30vmax at 75% 8%, oklch(0.85 0.1 var(--accent-hue) / 0.6), transparent 70%),
+    radial-gradient(34vmax 26vmax at 15% 20%, var(--aurora-a), transparent 70%),
+    radial-gradient(40vmax 30vmax at 60% 90%, oklch(0.88 0.08 calc(var(--accent-hue) + 40) / 0.5), transparent 70%),
+    radial-gradient(30vmax 24vmax at 15% 85%, var(--aurora-c), transparent 70%);
+}
+@keyframes aurora-drift {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate3d(3vmax, -2vmax, 0) rotate(6deg) scale(1.06); }
+  100% { transform: translate3d(-3vmax, 2vmax, 0) rotate(-5deg) scale(1.02); }
+}
+
+/* ---- glass ---- */
+.panel,
+.tool-card,
+.studio-col,
+.hub-hero,
+.route,
+.credits-band,
+.dialog,
+.sheet,
+.palette,
+.app-notice,
+.me-tile,
+.chroma-card,
+.stat-card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent 45%), var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--glass-edge);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .tool-card,
+:root[data-theme="dark"] .studio-col,
+:root[data-theme="dark"] .hub-hero,
+:root[data-theme="dark"] .route {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.01) 50%), var(--surface);
+}
+.panel { border-radius: var(--r-3); }
+/* A panel's top edge catches the tool's light. */
+.tool-frame .panel { position: relative; }
+.tool-frame .panel::before {
+  content: "";
+  position: absolute;
+  inset-inline: 18%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.panel-icon,
+.panel-head .panel-icon {
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border: 0;
+  box-shadow: var(--accent-glow);
+}
+
+/* ---- the shell ---- */
+.sidebar {
+  background: var(--sidebar-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-inline-end: 1px solid var(--line);
+}
+.topbar {
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.brand-text strong {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+}
+.nav-item { border-radius: var(--r-2); transition: background var(--dur-2), color var(--dur-2), transform var(--dur-2); }
+.nav-item:hover { transform: translateX(calc(var(--dir) * -2px)); }
+.nav-item.is-current,
+.nav-item.is-current:hover {
+  background: linear-gradient(100deg, oklch(0.62 0.2 var(--accent-hue) / 0.28), oklch(0.62 0.22 calc(var(--accent-hue) + 40) / 0.1));
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent-line), 0 8px 24px -14px oklch(0.6 0.2 var(--accent-hue) / 0.9);
+}
+.nav-item.is-current .nav-icon { color: var(--accent); filter: drop-shadow(0 0 6px oklch(0.75 0.18 var(--accent-hue) / 0.7)); }
+.nav-led { border-radius: 3px; }
+.sidebar-search,
+.tabbar {
+  background: color-mix(in srgb, var(--surface-solid) 60%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.tour-button,
+.privacy-pill,
+.credits-pill,
+.account-button { border-radius: var(--r-pill); }
+.tabbar button.is-current svg,
+.tabbar a.is-current svg { filter: drop-shadow(0 0 8px oklch(0.75 0.18 var(--accent-hue) / 0.8)); }
+
+/* ---- buttons ---- */
+.btn-primary,
+.primary-button,
+.transport-button.primary,
+.save-work-button:hover:not(:disabled),
+.app-notice-action {
+  position: relative;
+  overflow: hidden;
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border: 0;
+  box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), filter var(--dur-2);
+}
+.btn-primary::after,
+.primary-button::after,
+.transport-button.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+.btn-primary:hover:not(:disabled),
+.primary-button:hover:not(:disabled),
+.transport-button.primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.08) saturate(1.1);
+  box-shadow: 0 16px 40px -10px oklch(0.62 0.22 var(--accent-hue) / 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.btn-primary:hover:not(:disabled)::after,
+.primary-button:hover:not(:disabled)::after,
+.transport-button.primary:hover:not(:disabled)::after { transition: transform 0.7s var(--ease-out); transform: translateX(130%); }
+.btn-secondary,
+.secondary-button,
+.transport-button:not(.primary),
+.page-share,
+.download-buttons button,
+.download-buttons a {
+  background: color-mix(in srgb, var(--surface-solid) 55%, transparent);
+  border: 1px solid var(--line-strong);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  transition: border-color var(--dur-2), box-shadow var(--dur-2), transform var(--dur-2), background var(--dur-2);
+}
+.btn-secondary:hover:not(:disabled),
+.secondary-button:hover:not(:disabled),
+.transport-button:not(.primary):hover:not(:disabled),
+.page-share:hover,
+.download-buttons button:hover:not(:disabled),
+.download-buttons a:hover {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px var(--accent-tint), 0 10px 26px -14px oklch(0.6 0.2 var(--accent-hue) / 0.8);
+  transform: translateY(-1px);
+}
+.download-buttons button svg,
+.download-buttons a svg { color: var(--accent); filter: drop-shadow(0 0 6px oklch(0.75 0.18 var(--accent-hue) / 0.6)); }
+
+/* Pills that are chosen glow in the tool's gradient. */
+.segmented button.active,
+.segmented button[aria-pressed="true"],
+.segmented-control button.active,
+.tabs button.active,
+.chip-toggle.active,
+.chip-toggle[aria-pressed="true"],
+.preset-row button.active {
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border-color: transparent;
+  box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.segmented-thumb { background: var(--accent-grad); box-shadow: var(--accent-glow); border: 0; }
+.segmented:has(.segmented-thumb[data-thumb]) button[aria-pressed="true"] { background: none; box-shadow: none; }
+.segmented button[aria-pressed="true"],
+.segmented-control button.active svg { color: var(--on-accent); }
+
+/* Sliders: a gradient trail and a glowing thumb. */
+input[type="range"] { --range-done: var(--accent-grad); }
+input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-tint), 0 0 16px oklch(0.7 0.2 var(--accent-hue) / 0.7), var(--shadow-cap); }
+
+/* Fields and the drop zone. */
+.field,
+.setting-field select,
+.setting-field input[type="number"],
+.setting-field input[type="text"],
+.setting-field textarea {
+  background: color-mix(in srgb, var(--surface-solid) 60%, transparent);
+  border-radius: var(--r-2);
+}
+.drop-zone {
+  position: relative;
+  border-radius: var(--r-3);
+  border: 1.5px dashed var(--accent-line);
+  background:
+    radial-gradient(70% 90% at 50% 0%, oklch(0.62 0.2 var(--accent-hue) / 0.16), transparent 70%),
+    color-mix(in srgb, var(--surface-solid) 40%, transparent);
+  transition: border-color var(--dur-3), box-shadow var(--dur-3), transform var(--dur-3);
+}
+.drop-zone:hover,
+.drop-zone.is-dragging {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 6px var(--accent-tint), 0 20px 60px -25px oklch(0.62 0.22 var(--accent-hue) / 0.8);
+}
+.upload-icon,
+.quick-drop-icon,
+.download-icon,
+.file-icon,
+.tool-intro-icon {
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border: 0;
+  box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.drop-zone:hover .upload-icon { animation: icon-bob 1.4s ease-in-out infinite; }
+@keyframes icon-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.progress-track > div,
+.progress-bar { background: var(--accent-grad); box-shadow: 0 0 14px oklch(0.7 0.2 var(--accent-hue) / 0.6); }
+
+/* ---- the tool's masthead: a lit banner ---- */
+.tool-masthead,
+.tool-masthead.tool-intro {
+  position: relative;
+  isolation: isolate;
+  padding: 26px 28px;
+  border-radius: var(--r-4);
+  border: 1px solid var(--accent-line);
+  background:
+    radial-gradient(70% 140% at 100% 0%, oklch(0.62 0.22 var(--accent-hue) / 0.32), transparent 60%),
+    radial-gradient(60% 120% at 0% 100%, oklch(0.6 0.22 calc(var(--accent-hue) + 40) / 0.22), transparent 65%),
+    var(--surface);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-raised), inset 0 1px 0 var(--glass-edge);
+  overflow: hidden;
+}
+/* An equaliser in the tool's colour along the far edge, swaying. */
+.tool-masthead.tool-intro::after {
+  content: "";
+  display: block;
+  position: absolute;
+  z-index: -1;
+  inset-block: 18px;
+  inset-inline-end: 22px;
+  width: min(260px, 26%);
+  background: linear-gradient(to top, var(--accent), var(--accent-2) 80%, transparent 120%);
+  opacity: 0.24;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100' preserveAspectRatio='none'%3E%3Cg fill='%23000'%3E%3Crect x='0' y='62' width='8' height='38' rx='4'/%3E%3Crect x='16' y='40' width='8' height='60' rx='4'/%3E%3Crect x='32' y='70' width='8' height='30' rx='4'/%3E%3Crect x='48' y='22' width='8' height='78' rx='4'/%3E%3Crect x='64' y='50' width='8' height='50' rx='4'/%3E%3Crect x='80' y='8' width='8' height='92' rx='4'/%3E%3Crect x='96' y='36' width='8' height='64' rx='4'/%3E%3Crect x='112' y='58' width='8' height='42' rx='4'/%3E%3Crect x='128' y='18' width='8' height='82' rx='4'/%3E%3Crect x='144' y='44' width='8' height='56' rx='4'/%3E%3Crect x='160' y='66' width='8' height='34' rx='4'/%3E%3Crect x='176' y='30' width='8' height='70' rx='4'/%3E%3Crect x='192' y='54' width='8' height='46' rx='4'/%3E%3Crect x='208' y='12' width='8' height='88' rx='4'/%3E%3Crect x='224' y='48' width='8' height='52' rx='4'/%3E%3Crect x='240' y='72' width='8' height='28' rx='4'/%3E%3Crect x='256' y='38' width='8' height='62' rx='4'/%3E%3Crect x='272' y='60' width='8' height='40' rx='4'/%3E%3Crect x='288' y='78' width='8' height='22' rx='4'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100' preserveAspectRatio='none'%3E%3Cg fill='%23000'%3E%3Crect x='0' y='62' width='8' height='38' rx='4'/%3E%3Crect x='16' y='40' width='8' height='60' rx='4'/%3E%3Crect x='32' y='70' width='8' height='30' rx='4'/%3E%3Crect x='48' y='22' width='8' height='78' rx='4'/%3E%3Crect x='64' y='50' width='8' height='50' rx='4'/%3E%3Crect x='80' y='8' width='8' height='92' rx='4'/%3E%3Crect x='96' y='36' width='8' height='64' rx='4'/%3E%3Crect x='112' y='58' width='8' height='42' rx='4'/%3E%3Crect x='128' y='18' width='8' height='82' rx='4'/%3E%3Crect x='144' y='44' width='8' height='56' rx='4'/%3E%3Crect x='160' y='66' width='8' height='34' rx='4'/%3E%3Crect x='176' y='30' width='8' height='70' rx='4'/%3E%3Crect x='192' y='54' width='8' height='46' rx='4'/%3E%3Crect x='208' y='12' width='8' height='88' rx='4'/%3E%3Crect x='224' y='48' width='8' height='52' rx='4'/%3E%3Crect x='240' y='72' width='8' height='28' rx='4'/%3E%3Crect x='256' y='38' width='8' height='62' rx='4'/%3E%3Crect x='272' y='60' width='8' height='40' rx='4'/%3E%3Crect x='288' y='78' width='8' height='22' rx='4'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  transform-origin: bottom;
+  animation: eq-sway 2.6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes eq-sway { from { transform: scaleY(0.78); } to { transform: scaleY(1.04); } }
+:root[data-theme="dark"] .tool-masthead.tool-intro::after { opacity: 0.28; }
+.masthead-icon {
+  width: 64px;
+  height: 64px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  box-shadow: 0 16px 40px -10px oklch(0.6 0.22 var(--accent-hue) / 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.masthead-icon svg { width: 28px; height: 28px; }
+.tool-masthead,
+.tool-masthead.tool-intro { grid-template-columns: 64px minmax(0, 1fr) auto; column-gap: 20px; }
+.tool-masthead .masthead-title {
+  font-size: clamp(30px, 1.6vw + 20px, 42px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, var(--text) 35%, var(--accent-text));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tool-masthead .masthead-kicker { color: var(--accent-text); }
+.masthead-rule {
+  height: 2px;
+  margin-top: 18px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+  box-shadow: 0 0 16px oklch(0.7 0.2 var(--accent-hue) / 0.7);
+  opacity: 0.8;
+}
+.tool-tabs { background: transparent; }
+.tool-tabs-thumb { background: var(--accent-grad); box-shadow: 0 0 12px oklch(0.7 0.2 var(--accent-hue) / 0.8); height: 3px; border-radius: 3px; }
+
+@media (max-width: 719.98px) {
+  .tool-masthead,
+  .tool-masthead.tool-intro { grid-template-columns: 48px minmax(0, 1fr); padding: 18px; column-gap: 14px; }
+  .masthead-icon { width: 48px; height: 48px; border-radius: 15px; }
+  .masthead-icon svg { width: 22px; height: 22px; }
+  .tool-masthead.tool-intro::after { width: 38%; opacity: 0.12; }
+}
+
+/* ---- decks: neon instruments ---- */
+.deck,
+.metronome-stage.metronome-stage,
+.tuner-stage.tuner-stage,
+.ear-stage.ear-stage,
+.beat-deck,
+.prog-deck,
+.quick-start.deck {
+  background:
+    radial-gradient(80% 120% at 50% 0%, oklch(0.55 0.22 var(--accent-hue) / 0.22), transparent 65%),
+    radial-gradient(60% 80% at 100% 100%, oklch(0.55 0.22 calc(var(--accent-hue) + 40) / 0.14), transparent 70%),
+    var(--deck-bg);
+  border: 1px solid oklch(0.75 0.18 var(--accent-hue) / 0.35);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 30px 80px -30px oklch(0.55 0.24 var(--accent-hue) / 0.75);
+  border-radius: var(--r-4);
+}
+.readout,
+.bpm-value strong,
+.tuner-note,
+.deck .t-read-xl {
+  text-shadow: 0 0 18px oklch(0.8 0.17 var(--accent-hue) / 0.7), 0 0 42px oklch(0.75 0.2 var(--accent-hue) / 0.35);
+}
+.beat-dot.is-active,
+.beat-cell.is-on,
+.pad.is-active,
+.led.is-on {
+  box-shadow: 0 0 14px oklch(0.82 0.16 var(--accent-hue) / 0.9), 0 0 32px oklch(0.75 0.2 var(--accent-hue) / 0.45);
+}
+
+/* ---- the home page ---- */
+.hub-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 30px;
+  border: 1px solid var(--line-strong);
+  background:
+    radial-gradient(60% 90% at 100% 0%, oklch(0.6 0.24 285 / 0.28), transparent 60%),
+    radial-gradient(50% 80% at 0% 100%, oklch(0.62 0.24 335 / 0.22), transparent 60%),
+    var(--surface);
+}
+/* A low equaliser of light along the hero's foot. */
+.hub-hero::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 13%;
+  background: var(--brand-gradient);
+  opacity: 0.12;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100' preserveAspectRatio='none'%3E%3Cg fill='%23000'%3E%3Crect x='0' y='62' width='8' height='38' rx='4'/%3E%3Crect x='16' y='40' width='8' height='60' rx='4'/%3E%3Crect x='32' y='70' width='8' height='30' rx='4'/%3E%3Crect x='48' y='22' width='8' height='78' rx='4'/%3E%3Crect x='64' y='50' width='8' height='50' rx='4'/%3E%3Crect x='80' y='8' width='8' height='92' rx='4'/%3E%3Crect x='96' y='36' width='8' height='64' rx='4'/%3E%3Crect x='112' y='58' width='8' height='42' rx='4'/%3E%3Crect x='128' y='18' width='8' height='82' rx='4'/%3E%3Crect x='144' y='44' width='8' height='56' rx='4'/%3E%3Crect x='160' y='66' width='8' height='34' rx='4'/%3E%3Crect x='176' y='30' width='8' height='70' rx='4'/%3E%3Crect x='192' y='54' width='8' height='46' rx='4'/%3E%3Crect x='208' y='12' width='8' height='88' rx='4'/%3E%3Crect x='224' y='48' width='8' height='52' rx='4'/%3E%3Crect x='240' y='72' width='8' height='28' rx='4'/%3E%3Crect x='256' y='38' width='8' height='62' rx='4'/%3E%3Crect x='272' y='60' width='8' height='40' rx='4'/%3E%3Crect x='288' y='78' width='8' height='22' rx='4'/%3E%3C/g%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100' preserveAspectRatio='none'%3E%3Cg fill='%23000'%3E%3Crect x='0' y='62' width='8' height='38' rx='4'/%3E%3Crect x='16' y='40' width='8' height='60' rx='4'/%3E%3Crect x='32' y='70' width='8' height='30' rx='4'/%3E%3Crect x='48' y='22' width='8' height='78' rx='4'/%3E%3Crect x='64' y='50' width='8' height='50' rx='4'/%3E%3Crect x='80' y='8' width='8' height='92' rx='4'/%3E%3Crect x='96' y='36' width='8' height='64' rx='4'/%3E%3Crect x='112' y='58' width='8' height='42' rx='4'/%3E%3Crect x='128' y='18' width='8' height='82' rx='4'/%3E%3Crect x='144' y='44' width='8' height='56' rx='4'/%3E%3Crect x='160' y='66' width='8' height='34' rx='4'/%3E%3Crect x='176' y='30' width='8' height='70' rx='4'/%3E%3Crect x='192' y='54' width='8' height='46' rx='4'/%3E%3Crect x='208' y='12' width='8' height='88' rx='4'/%3E%3Crect x='224' y='48' width='8' height='52' rx='4'/%3E%3Crect x='240' y='72' width='8' height='28' rx='4'/%3E%3Crect x='256' y='38' width='8' height='62' rx='4'/%3E%3Crect x='272' y='60' width='8' height='40' rx='4'/%3E%3Crect x='288' y='78' width='8' height='22' rx='4'/%3E%3C/g%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+  transform-origin: bottom;
+  animation: eq-sway 3.2s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+.hub-hero > * { position: relative; z-index: 1; }
+.hero-title,
+.hub-hero h1 {
+  font-size: clamp(40px, 3.4vw + 18px, 68px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.hero-title em,
+.hero-title b,
+.hero-title .is-accent,
+.hub-hero h1 em,
+.hub-hero h1 b {
+  font-style: normal;
+  background: var(--brand-gradient);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: grad-flow 6s ease-in-out infinite alternate;
+}
+@keyframes grad-flow { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+.hero-bar { height: 4px; width: 96px; border-radius: 4px; background: var(--brand-gradient); box-shadow: 0 0 20px oklch(0.7 0.24 300 / 0.7); }
+.hero-kicker { border-radius: var(--r-pill); background: color-mix(in srgb, var(--surface-solid) 50%, transparent); border: 1px solid var(--line-strong); }
+.hero-cta { --accent-hue: 285; }
+/* The quick start: a deck whose edge turns like a ring of light. */
+.quick-start.deck { position: relative; isolation: isolate; --accent-hue: 285; }
+.quick-start.deck::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--ring, 0deg), oklch(0.7 0.24 285), oklch(0.72 0.24 335), oklch(0.85 0.15 70), oklch(0.75 0.15 200), oklch(0.7 0.24 285));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ring-turn 8s linear infinite;
+  opacity: 0.85;
+}
+@property --ring { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes ring-turn { to { --ring: 360deg; } }
+
+/* Tool cards: glass that lifts and glows in its tool's colour. */
+.tool-card {
+  border-radius: var(--r-3);
+  transition: transform var(--dur-3) var(--ease-out), box-shadow var(--dur-3) var(--ease-out), border-color var(--dur-3);
+}
+.tool-card-icon {
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border: 0;
+  box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform var(--dur-3) var(--ease-spring);
+}
+.tool-card:hover:not(.is-off) {
+  transform: translateY(-4px);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-raised), 0 24px 60px -24px oklch(0.6 0.22 var(--accent-hue) / 0.75);
+}
+.tool-card:hover:not(.is-off) .tool-card-icon { transform: scale(1.08) rotate(-4deg); background: var(--accent-grad); }
+.tool-card-open { color: var(--text); }
+.studio-last-icon,
+.studio-app-icon,
+.pledge-icon,
+.credits-promo-icon,
+.quick-action-icon,
+.next-step-icon,
+.send-file-target svg {
+  border-radius: 12px;
+}
+.studio-last-icon,
+.studio-app-icon,
+.pledge-icon,
+.credits-promo-icon,
+.quick-action-icon {
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  box-shadow: var(--accent-glow);
+}
+.catalog-group-head h2,
+.section-head h2 { font-size: clamp(22px, 1vw + 16px, 30px); font-weight: 800; letter-spacing: -0.02em; }
+.catalog-bar {
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.hub-search input { border-radius: var(--r-pill); }
+.hub-search:focus-within { box-shadow: 0 0 0 4px var(--accent-tint), 0 0 30px -6px oklch(0.65 0.22 285 / 0.6); border-radius: var(--r-pill); }
+.credits-band {
+  border-radius: var(--r-4);
+  background:
+    radial-gradient(60% 140% at 100% 50%, oklch(0.75 0.16 70 / 0.25), transparent 60%),
+    radial-gradient(60% 140% at 0% 50%, oklch(0.62 0.24 300 / 0.22), transparent 60%),
+    var(--surface);
+}
+
+/* The page enters softly. */
+.tool-frame > *,
+.home > * { animation: skin-rise 0.6s var(--ease-out) both; }
+.tool-frame > :nth-child(2),
+.home > :nth-child(2) { animation-delay: 60ms; }
+.tool-frame > :nth-child(3),
+.home > :nth-child(3) { animation-delay: 120ms; }
+.tool-frame > :nth-child(n + 4),
+.home > :nth-child(n + 4) { animation-delay: 180ms; }
+@keyframes skin-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* Notices and dialogs: glass with a lit edge. */
+.app-notice { border-radius: var(--r-3); color: var(--text); }
+.dialog,
+.palette { border-radius: var(--r-4); border-color: var(--line-strong); box-shadow: var(--shadow-overlay), 0 0 0 1px var(--glass-edge) inset, 0 40px 120px -40px oklch(0.55 0.24 285 / 0.6); }
+
+/* ---- calm for those who ask for it ---- */
+@media (prefers-reduced-motion: reduce) {
+  .app::before,
+  .tool-masthead.tool-intro::after,
+  .hub-hero::before,
+  .quick-start.deck::before,
+  .hero-title em,
+  .hero-title b,
+  .tool-frame > *,
+  .home > * { animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .panel, .tool-card, .studio-col, .hub-hero, .sidebar, .topbar, .tool-masthead { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media print {
+  .app::before, .app::after { display: none; }
+}
+
+/* The save button: tinted in the tool's colour, lit when hovered. */
+.save-work-button:not(.is-saved):not(.is-failed) { background: var(--accent-grad); border: 0; color: var(--on-accent); box-shadow: var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.save-work-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.save-work-button:disabled { opacity: 0.5; box-shadow: none; }
