@@ -56,6 +56,14 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acc
 // Counting the voices the synth starts is the only way from outside the page
 // to tell one playback from two overlapping ones.
 await page.addInitScript(() => {
+  // The invitation to open an account comes up a few seconds into a visit
+  // and sits over the page; the checks below are about the tools, so it is
+  // marked as already shown.
+  try {
+    sessionStorage.setItem("musictools.sign-in-prompt.shown.v1", "1");
+  } catch {
+    // No storage: the invitation may appear.
+  }
   window.__oscillators = 0;
   const create = AudioContext.prototype.createOscillator;
   AudioContext.prototype.createOscillator = function countingCreateOscillator() {
