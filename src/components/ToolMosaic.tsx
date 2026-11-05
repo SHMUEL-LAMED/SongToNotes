@@ -3,7 +3,7 @@ import { memo, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { useFavorites } from "../lib/prefs";
 import { MENU_GROUPS, MENU_TOOLS, type ToolDefinition } from "../lib/tools";
-import { SectionHead } from "./SectionHead";
+import { Button, Chip, ChipToggle, SectionHead } from "../ui";
 
 type Filter = "all" | "favorites" | string;
 
@@ -130,17 +130,15 @@ export const ToolMosaic = memo(function ToolMosaic({ onOpen, disabledTools }: { 
         </label>
         <div className="catalog-chips" role="group" aria-label="סינון לפי קבוצה" ref={chipsRef}>
           {FILTERS.map((item) => (
-            <button
+            <ChipToggle
               key={item.id}
-              type="button"
-              className={`chip chip-toggle${filter === item.id ? " active" : ""}`}
+              pressed={filter === item.id}
               onClick={() => setFilter(item.id)}
-              aria-pressed={filter === item.id}
+              icon={item.id === "favorites" ? <Star size={14} aria-hidden="true" /> : undefined}
+              count={counts[item.id] ?? 0}
             >
-              {item.id === "favorites" && <Star size={14} aria-hidden="true" />}
               {item.label}
-              <span className="chip-count">{counts[item.id] ?? 0}</span>
-            </button>
+            </ChipToggle>
           ))}
         </div>
         <p className="catalog-result" aria-live="polite">
@@ -190,9 +188,9 @@ export const ToolMosaic = memo(function ToolMosaic({ onOpen, disabledTools }: { 
               // The search did find tools, only not under this filter.
               <>
                 <p>{`אין ב„${FILTERS.find((item) => item.id === filter)?.label}” כלי שמתאים ל„${query.trim()}”.`}</p>
-                <button type="button" className="secondary-button" onClick={() => setFilter("all")}>
+                <Button onClick={() => setFilter("all")}>
                   חיפוש בכל הכלים <span className="chip-count">{found.length}</span>
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -235,9 +233,9 @@ function ToolCard({ tool, flagship, off, pinned, onToggle, onOpen }: CardProps) 
             </button>
           </h4>
           {off ? (
-            <span className="tool-card-badge chip is-off">מכובה זמנית</span>
+            <Chip className="tool-card-badge is-off">מכובה זמנית</Chip>
           ) : tool.badge ? (
-            <span className="tool-card-badge chip">{tool.badge}</span>
+            <Chip className="tool-card-badge">{tool.badge}</Chip>
           ) : null}
         </div>
         <p className="tool-card-tagline">{tool.tagline}</p>
@@ -246,13 +244,9 @@ function ToolCard({ tool, flagship, off, pinned, onToggle, onOpen }: CardProps) 
         </p>
         {flagship && (
           <p className="tool-card-outputs" aria-hidden="true">
-            <span className="chip">תווים</span>
-            <span className="chip" dir="ltr">
-              MIDI
-            </span>
-            <span className="chip" dir="ltr">
-              MusicXML
-            </span>
+            <Chip>תווים</Chip>
+            <Chip dir="ltr">MIDI</Chip>
+            <Chip dir="ltr">MusicXML</Chip>
           </p>
         )}
       </div>

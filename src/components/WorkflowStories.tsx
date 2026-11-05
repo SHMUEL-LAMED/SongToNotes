@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { memo, type CSSProperties, type FocusEvent } from "react";
 import { findTool } from "../lib/tools";
 import { WORKFLOWS } from "../lib/workflows";
-import { SectionHead } from "./SectionHead";
+import { Button, SectionHead } from "../ui";
 
 /**
  * The routes: one panel per job, in a row that scrolls sideways and snaps —
@@ -65,15 +65,15 @@ export const WorkflowStories = memo(function WorkflowStories({
                   );
                 })}
               </ol>
-              <button
-                type="button"
-                className="btn btn-primary btn-md route-start"
+              <Button
+                variant="primary"
+                className="route-start"
                 disabled={firstOff}
                 onClick={() => onOpen(first.id)}
                 aria-label={`להתחיל את „${flow.title}”`}
               >
                 להתחיל <ArrowLeft size={16} aria-hidden="true" />
-              </button>
+              </Button>
             </li>
           );
         })}

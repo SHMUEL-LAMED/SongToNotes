@@ -1,0 +1,594 @@
+/* =====================================================================
+   The tool page frame (SPEC §4): masthead, rule, family tabs, the body's
+   rhythm, panels and their numerals, the ledger, and the foot (carrying
+   the file on, the next tools, the video).
+   ===================================================================== */
+
+.tool-frame {
+  /* The panels are numbered down the page, the foot's included. */
+  counter-reset: panel;
+}
+
+/* ---- the masthead ---- */
+
+/* It also carries .tool-intro (the tours open on that name): none of the old
+   banner's look applies to it. */
+.tool-masthead,
+.tool-masthead.tool-intro {
+  position: static;
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  margin: 20px auto 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  column-gap: 16px;
+  align-items: start;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+}
+.tool-masthead.tool-intro::before,
+.tool-masthead.tool-intro::after { content: none; display: none; }
+
+.masthead-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-3);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.masthead-copy { min-width: 0; }
+.tool-masthead .masthead-kicker {
+  margin: 2px 0 4px;
+  max-width: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.masthead-where { display: inline-flex; align-items: center; gap: 4px; }
+.masthead-badge.is-new { color: var(--accent-text); }
+.tool-masthead .masthead-title {
+  margin: 0;
+  font-size: clamp(26px, 1vw + 19px, 32px);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.tool-masthead .masthead-tagline {
+  margin: 6px 0 0;
+  max-width: var(--read-w);
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+.masthead-more { margin-top: 10px; }
+.masthead-more summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--accent-text);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--r-1);
+}
+.masthead-more summary::-webkit-details-marker { display: none; }
+/* A chevron drawn with borders: it turns when the description opens. */
+.masthead-more summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.masthead-more[open] summary::after { margin-top: 3px; transform: rotate(-135deg); }
+.tool-masthead .masthead-more p {
+  margin: 6px 0 0;
+  max-width: var(--read-w);
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.masthead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+/* The tool's own controls (ToolActions) land here as the actions' own items. */
+.masthead-slot { display: contents; }
+.masthead-actions .fav-toggle { width: 40px; height: 40px; }
+
+.page-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding-inline: 10px 12px;
+  border: var(--hair-strong);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.page-share:hover { border-color: var(--accent-line); color: var(--text); }
+.page-share.is-on { border-color: var(--success); color: var(--success); }
+
+.masthead-rule {
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  height: 2px;
+  margin: 20px auto 0;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+@media (max-width: 719.98px) {
+  .tool-masthead,
+  .tool-masthead.tool-intro { grid-template-columns: 44px minmax(0, 1fr); column-gap: 12px; margin-top: 16px; }
+  .masthead-icon { width: 44px; height: 44px; border-radius: var(--r-2); }
+  .masthead-icon svg { width: 22px; height: 22px; }
+  .tool-masthead .masthead-tagline { font-size: 15.5px; }
+  .masthead-actions { grid-column: 1 / -1; justify-content: flex-start; padding-top: 12px; }
+  .masthead-rule { margin-top: 16px; }
+}
+
+/* ---- the family's tabs ---- */
+
+.tool-tabs {
+  position: relative;
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  margin: 8px auto 0;
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  box-shadow: inset 0 -1px 0 var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tool-tabs::-webkit-scrollbar { display: none; }
+@media (min-width: 720px) {
+  .tool-tabs { position: sticky; top: var(--topbar-h); z-index: var(--z-sticky); }
+}
+.tool-tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--tooltabs-h);
+  padding-inline: 12px;
+  border-radius: var(--r-2) var(--r-2) 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out);
+}
+.tool-tab svg { flex: none; color: var(--text-muted); transition: color var(--dur-2) var(--ease-out); }
+/* Each tab hovers in its own hue (it carries its tool's --accent-hue). */
+.tool-tab:hover { color: var(--accent-text); }
+.tool-tab:hover svg { color: var(--accent); }
+.tool-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tool-tab.is-active { color: var(--text); }
+.tool-tab.is-active svg { color: var(--accent); }
+/* The underline slides to the chosen tab; ToolTabs measures where it goes. */
+.tool-tabs-thumb {
+  position: absolute;
+  bottom: 0;
+  left: var(--tab-x, 0px);
+  width: var(--tab-w, 0px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: var(--tab-ready, 0);
+  pointer-events: none;
+  transition: left 220ms var(--ease-spring), width 220ms var(--ease-spring), opacity var(--dur-2) var(--ease-out);
+}
+/* Until it is measured (and without script) the chosen tab still reads as chosen. */
+.tool-tabs:not(.has-thumb) .tool-tab.is-active { box-shadow: inset 0 -2px 0 var(--accent); }
+.tool-tabs + .pad-tool { margin-top: 12px; }
+
+/* ---- the body's rhythm ---- */
+
+.tool-frame .tool-body,
+.tool-foot {
+  width: min(var(--tool-w), calc(100% - 2 * var(--gutter)));
+  margin: 20px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.tool-frame .tool-body { animation: frame-enter 180ms var(--ease-out) backwards; }
+.tool-foot { margin-top: 32px; }
+.tool-foot:empty { display: none; }
+@keyframes frame-enter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@media (max-width: 599.98px) {
+  .tool-frame .tool-body,
+  .tool-foot { gap: 16px; }
+}
+/* Wide enough, the column keeps a margin at its start for the panels' numbers. */
+@media (min-width: 1280px) {
+  .tool-frame .tool-body,
+  .tool-foot { padding-inline-start: var(--margin-col); }
+}
+
+/* ---- panels: numbered down the page ----
+   The panel itself is a primitive (ui.css). Here: the count runs over the
+   whole frame, the foot's panels included, and the legacy cards count as
+   panels so the numbers stay right while tools migrate. */
+
+.tool-frame .tool-body { counter-reset: none; }
+:is(.tool-body, .tool-foot) > :is(.workspace-card, .settings-panel, .refine-panel, .playback-card, .chroma-card, .result-canvas, .card, .downloads-card:not(.panel)),
+.tool-foot > .panel {
+  counter-increment: panel;
+}
+@media (min-width: 1280px) {
+  .tool-foot > .panel > .panel-num {
+    display: block;
+    position: absolute;
+    top: 22px;
+    inset-inline-start: -36px;
+    width: 26px;
+    text-align: end;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+  .tool-foot > .panel > .panel-num::before { content: counter(panel, decimal-leading-zero); }
+}
+
+/* The legacy result sections: the result panel's accent edge, the old head. */
+.results-section { min-width: 0; border-top: 2px solid var(--accent); padding-top: 16px; }
+.results-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.results-header h2 { margin: 0; font-size: 21px; line-height: 1.25; font-weight: 700; }
+.workspace-section { min-width: 0; }
+
+/* ---- downloads ---- */
+
+/* The legacy card: its head (icon + title) beside the save button, the format buttons under them. */
+.downloads-card:not(.ledger) {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: var(--surface);
+  border: var(--hair);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-panel);
+}
+.downloads-card:not(.ledger) > * { grid-column: 1 / -1; }
+.downloads-card:not(.ledger) > :first-child { grid-column: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.downloads-card:not(.ledger) > .save-work { grid-column: 2; grid-row: 1; }
+.downloads-card h3 { margin: 0; font-size: 16.5px; font-weight: 600; }
+.downloads-card :is(h3 + p) { margin: 2px 0 0; font-size: 13px; color: var(--text-muted); }
+.download-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-1);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: none;
+}
+.download-icon svg { width: 16px; height: 16px; }
+.download-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.download-buttons :is(button, a) {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border: var(--hair-strong);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: start;
+  text-decoration: none;
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out);
+}
+.download-buttons :is(button, a) > svg { flex: none; color: var(--accent); transform: none; }
+.download-buttons :is(button, a) > span { display: flex; flex-direction: column; min-width: 0; }
+.download-buttons :is(button, a) small { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.download-buttons :is(button, a):hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-tint); transform: none; }
+.download-buttons :is(button, a):active:not(:disabled) { transform: translateY(1px); }
+.download-buttons :is(button, a):disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 719.98px) {
+  .downloads-card:not(.ledger) > .save-work { grid-column: 1 / -1; grid-row: auto; }
+  /* With a result on a phone, the ledger rides above the tab bar: a row of
+     format buttons and the save button, always in reach. */
+  .has-result .ledger {
+    position: sticky;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    z-index: var(--z-sticky);
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px var(--gutter);
+    margin-inline: calc(-1 * var(--gutter));
+    overflow-x: auto;
+    border: 0;
+    border-top: var(--hair);
+    border-radius: 0;
+    background: var(--bg);
+    box-shadow: none;
+  }
+  .has-result .ledger > *,
+  .has-result .ledger .ledger-rows { flex: none; display: flex; align-items: center; gap: 8px; }
+  .has-result .ledger :is(.ledger-head, .ledger-label, .ledger-size) { display: none; }
+  .has-result .ledger .ledger-rows > li + li { border-top: 0; }
+  .has-result .ledger .ledger-row {
+    display: inline-flex;
+    width: auto;
+    min-height: 44px;
+    padding-inline: 12px;
+    border: var(--hair-strong);
+    border-radius: var(--r-2);
+  }
+}
+
+/* ---- the foot: carrying the file on ---- */
+
+.send-file-name { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.send-file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.send-file-target {
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: var(--hair);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out);
+}
+.send-file-target:hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-tint); }
+.send-file-target:disabled { cursor: progress; opacity: 0.6; }
+.send-file-target.is-sending { opacity: 1; border-color: var(--accent-line); }
+.send-file-target-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.send-file-target-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.send-file-target-text b { font-size: 14px; font-weight: 600; }
+.send-file-target-text small { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.send-file-go { flex: none; color: var(--text-muted); }
+.send-file-target:hover .send-file-go { color: var(--accent-text); }
+.send-file .error-message { margin: 0; }
+
+/* The small menu beside a loaded file. */
+.send-file-menu { position: relative; flex: 0 0 auto; }
+.send-file-popover {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 6px);
+  z-index: var(--z-sticky);
+  width: min(260px, calc(100vw - 32px));
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: var(--hair);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+}
+.send-file-item {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.send-file-item svg { flex: none; color: var(--accent-text); }
+.send-file-item:hover:not(:disabled),
+.send-file-item:focus-visible { background: var(--accent-soft); }
+.send-file-item:disabled { cursor: progress; }
+.send-file-popover .error-message { margin: 6px 4px 2px; font-size: 12.5px; }
+@media (max-width: 599.98px) {
+  .send-file-grid { grid-template-columns: 1fr; }
+  /* On a phone the menu opens under the file row, across its width. */
+  .send-file-menu { position: static; }
+  .selected-file:has(.send-file-menu) { position: relative; }
+  .send-file-popover { inset-inline: 0; width: auto; }
+}
+
+/* ---- the foot: the next tools, as ruled columns ---- */
+
+.next-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-inline: -20px;
+  margin-bottom: -20px;
+  border-top: var(--hair);
+}
+.next-step {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 0;
+  border-inline-start: var(--hair);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-out);
+}
+.next-step:first-child { border-inline-start: 0; }
+.next-step:hover { background: var(--surface-hover); }
+.next-step:first-child:hover { border-end-start-radius: var(--r-3); }
+.next-step:last-child:hover { border-end-end-radius: var(--r-3); }
+.next-step-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.next-step-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.next-step-text b { font-size: 15px; font-weight: 600; }
+.next-step-text small { font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.next-step-go { margin-top: 8px; color: var(--text-muted); transition: color var(--dur-2) var(--ease-out); }
+.next-step:hover .next-step-go { color: var(--accent-text); }
+@media (max-width: 599.98px) {
+  .next-steps-grid { margin-inline: -16px; margin-bottom: -16px; }
+  .next-step { padding: 14px 16px; border-inline-start: 0; border-top: var(--hair); }
+  .next-step:first-child { border-top: 0; }
+}
+
+/* ---- the foot: the how-to video ---- */
+
+.tool-video-name { font-weight: 600; color: var(--text-soft); }
+.tool-video-frame {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: var(--hair);
+  border-radius: var(--r-2);
+  background: var(--deck-bg);
+}
+.tool-video-frame video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tool-video-frame.is-started video { object-fit: contain; }
+.tool-video-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.tool-video-play-mark {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  padding-inline-start: 4px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-raised);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.tool-video-play:hover .tool-video-play-mark { transform: scale(1.04); }
+.tool-video-play:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+/* ---- legacy intro — removed when every tool is migrated ----
+   The frame's masthead now says what the tool is; a tool that still draws
+   its own banner would show two headers. */
+.tool-frame .tool-body > .tool-intro:not(:has(> .tool-intro-side)),
+.tool-frame .pad-tool > .tool-intro,
+.tool-frame .tool-hero { display: none; }
+/* A banner with side controls (a save button, a toggle) keeps only them, on
+   a row at the end, until the tool moves them into <ToolActions>. */
+.tool-frame .tool-body > .tool-intro:has(> .tool-intro-side) {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.tool-frame .tool-body > .tool-intro:has(> .tool-intro-side)::before,
+.tool-frame .tool-body > .tool-intro:has(> .tool-intro-side)::after { content: none; display: none; }
+.tool-frame .tool-body > .tool-intro:has(> .tool-intro-side) > :not(.tool-intro-side) { display: none; }
+.tool-frame .tool-body > .tool-intro > .tool-intro-side { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-frame .tool-body { animation: none; }
+  .tool-tabs-thumb,
+  .masthead-more summary::after,
+  .tool-video-play-mark { transition: none; }
+}
+
+@media print {
+  .masthead-actions,
+  .masthead-more,
+  .tool-tabs,
+  .tool-foot,
+  .send-file-menu,
+  .ledger,
+  .downloads-card,
+  .settings-panel,
+  .refine-panel,
+  .playback-card,
+  .result-toolbar { display: none !important; }
+  .masthead-rule { background: #000; }
+}

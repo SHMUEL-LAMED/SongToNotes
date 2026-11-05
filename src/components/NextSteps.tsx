@@ -1,6 +1,7 @@
 import { ArrowLeft, Compass } from "lucide-react";
 import type { CSSProperties } from "react";
 import { familyOf, findTool, type ToolDefinition } from "../lib/tools";
+import { Button } from "../ui";
 import { SendFileSection } from "./SendFile";
 
 /**
@@ -34,8 +35,8 @@ export function NextSteps({
 function RelatedTools({ next, onOpen }: { next: ToolDefinition[]; onOpen: (id: string) => void }) {
   return (
     <section className="panel next-steps" aria-labelledby="next-steps-title">
+      <span className="panel-num" aria-hidden="true" />
       <header className="panel-head next-steps-head">
-        <span className="panel-num" aria-hidden="true" />
         <span className="panel-icon" aria-hidden="true">
           <Compass size={16} />
         </span>
@@ -46,9 +47,9 @@ function RelatedTools({ next, onOpen }: { next: ToolDefinition[]; onOpen: (id: s
           <p className="panel-hint">הכלים שבדרך כלל באים אחרי הכלי הזה.</p>
         </div>
         <div className="panel-actions">
-          <button type="button" className="ghost-button" onClick={() => onOpen("home")}>
+          <Button variant="ghost" size="sm" onClick={() => onOpen("home")}>
             כל הכלים <ArrowLeft size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       </header>
       <div className="next-steps-grid">

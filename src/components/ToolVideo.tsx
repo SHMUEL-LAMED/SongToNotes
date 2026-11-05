@@ -25,8 +25,8 @@ export function ToolVideo({ tool }: { tool: ToolDefinition }) {
 
   return (
     <section className="panel tool-video" aria-labelledby="tool-video-title" style={{ "--accent-hue": tool.hue } as CSSProperties}>
+      <span className="panel-num" aria-hidden="true" />
       <header className="panel-head tool-video-head">
-        <span className="panel-num" aria-hidden="true" />
         <span className="panel-icon tool-video-icon" aria-hidden="true">
           <PlayCircle size={16} />
         </span>

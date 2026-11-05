@@ -1,17 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#a66bff"/>
-      <stop offset="0.55" stop-color="#f0569a"/>
-      <stop offset="1" stop-color="#ffab5c"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="18" fill="url(#g)"/>
-  <g transform="translate(8 8)" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round">
-    <path d="M7 27v-6"/>
-    <path d="M15 33V15"/>
-    <path d="M23 26v-4"/>
-    <path d="M37.2 34.4V8.4c3.2 1.4 6 3.8 6 8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .ink { stroke: #15161a; }
+    .stem { stroke: #006ac5; }
+    .note { fill: #e78a45; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #eeeef1; }
+      .stem { stroke: #73bdff; }
+      .note { fill: #ffb366; }
+    }
+  </style>
+  <g class="ink" fill="none" stroke-width="1.75" stroke-linecap="round">
+    <path d="M3 11h26"/>
+    <path d="M3 17h26"/>
+    <path d="M3 23h26"/>
   </g>
-  <ellipse cx="39.8" cy="43.2" rx="6" ry="4.8" transform="rotate(-18 39.8 43.2)" fill="#fff"/>
+  <ellipse class="note" cx="11.5" cy="23" rx="6.6" ry="4.65" transform="rotate(-22 11.5 23)"/>
+  <g class="stem" fill="none" stroke-width="2.5" stroke-linecap="round">
+    <path d="M17.4 21.5V4.5"/>
+    <path d="M17.4 4.5c4.2 1.2 6.6 4.4 5.2 8.6"/>
+  </g>
 </svg>

@@ -10,8 +10,6 @@ import { CreditNotices } from "./components/CreditNotices";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Home } from "./components/Home";
 import { LogoGlyph } from "./components/Logo";
-import { NextSteps } from "./components/NextSteps";
-import { ToolTabs } from "./components/ToolTabs";
 import { SharePage } from "./components/SharePage";
 import { SharePrompt, ShareSiteDialog } from "./components/SiteShare";
 import { ShortcutsDialog } from "./components/ShortcutsDialog";
@@ -19,7 +17,7 @@ import { SignInPrompt } from "./components/SignInPrompt";
 import { SiteFooter } from "./components/SiteFooter";
 import { ToolPromo } from "./components/ToolPromo";
 import { Tour } from "./components/Tour";
-import { ToolVideo } from "./components/ToolVideo";
+import { ToolFrame } from "./components/ToolFrame";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
@@ -32,6 +30,7 @@ import { useSiteControl } from "./lib/siteControl";
 import { langForModel } from "./lib/i18n";
 import { recordToolVisit } from "./lib/prefs";
 import { useCommandKey } from "./lib/useCommandKey";
+import { PHONE_QUERY, useMediaQuery } from "./lib/useMediaQuery";
 import { ASSISTANT_TARGET, useToolPromo } from "./lib/toolPromo";
 import { ACCENT_CHOICES, useAccent, useTheme, type ThemePreference } from "./lib/theme";
 import { createShare, shareTokenFromRoute } from "./lib/share";
@@ -175,6 +174,9 @@ function WorkspaceApp() {
   const [paletteWorks, setPaletteWorks] = useState<SavedWork[]>([]);
   const control = useSiteControl();
   const owner = isAdmin(user);
+  // On a phone the tab bar carries the assistant's way in, so its floating
+  // launcher is not drawn there (one of the two, never both).
+  const phone = useMediaQuery(PHONE_QUERY);
 
   // A hidden tool is an unknown address to visitors; the owner can still open it.
   const tool = findTool(route) ?? (owner ? findAnyTool(route) : null);
@@ -520,6 +522,8 @@ function WorkspaceApp() {
       onOpenCredits={() => go("credits")}
       onOpenTour={openTour}
       touring={tourRoute === route}
+      assistantOpen={assistantOpen}
+      onToggleAssistant={() => setAssistantOpen((open) => !open)}
     >
       <AccountDrawer
         open={accountOpen}
@@ -556,7 +560,10 @@ function WorkspaceApp() {
       {tourRoute === route && <Tour key={route} steps={tourFor(route, tool)} onClose={closeTour} />}
 
       {control.banner && !closed && (
-        <p className={`site-banner is-${control.bannerKind}`} role="status">
+        <p
+          className={`site-banner is-${control.bannerKind} notice notice-${control.bannerKind === "warn" ? "warning" : control.bannerKind === "good" ? "success" : "info"}`}
+          role="status"
+        >
           <Info size={16} aria-hidden="true" /> {control.banner}
         </p>
       )}
@@ -567,6 +574,7 @@ function WorkspaceApp() {
         onClose={() => setAssistantOpen(false)}
         toolId={tool?.id ?? null}
         toolTitle={tool?.title ?? null}
+        launcher={!phone}
       />
 
       <AppNotices>
@@ -639,7 +647,7 @@ function WorkspaceApp() {
             </span>
             <h1>{tool.title} מכובה זמנית</h1>
             <p>הכלי הזה כבוי כרגע — בדרך כלל כי שירות שהוא נשען עליו לא זמין. שאר הכלים פתוחים.</p>
-            <button type="button" className="secondary-button" onClick={() => go("home")}>
+            <button type="button" className="btn btn-secondary btn-md" onClick={() => go("home")}>
               לכל הכלים
             </button>
           </div>
@@ -650,64 +658,65 @@ function WorkspaceApp() {
           </Suspense>
         )}
         {!closed && !tool && !shareToken && !admin && !me && !credits && (
-          <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} />
+          <Home onOpen={go} onOpenWork={openWork} disabledTools={control.disabledTools} onFeedback={openFeedback} onOpenPalette={openPalette} />
         )}
-        {shown && <ToolTabs current={shown} />}
-        {shown === "notes" && (
-          <Suspense fallback={loading("טוען את מנוע התווים…")}>
-            <TranscriberTool
-              key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
-              initial={
-                opened && (opened.work.kind === "notes" || opened.work.kind === "piano")
-                  ? toPendingTranscription(opened.work)
-                  : null
-              }
-            />
-          </Suspense>
+        {/* Every tool page is framed alike: the masthead from the registry, the
+            family's tabs, the tool's own body, and the foot (carrying the file
+            on, the next tools, the video and the site's footer). */}
+        {shown && pageTool && (
+          <ToolFrame tool={pageTool} current={shown} onOpen={go} onFeedback={openFeedback} disabledTools={control.disabledTools}>
+            {shown === "notes" && (
+              <Suspense fallback={loading("טוען את מנוע התווים…")}>
+                <TranscriberTool
+                  key={opened && (opened.work.kind === "notes" || opened.work.kind === "piano") ? opened.key : 0}
+                  initial={
+                    opened && (opened.work.kind === "notes" || opened.work.kind === "piano")
+                      ? toPendingTranscription(opened.work)
+                      : null
+                  }
+                />
+              </Suspense>
+            )}
+            <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
+              {shown === "ringtone" && <RingtoneTool />}
+              {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
+              {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
+              {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
+              {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
+              {shown === "piano" && <PianoTool />}
+              {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
+              {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
+              {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
+              {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
+              {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
+              {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
+              {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
+              {shown === "pads" && <PadTool />}
+              {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
+              {shown === "video" && <VideoTool />}
+              {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
+              {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
+              {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
+              {shown === "beats" && <BeatMakerTool />}
+              {shown === "theory" && <TheoryTool />}
+              {shown === "progressions" && <ProgressionTool />}
+              {shown === "changes" && <ChangesTool />}
+              {shown === "recorder" && <RecorderTool />}
+              {shown === "denoise" && <DenoiseTool />}
+              {shown === "joiner" && <JoinerTool />}
+              {shown === "melody" && <MelodyTool />}
+              {shown === "visualizer" && <VisualizerTool />}
+              {shown === "voice" && <VoiceTool />}
+              {shown === "songcard" && <SongCardTool />}
+              {shown === "drumkit" && <DrumKitTool />}
+              {shown === "setlist" && <SetlistTool onOpenWork={openWork} />}
+              {shown === "speechsong" && <SpeechSongTool />}
+            </Suspense>
+          </ToolFrame>
         )}
-        <Suspense fallback={shown && shown !== "notes" ? loading("טוען את הכלי…") : null}>
-          {shown === "ringtone" && <RingtoneTool />}
-          {shown === "vocals" && <VocalsTool key={keyFor("vocals")} initial={initialFor("vocals")} />}
-          {shown === "speed" && <SpeedTool key={keyFor("speed")} initial={initialFor("speed")} />}
-          {shown === "metronome" && <MetronomeTool key={keyFor("metronome")} initial={initialFor("metronome")} />}
-          {shown === "tuner" && <TunerTool key={keyFor("tuner")} initial={initialFor("tuner")} />}
-          {shown === "piano" && <PianoTool />}
-          {shown === "ear" && <EarTrainingTool key={keyFor("ear")} initial={initialFor("ear")} />}
-          {shown === "analyze" && <AnalyzeTool key={keyFor("analysis")} initial={initialFor("analysis")} />}
-          {shown === "tts" && <TtsTool key={keyFor("tts")} initial={initialFor("tts")} />}
-          {shown === "identify" && <IdentifyTool key={keyFor("identify")} initial={initialFor("identify")} />}
-          {shown === "lyrics" && <LyricsTool key={keyFor("lyrics")} initial={initialFor("lyrics")} />}
-          {shown === "rhythm" && <RhythmTool key={keyFor("rhythm")} initial={initialFor("rhythm")} />}
-          {shown === "mixer" && <MixerTool key={keyFor("mix")} initial={initialFor("mix")} />}
-          {shown === "pads" && <PadTool />}
-          {shown === "convert" && <ConvertTool key={keyFor("convert")} initial={initialFor("convert")} />}
-          {shown === "video" && <VideoTool />}
-          {shown === "chords" && <ChordsTool key={keyFor("chords")} initial={initialFor("chords")} />}
-          {shown === "songbook" && <SongbookTool key={keyFor("song")} initial={initialFor("song")} />}
-          {shown === "transcript" && <TranscriptTool key={keyFor("transcript")} initial={initialFor("transcript")} />}
-          {shown === "beats" && <BeatMakerTool />}
-          {shown === "theory" && <TheoryTool />}
-          {shown === "progressions" && <ProgressionTool />}
-          {shown === "changes" && <ChangesTool />}
-          {shown === "recorder" && <RecorderTool />}
-          {shown === "denoise" && <DenoiseTool />}
-          {shown === "joiner" && <JoinerTool />}
-          {shown === "melody" && <MelodyTool />}
-          {shown === "visualizer" && <VisualizerTool />}
-          {shown === "voice" && <VoiceTool />}
-          {shown === "songcard" && <SongCardTool />}
-          {shown === "drumkit" && <DrumKitTool />}
-          {shown === "setlist" && <SetlistTool onOpenWork={openWork} />}
-          {shown === "speechsong" && <SpeechSongTool />}
-        </Suspense>
 
-        {tool && (
-          <>
-            {shown && <ToolVideo tool={tool} />}
-            {shown && pageTool && <NextSteps tool={pageTool} onOpen={go} disabledTools={control.disabledTools} />}
-            <SiteFooter onOpen={go} onFeedback={openFeedback} />
-          </>
-        )}
+        {/* A tool that is off (or a closed site on a tool's address) still ends on the footer. */}
+        {tool && !shown && <SiteFooter onOpen={go} onFeedback={openFeedback} />}
       </ErrorBoundary>
     </AppShell>
   );

@@ -35,8 +35,8 @@ export function SendFileSection({ disabledTools = [] }: { disabledTools?: readon
 
   return (
     <section className="panel send-file" aria-labelledby="send-file-title">
+      <span className="panel-num" aria-hidden="true" />
       <header className="panel-head">
-        <span className="panel-num" aria-hidden="true" />
         <span className="panel-icon send-file-icon" aria-hidden="true">
           {isResult ? <Sparkles size={16} /> : <FileAudio size={16} />}
         </span>
