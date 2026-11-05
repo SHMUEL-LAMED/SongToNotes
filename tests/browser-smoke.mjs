@@ -87,10 +87,12 @@ const TOOLS = ["notes", "ringtone", "vocals", "speed", "metronome", "tuner", "pi
 for (const id of TOOLS) {
   await page.goto(`${BASE}#/${id}`, { waitUntil: "load" });
   await page.waitForTimeout(500);
-  // The pads are a full-bleed board of their own, outside .tool-body.
-  await page.waitForSelector(".tool-body h1, .tool-hero h1, .pad-tool h1", { timeout: 30_000 }).catch(() => {});
-  const heading = await page.locator(".tool-body h1, .tool-hero h1, .pad-tool h1").first().textContent().catch(() => null);
-  log(Boolean(heading), `tool "${id}" renders`, heading ?? "no heading");
+  // The frame writes the tool's name in the masthead; the tool's own body
+  // has to be there under it too.
+  await page.waitForSelector(".tool-frame .tool-body", { timeout: 30_000 }).catch(() => {});
+  const heading = await page.locator(".tool-masthead h1").first().textContent().catch(() => null);
+  const body = await page.locator(".tool-frame .tool-body").count();
+  log(Boolean(heading) && body > 0, `tool "${id}" renders`, heading ? `${heading}, body ${body}` : "no heading");
 }
 
 // --- unknown route falls back to hub ---
