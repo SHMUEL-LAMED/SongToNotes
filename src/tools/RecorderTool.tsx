@@ -984,11 +984,11 @@ export function RecorderTool() {
             <span>
               קליק <b dir="ltr">{Math.round(settings.clickVolume * 100)}%</b>
             </span>
+            <input type="range" min={0} max={100} value={Math.round(settings.clickVolume * 100)} onChange={(event) => updateSettings({ clickVolume: Number(event.target.value) / 100 })} disabled={recordingNow} dir="ltr" aria-label="עוצמת הקליק" />
             <label className="checkbox-field">
               <input type="checkbox" checked={settings.click} onChange={(event) => updateSettings({ click: event.target.checked })} disabled={recordingNow} />
               מטרונום גם בזמן ההקלטה
             </label>
-            <input type="range" min={0} max={100} value={Math.round(settings.clickVolume * 100)} onChange={(event) => updateSettings({ clickVolume: Number(event.target.value) / 100 })} disabled={recordingNow} dir="ltr" aria-label="עוצמת הקליק" />
           </div>
           <label className="setting-field recorder-latency">
             <span>
