@@ -1,4 +1,4 @@
-import { Cpu, Download, Headphones, Layers, MicVocal, Sparkles, Volume2, VolumeX, Wand2 } from "lucide-react";
+import { Cpu, Download, Headphones, Layers, MicVocal, Minus, Pause, Play, Plus, Sparkles, Square, Volume2, VolumeX, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiError, separateOnServer, separationAvailability } from "../lib/aiApi";
 import { decodeAudioFile } from "../lib/audio";
@@ -27,6 +27,7 @@ import { encodeWav } from "../lib/wav";
 import { handOffTo } from "../lib/handoff";
 import { MixPlayer, audibleTracks, mixDuration, renderMix, type MixTrack } from "../lib/mixer";
 import type { SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 const STEM_NAMES: Record<string, string> = { vocals: "שירה", drums: "תופים", bass: "בס", other: "שאר הכלים", guitar: "גיטרה", piano: "פסנתר", no_vocals: "ליווי" };
 const STEM_HUES: Record<string, number> = { vocals: 340, drums: 20, bass: 260, other: 200, guitar: 45, piano: 120 };
@@ -808,13 +809,7 @@ export function VocalsTool({ initial = null }: Props) {
                   <span>
                     עוצמת ההפרדה <b>{strength}%</b>
                   </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={strength}
-                    onChange={(event) => setStrength(Number(event.target.value))}
-                  />
+                  <Fader min={0} max={100} value={strength} onChange={setStrength} label="עוצמת ההפרדה" />
                   <small>
                     {usedAi
                       ? "חל על ההפרדה המהירה; תוצאת ה־AI נשארת כמו שהיא."
@@ -905,11 +900,11 @@ export function VocalsTool({ initial = null }: Props) {
                             <div className="mixer-track-controls">
                               <label>
                                 <span>עוצמה {Math.round(track.gain * 100)}%</span>
-                                <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => updateStem(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
+                                <Fader min={0} max={150} value={Math.round(track.gain * 100)} onChange={(value) => updateStem(track.id, { gain: value / 100 })} label={`עוצמה של ${track.name}`} />
                               </label>
                               <label>
                                 <span>פאן {track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</span>
-                                <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => updateStem(track.id, { pan: Number(event.target.value) / 100 })} aria-label={`פאן של ${track.name}`} />
+                                <Fader min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(value) => updateStem(track.id, { pan: value / 100 })} label={`פאן של ${track.name}`} />
                               </label>
                             </div>
                           </div>
@@ -928,11 +923,13 @@ export function VocalsTool({ initial = null }: Props) {
                             setStemsPlaying(false);
                           } else void player.play().then((started) => setStemsPlaying(started));
                         }}
+                        aria-label={stemsPlaying ? "השהה" : "נגן"}
                       >
+                        {stemsPlaying ? <Pause size={19} /> : <Play size={19} />}
                         {stemsPlaying ? "השהה" : "נגן את המיקס"}
                       </button>
                       <button className="transport-button" type="button" onClick={() => stopStems()} aria-label="עצור">
-                        ■
+                        <Square size={16} />
                       </button>
                       <small className="ai-status">{aiStatus}</small>
                     </div>
@@ -943,20 +940,20 @@ export function VocalsTool({ initial = null }: Props) {
                         </span>
                         <div className="stem-key-row">
                           <button type="button" className="icon-button" onClick={() => setSemitones((value) => Math.max(-MAX_SHIFT, value - 1))} disabled={semitones <= -MAX_SHIFT} aria-label="חצי טון למטה">
-                            −
+                            <Minus size={16} />
                           </button>
-                          <input
-                            type="range"
+                          <Fader
                             min={-MAX_SHIFT}
                             max={MAX_SHIFT}
                             step={1}
                             value={semitones}
-                            onChange={(event) => setSemitones(Number(event.target.value))}
+                            onChange={setSemitones}
+                            label="שינוי טון"
                             aria-labelledby="stem-key-label"
-                            aria-valuetext={shiftLabel(semitones)}
+                            format={shiftLabel}
                           />
                           <button type="button" className="icon-button" onClick={() => setSemitones((value) => Math.min(MAX_SHIFT, value + 1))} disabled={semitones >= MAX_SHIFT} aria-label="חצי טון למעלה">
-                            +
+                            <Plus size={16} />
                           </button>
                           {semitones !== 0 && (
                             <button type="button" className="link-button" onClick={() => setSemitones(0)}>

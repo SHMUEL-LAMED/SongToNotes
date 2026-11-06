@@ -32,7 +32,7 @@
 
   /* ---- type ---- */
   --font-sans: "Rubik Variable", "Rubik", "Heebo", "Segoe UI", system-ui, "Arial Hebrew", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "DejaVu Sans Mono", "Rubik Variable", "Rubik", monospace;
 
   --fs-display: clamp(36px, 2.2vw + 22px, 52px);
   --fs-h1: clamp(26px, 1vw + 19px, 32px);
@@ -332,10 +332,10 @@
    deck that sets its own hue. The legacy instrument classes are listed
    until every tool renders <Deck>. `.beat-steps` (a row of the drum grid)
    only takes the tokens; the plate is drawn on the grid around it. */
-:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
-:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"],
-:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
-:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"] {
+:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .prog-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
+:root :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .prog-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"],
+:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .prog-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage),
+:root[data-theme] :is(.deck, .metronome-stage, .tuner-stage, .ear-stage, .piano-stage, .pad-grid, .beat-deck, .prog-deck, .beat-grid-wrap, .beat-steps, .drumkit-stage, .theory-circle, .setlist-stage) [style*="--accent-hue"] {
   --bg: var(--deck-bg);
   --surface: var(--deck-2);
   --surface-2: var(--deck-2);

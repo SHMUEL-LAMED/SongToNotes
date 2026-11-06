@@ -16,6 +16,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { decodeWav, fromAudioBuffer } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 const MAX_CHARS = 4000;
 const SETTINGS_KEY = "musictools.tts.v1";
@@ -346,13 +347,13 @@ export function TtsTool({ initial = null }: Props) {
                 <span>
                   מהירות <b>{rate.toFixed(1)}×</b>
                 </span>
-                <input type="range" min={0.5} max={2} step={0.1} value={rate} onChange={(event) => setRate(Number(event.target.value))} aria-label="מהירות" />
+                <Fader min={0.5} max={2} step={0.1} value={rate} onChange={setRate} label="מהירות" />
               </label>
               <label className="setting-field range-field">
                 <span>
                   גובה <b>{pitch.toFixed(1)}</b>
                 </span>
-                <input type="range" min={0.5} max={2} step={0.1} value={pitch} onChange={(event) => setPitch(Number(event.target.value))} aria-label="גובה הקול" />
+                <Fader min={0.5} max={2} step={0.1} value={pitch} onChange={setPitch} label="גובה הקול" />
               </label>
             </div>
           </div>

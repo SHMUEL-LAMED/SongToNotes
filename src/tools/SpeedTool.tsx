@@ -14,6 +14,7 @@ import type { StretchRequest, StretchResponse } from "../workers/separate.worker
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 function sharedContext() {
   const Context =
@@ -323,13 +324,7 @@ export function SpeedTool({ initial = null }: Props) {
                   <span>
                     מהירות <b>{speed}%</b>
                   </span>
-                  <input
-                    type="range"
-                    min={40}
-                    max={160}
-                    value={speed}
-                    onChange={(event) => setSpeed(Number(event.target.value))}
-                  />
+                  <Fader min={40} max={160} value={speed} onChange={setSpeed} label="מהירות" />
                   <div className="preset-row compact" aria-label="מהירויות נפוצות">
                     {SPEED_PRESETS.map((preset) => (
                       <button
@@ -349,13 +344,7 @@ export function SpeedTool({ initial = null }: Props) {
                         right-to-left page "-3" otherwise shows as "3-". */}
                     טון <b><bdi dir="ltr">{semitones > 0 ? "+" : ""}{semitones}</bdi> חצאי טונים</b>
                   </span>
-                  <input
-                    type="range"
-                    min={-12}
-                    max={12}
-                    value={semitones}
-                    onChange={(event) => setSemitones(Number(event.target.value))}
-                  />
+                  <Fader min={-12} max={12} value={semitones} onChange={setSemitones} label="טון" />
                   <small>הקצב נשאר; רק הגובה משתנה.</small>
                 </label>
               </div>

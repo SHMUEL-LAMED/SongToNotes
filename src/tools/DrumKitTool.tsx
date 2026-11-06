@@ -40,6 +40,7 @@ import { useMidiInput } from "../lib/midiInput";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav, fromAudioBuffer } from "../lib/wav";
 import "./drumkit.css";
+import { Fader } from "../ui";
 
 const STORAGE_KEY = "musictools.drumkit.v1";
 /** How far ahead of the audio clock the loop and the click are scheduled. */
@@ -902,13 +903,13 @@ export function DrumKitTool() {
             <span>
               עוצמה <b>{Math.round(volume * 100)}%</b>
             </span>
-            <input type="range" min={0} max={100} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} aria-label="עוצמה ראשית" />
+            <Fader min={0} max={100} value={Math.round(volume * 100)} onChange={(next) => setVolume(next / 100)} label="עוצמה ראשית" />
           </label>
           <label className="setting-field">
             <span>
               קצב <b>{bpm} BPM</b>
             </span>
-            <input type="range" min={MIN_BPM} max={MAX_BPM} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} aria-label="קצב" />
+            <Fader min={MIN_BPM} max={MAX_BPM} value={bpm} onChange={setBpm} label="קצב" />
           </label>
           <div className="setting-field drumkit-length">
             <span>אורך הלולאה</span>

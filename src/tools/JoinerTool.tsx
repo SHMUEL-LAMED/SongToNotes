@@ -11,6 +11,7 @@ import { MAX_TRANSITION_SECONDS, clampTransitionSeconds, clampTrim, joinPcmSteps
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
 import "./joiner.css";
+import { Fader } from "../ui";
 
 const MAX_CLIPS = 12;
 const HUES = [96, 200, 300, 30, 250, 150, 340, 60];
@@ -323,7 +324,7 @@ function ClipCard({ clip, index, count, dragging, playback, clock, onUpdate, onM
           <span>
             עוצמה <b>{Math.round(clip.gain * 100)}%</b>
           </span>
-          <input type="range" min={0} max={200} step={1} value={Math.round(clip.gain * 100)} onChange={(event) => onUpdate({ gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${clip.name}`} />
+          <Fader min={0} max={200} step={1} value={Math.round(clip.gain * 100)} onChange={(value) => onUpdate({ gain: value / 100 })} label={`עוצמה של ${clip.name}`} />
         </label>
       </div>
     </li>
@@ -845,7 +846,7 @@ export function JoinerTool() {
                     <span>
                       {transition.kind === "crossfade" ? "משך המעבר" : "משך השקט"} <b>{requestedSeconds.toFixed(1)} ש׳</b>
                     </span>
-                    <input type="range" min={0} max={MAX_TRANSITION_SECONDS} step={0.1} value={requestedSeconds} onChange={(event) => setTransitionSeconds(Number(event.target.value))} aria-label={transition.kind === "crossfade" ? "משך המעבר בשניות" : "משך השקט בשניות"} />
+                    <Fader min={0} max={MAX_TRANSITION_SECONDS} step={0.1} value={requestedSeconds} onChange={setTransitionSeconds} label={transition.kind === "crossfade" ? "משך המעבר בשניות" : "משך השקט בשניות"} />
                     {shortened && <small>בין קבצים קצרים המעבר מתקצר לחצי מאורך הקובץ הקצר, כדי שלא יבלע אותו.</small>}
                   </label>
                 )}

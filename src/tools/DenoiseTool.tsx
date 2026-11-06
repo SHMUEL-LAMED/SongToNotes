@@ -25,6 +25,7 @@ import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
 import "./denoise.css";
+import { Fader } from "../ui";
 
 const SETTINGS_KEY = "musictools.denoise.v1";
 /** Shorter than this and the noise profile is mostly guesswork. */
@@ -394,15 +395,7 @@ export function DenoiseTool() {
                   <span>
                     עוצמת הניקוי <b>{settings.strength}%</b>
                   </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={settings.strength}
-                    onChange={(event) => update({ strength: Number(event.target.value) })}
-                    aria-label="עוצמת הניקוי"
-                  />
+                  <Fader min={0} max={100} step={5} value={settings.strength} onChange={(value) => update({ strength: value })} label="עוצמת הניקוי" />
                   <small>ככל שהעוצמה גבוהה יותר נעלם יותר רחש, אבל הקול עלול להישמע „מתכתי”. 40–70% מתאים לרוב ההקלטות.</small>
                 </label>
 
@@ -560,7 +553,7 @@ export function DenoiseTool() {
                 <ul className="denoise-stats">
                   {result.reductionDb !== null && result.reductionDb > 0.5 && (
                     <li>
-                      רעש הרקע ירד בכ־<b>{Math.round(result.reductionDb)} dB</b>
+                      רעש הרקע ירד בכ־<b dir="ltr">{Math.round(result.reductionDb)} dB</b>
                     </li>
                   )}
                   {result.clicks > 0 && (

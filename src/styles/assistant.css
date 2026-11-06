@@ -465,7 +465,7 @@
 .assistant-history-list li:hover .assistant-history-actions,
 .assistant-history-list li:focus-within .assistant-history-actions { opacity: 1; }
 @media (hover: none) { .assistant-history-actions { opacity: 1; } }
-.assistant-history-actions .icon-button { width: 28px; height: 28px; border: 0; background: none; color: var(--text-muted); border-radius: 8px; }
+.assistant-history-actions .icon-button { min-width: 26px; min-height: 26px; width: 26px; height: 26px; padding: 0; border: 0; background: none; color: var(--text-muted); border-radius: 8px; }
 .assistant-history-actions .icon-button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 .assistant-history-actions .icon-button.is-on { color: var(--brand-2); opacity: 1; }
 .assistant-history-actions .icon-button.is-danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }

@@ -61,6 +61,7 @@ import {
   type VisualizerStyle,
 } from "../lib/visualizer";
 import "./visualizer.css";
+import { Fader } from "../ui";
 
 const FFT_SIZE = 4096;
 const MIN_DB = -88;
@@ -1112,13 +1113,12 @@ export function VisualizerTool() {
                       <span>
                         עמעום <b>{Math.round(videoDim * 100)}%</b>
                       </span>
-                      <input
-                        type="range"
+                      <Fader
                         min={0}
                         max={100}
                         value={Math.round(videoDim * 100)}
-                        onChange={(event) => setVideoDim(Number(event.target.value) / 100)}
-                        aria-label="עמעום הווידאו"
+                        onChange={(next) => setVideoDim(next / 100)}
+                        label="עמעום הווידאו"
                       />
                     </label>
                   </div>
@@ -1166,13 +1166,13 @@ export function VisualizerTool() {
                     <i className="visualizer-swatch" style={{ background: `hsl(${hue}, 90%, 60%)` }} aria-hidden="true" />
                     <b>{hue}°</b>
                   </span>
-                  <input
+                  <Fader
                     className="visualizer-hue"
-                    type="range"
                     min={0}
                     max={359}
                     value={hue}
-                    onChange={(event) => setHue(Number(event.target.value))}
+                    onChange={setHue}
+                    label="צבע"
                     aria-valuetext={`גוון ${hue}`}
                   />
                 </label>

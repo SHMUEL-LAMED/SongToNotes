@@ -13,6 +13,7 @@ import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 const SETTINGS_KEY = "musictools.convert.v1";
 
@@ -285,7 +286,7 @@ export function ConvertTool({ initial = null }: Props) {
                   <span>
                     עוצמה <b>{gain}%</b>
                   </span>
-                  <input type="range" min={20} max={300} value={gain} onChange={(event) => setGain(Number(event.target.value))} aria-label="עוצמה" />
+                  <Fader min={20} max={300} value={gain} onChange={setGain} label="עוצמה" />
                 </label>
                 <label className="checkbox-field">
                   <input type="checkbox" checked={normalise} onChange={(event) => setNormalise(event.target.checked)} />

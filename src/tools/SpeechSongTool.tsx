@@ -36,6 +36,7 @@ import { ROOTS } from "../lib/theory";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav } from "../lib/wav";
 import "./speechsong.css";
+import { Fader } from "../ui";
 
 const SETTINGS_KEY = "musictools.speechsong.v1";
 /** Long enough to swallow a dragged slider, short enough to feel instant on a tap. */
@@ -271,6 +272,13 @@ export function SpeechSongTool() {
   };
 
   const keyText = plan ? keyLabel(plan.keyPc, plan.minor) : settings.keyPc === null ? "לפי הקול" : keyLabel(settings.keyPc, settings.minor);
+  // The note name is Latin (and may carry ♭), so it is isolated LTR while the Hebrew mode word stays in the RTL flow.
+  const keyView = (keyPc: number, minor: boolean) => (
+    <>
+      <bdi dir="ltr">{ROOTS[((keyPc % 12) + 12) % 12].name}</bdi> {minor ? "מינור" : "מז׳ור"}
+    </>
+  );
+  const keyShown = plan ? keyView(plan.keyPc, plan.minor) : settings.keyPc === null ? "לפי הקול" : keyView(settings.keyPc, settings.minor);
   const chordsText = plan ? plan.chords.map((chord) => chord.name).join(" · ") : "";
   const describeHooks = (hooks: Phrase[]) => hooks.map((item, index) => `${index + 1}: ${formatTime(item.start)}–${formatTime(item.end)}`).join(", ");
 
@@ -452,11 +460,11 @@ export function SpeechSongTool() {
             <span>
               קצב <b>{settings.bpm} BPM</b>
             </span>
-            <input type="range" min={70} max={140} value={settings.bpm} onChange={(event) => update({ bpm: Number(event.target.value) })} aria-label="קצב" />
+            <Fader min={70} max={140} value={settings.bpm} onChange={(next) => update({ bpm: next })} label="קצב" />
           </label>
           <div className="setting-field">
             <span>
-              סולם <b>{keyText}</b>
+              סולם <b>{keyShown}</b>
             </span>
             <div className="speechsong-key">
               <select
@@ -467,7 +475,8 @@ export function SpeechSongTool() {
                 <option value="auto">לפי הקול שלך</option>
                 {ROOTS.map((root) => (
                   <option key={root.pc} value={root.pc}>
-                    {root.name}
+                    {/* The trailing LRM keeps a flat after its letter in the RTL select ('A♭', not '♭A'). */}
+                    {`${root.name}\u200E`}
                   </option>
                 ))}
               </select>
@@ -495,7 +504,7 @@ export function SpeechSongTool() {
             <span>
               עוצמת הליווי <b>{Math.round(settings.backing * 100)}</b>
             </span>
-            <input type="range" min={0} max={100} value={Math.round(settings.backing * 100)} onChange={(event) => update({ backing: Number(event.target.value) / 100 })} aria-label="עוצמת הליווי" />
+            <Fader min={0} max={100} value={Math.round(settings.backing * 100)} onChange={(next) => update({ backing: next / 100 })} label="עוצמת הליווי" />
           </label>
         </div>
       </div>
@@ -515,7 +524,9 @@ export function SpeechSongTool() {
                       <Loader2 size={15} className="spin" /> {ready ? "מכין את השיר…" : "מקשיב להקלטה…"}
                     </span>
                   ) : result && plan ? (
-                    `${formatTime(result.duration)} · ${keyLabel(plan.keyPc, plan.minor)} · ${plan.bpm} BPM · ${plan.notes.length} הברות`
+                    <>
+                      {formatTime(result.duration)} · {keyView(plan.keyPc, plan.minor)} · <bdi dir="ltr">{plan.bpm} BPM</bdi> · {plan.notes.length} הברות
+                    </>
                   ) : (
                     ""
                   )}

@@ -20,6 +20,7 @@ import { setSongbookDraft } from "../lib/songbook";
 import { INSTRUMENTS, NotePlayer, type Instrument } from "../lib/synth";
 import { ROOTS, findScale, rootFor } from "../lib/theory";
 import { useAssistantTool } from "../lib/useAssistantTool";
+import { Fader } from "../ui";
 
 const STATE_KEY = "musictools.progression.v1";
 
@@ -305,7 +306,7 @@ export function ProgressionTool() {
           <span>
             קצב <b>{bpm}</b> BPM
           </span>
-          <input type="range" min={50} max={200} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} aria-label="קצב" />
+          <Fader min={50} max={200} value={bpm} onChange={setBpm} label="קצב" />
         </label>
         <label className="setting-field">
           <span>אורך כל אקורד</span>

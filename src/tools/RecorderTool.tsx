@@ -33,6 +33,7 @@ import {
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav, fromAudioBuffer } from "../lib/wav";
 import "./recorder.css";
+import { Fader } from "../ui";
 
 const HUES = [12, 200, 300, 120, 45, 260, 340, 170];
 const WAVE_WIDTH = 400;
@@ -923,13 +924,13 @@ export function RecorderTool() {
                       <span>
                         עוצמה <b dir="ltr">{Math.round(track.gain * 100)}%</b>
                       </span>
-                      <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => updateTrack(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
+                      <Fader min={0} max={150} value={Math.round(track.gain * 100)} onChange={(next) => updateTrack(track.id, { gain: next / 100 })} label={`עוצמה של ${track.name}`} />
                     </label>
                     <label>
                       <span>
                         פאן <b>{track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</b>
                       </span>
-                      <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => updateTrack(track.id, { pan: Number(event.target.value) / 100 })} onDoubleClick={() => updateTrack(track.id, { pan: 0 })} aria-label={`פאן של ${track.name}`} dir="ltr" />
+                      <Fader min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(next) => updateTrack(track.id, { pan: next / 100 })} onDoubleClick={() => updateTrack(track.id, { pan: 0 })} label={`פאן של ${track.name}`} dir="ltr" />
                     </label>
                   </div>
                 </div>
@@ -958,7 +959,7 @@ export function RecorderTool() {
             <span>
               קצב <b dir="ltr">{settings.bpm} BPM</b>
             </span>
-            <input type="range" min={40} max={240} value={settings.bpm} onChange={(event) => updateSettings({ bpm: clampBpm(Number(event.target.value)) })} disabled={recordingNow} dir="ltr" aria-label="קצב המטרונום" />
+            <Fader min={40} max={240} value={settings.bpm} onChange={(next) => updateSettings({ bpm: clampBpm(next) })} disabled={recordingNow} dir="ltr" label="קצב המטרונום" />
           </label>
           <div className="setting-field">
             <span>משקל</span>
@@ -984,17 +985,17 @@ export function RecorderTool() {
             <span>
               קליק <b dir="ltr">{Math.round(settings.clickVolume * 100)}%</b>
             </span>
+            <Fader min={0} max={100} value={Math.round(settings.clickVolume * 100)} onChange={(next) => updateSettings({ clickVolume: next / 100 })} disabled={recordingNow} dir="ltr" label="עוצמת הקליק" />
             <label className="checkbox-field">
               <input type="checkbox" checked={settings.click} onChange={(event) => updateSettings({ click: event.target.checked })} disabled={recordingNow} />
               מטרונום גם בזמן ההקלטה
             </label>
-            <input type="range" min={0} max={100} value={Math.round(settings.clickVolume * 100)} onChange={(event) => updateSettings({ clickVolume: Number(event.target.value) / 100 })} disabled={recordingNow} dir="ltr" aria-label="עוצמת הקליק" />
           </div>
           <label className="setting-field recorder-latency">
             <span>
               תיקון השהיה <b dir="ltr">{latencyOffset > 0 ? `+${latencyOffset}` : latencyOffset} ms</b>
             </span>
-            <input type="range" min={MIN_LATENCY_OFFSET_MS} max={MAX_LATENCY_OFFSET_MS} step={1} value={latencyOffset} onChange={(event) => updateLatencyOffset(Number(event.target.value))} disabled={recordingNow} dir="ltr" aria-label="תיקון השהיה במילישניות" />
+            <Fader min={MIN_LATENCY_OFFSET_MS} max={MAX_LATENCY_OFFSET_MS} step={1} value={latencyOffset} onChange={updateLatencyOffset} disabled={recordingNow} dir="ltr" label="תיקון השהיה במילישניות" />
             <small>
               השהיית הכרטיס {measuredLatency === null ? "המשוערת" : "שנמדדה"}: <bdi dir="ltr">{Math.round(autoLatency * 1000)} ms</bdi> · סך הכול מוזז אחורה: <bdi dir="ltr">{totalLatencyMs} ms</bdi>. אם הערוץ החדש נשמע מאחר — הגדילו; אם הוא מקדים — הקטינו.
             </small>

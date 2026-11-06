@@ -413,9 +413,9 @@ export function AudioPicker({
         <div className="file-details">
           <strong>{audio.file.name}</strong>
           <span>
-            {formatBytes(audio.file.size)} · {formatTime(audio.buffer.duration)} ·{" "}
+            <bdi dir="ltr">{formatBytes(audio.file.size)}</bdi> · <bdi dir="ltr">{formatTime(audio.buffer.duration)}</bdi> ·{" "}
             {audio.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"} ·{" "}
-            {Math.round(audio.buffer.sampleRate / 100) / 10} kHz
+            <bdi dir="ltr">{Math.round(audio.buffer.sampleRate / 100) / 10} kHz</bdi>
           </span>
           {audio.note ? <span className="file-note">{audio.note}</span> : null}
         </div>

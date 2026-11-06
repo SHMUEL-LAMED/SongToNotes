@@ -18,6 +18,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 import { ToolActions } from "../components/ToolFrame";
+import { Fader } from "../ui";
 
 const SETTINGS_KEY = "musictools.rhythm.v1";
 const PROGRESS_KEY = "musictools.rhythm.progress.v1";
@@ -378,7 +379,7 @@ export function RhythmTool({ initial = null }: Props) {
               <span>
                 <Timer size={15} /> קצב <b>{bpm} BPM</b>
               </span>
-              <input type="range" min={40} max={200} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} disabled={busy} aria-label="קצב" />
+              <Fader min={40} max={200} value={bpm} onChange={setBpm} disabled={busy} label="קצב" />
             </label>
             <label className="checkbox-field">
               <input type="checkbox" checked={muteHits} onChange={(event) => setMuteHits(event.target.checked)} disabled={busy} />

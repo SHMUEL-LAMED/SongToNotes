@@ -29,6 +29,7 @@ import { ROOTS } from "../lib/theory";
 import type { DetectedNote } from "../lib/types";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import "./melody.css";
+import { Fader } from "../ui";
 
 const STATE_KEY = "musictools.melody.v1";
 
@@ -470,13 +471,13 @@ export function MelodyTool() {
           <span>
             צפיפות תווים <b>{density}</b>
           </span>
-          <input type="range" min={1} max={5} step={1} value={density} onChange={(event) => setDensity(Number(event.target.value))} aria-label="צפיפות תווים" />
+          <Fader min={1} max={5} step={1} value={density} onChange={setDensity} label="צפיפות תווים" />
         </label>
         <label className="setting-field">
           <span>
             קצב <b>{bpm}</b> BPM
           </span>
-          <input type="range" min={50} max={200} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} aria-label="קצב" />
+          <Fader min={50} max={200} value={bpm} onChange={setBpm} label="קצב" />
         </label>
         <label className="setting-field">
           <span>צליל המנגינה</span>

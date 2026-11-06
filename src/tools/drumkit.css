@@ -376,7 +376,8 @@
 }
 .drumkit-label b { font-weight: 800; max-width: 80%; }
 .drumkit-label kbd {
-  font: 700 0.85em var(--font-mono);
+  /* Latin keys stay mono; Hebrew (רווח) falls through to Rubik, not a serif fallback. */
+  font: 700 0.85em ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "Rubik Variable", "Rubik", "Heebo", sans-serif;
   padding: 0.15em 0.5em;
   border-radius: 0.4em;
   background: var(--kbd-bg);
@@ -423,7 +424,7 @@
   border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   background: var(--surface-2);
-  font: 700 12.5px var(--font-mono);
+  font: 700 12.5px ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "Rubik Variable", "Rubik", "Heebo", sans-serif;
   text-align: center;
 }
 

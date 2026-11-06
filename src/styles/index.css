@@ -20,4 +20,9 @@
 @import "./tools.css";
 @import "./studio.css";
 @import "./skin.css";
+@import "./fixes/notation.css";
+@import "./fixes/editing.css";
+@import "./fixes/studio.css";
+@import "./fixes/words-practice.css";
+@import "./fixes/pages.css";
 @import "./ltr.css";

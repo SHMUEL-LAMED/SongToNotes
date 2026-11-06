@@ -1,0 +1,139 @@
+/* Style fixes found by the site-wide audit: studio. Loaded after skin.css. */
+
+/* studio-1 (plain .chip-toggle border and corners) lives in
+   fixes/words-practice.css (item 1). */
+
+/* studio-2: the beat style presets carry Hebrew words, not numbers, so they
+   use the sans face. Metronome and speed presets keep mono. */
+.beats-tool .preset-row button {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+/* studio-4: start the step grid's scroll at the voice column (the grid itself
+   is dir=ltr) and pin the voice names while scrolling on phones. */
+.beat-grid-wrap { direction: ltr; }
+@media (max-width: 719.98px) {
+  .beat-row > .beat-voice {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--deck-bg);
+    /* the first layer paints over the wrap's 14px left padding, so scrolled
+       cells don't show beside the pinned names */
+    box-shadow: -14px 0 0 var(--deck-bg), 8px 0 12px -8px rgba(0, 0, 0, 0.8);
+  }
+}
+
+/* studio-5: the progressions deck had no padding, so the play button and its
+   glow ring stuck out past the plate. */
+.prog-deck { padding: 18px 20px; }
+@media (max-width: 599.98px) {
+  .prog-deck { padding: 16px; }
+}
+
+/* studio-6: the progressions deck is a dark plate in both themes; its deck
+   tokens come from the lists in tokens.css (.prog-deck is listed there). */
+.prog-deck {
+  color: var(--deck-text);
+  color-scheme: dark;
+}
+
+/* studio-8: the dimension hint inside the selected size pill kept the muted
+   grey on the bright gradient. */
+.segmented-control button.active small,
+.segmented-control button[aria-pressed="true"] small,
+.segmented > button[aria-pressed="true"] small {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* studio-9 (the solid "send to another tool" menu) lives in
+   fixes/editing.css (section 3). */
+
+/* studio-10: the songbook translation language select sits outside a field
+   wrapper, so it got no field skin. Same look as the shared fields. */
+.songbook-gloss-actions select {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r-2);
+  border: var(--hair-strong);
+  background: color-mix(in srgb, var(--surface-solid) 60%, transparent);
+  color: var(--text);
+  font-size: var(--fs-ui);
+  font-weight: 400;
+  line-height: 1.4;
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.songbook-gloss-actions select:hover:not(:disabled):not(:focus) { border-color: var(--accent-line); }
+.songbook-gloss-actions select:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* studio-11: a section chip follows its own direction (RTL for Hebrew) even
+   when the sheet has no title and resolves to LTR; no tracking on Hebrew. */
+.songbook-sheet h3 {
+  display: block;
+  width: fit-content;
+  margin-inline-end: auto;
+  letter-spacing: 0;
+}
+
+/* studio-13: the mixer track's trash button matches mute/solo, and the head
+   row stays on one line on phones. */
+.mixer-track-head > .icon-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-color: var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+@media (max-width: 559.98px) {
+  .mixer-track-head { flex-wrap: nowrap; }
+  .mixer-track-name { flex: 1 1 0; }
+}
+
+/* studio-14: the native preview player takes the card's surface instead of
+   Chromium's grey pill. color-scheme comes from tokens.css per data-theme. */
+audio.convert-preview {
+  display: block;
+  width: 100%;
+  height: 44px;
+  border-radius: var(--r-pill);
+  border: var(--hair);
+  background: var(--surface-solid);
+}
+audio.convert-preview::-webkit-media-controls-enclosure {
+  border-radius: inherit;
+  background: transparent;
+}
+audio.convert-preview::-webkit-media-controls-panel { background: var(--surface-solid); }
+
+/* studio-16: on phones a six-option wrap group broke 5 + 1 (visualizer
+   'סגנון', metronome 'משקל'); lay it out 3 + 3. */
+@media (max-width: 559.98px) {
+  .segmented-control.wrap:has(> button:nth-child(6):last-child) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* studio-17: two-word pad names wrapped while one-word names did not, so key
+   caps sat at different heights. Reserve two lines for every name. */
+@media (max-width: 599.98px) {
+  .pad-grid .pad strong {
+    font-size: 14px;
+    line-height: 1.2;
+    min-height: 2.4em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+}

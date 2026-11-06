@@ -347,6 +347,7 @@ export function LyricsTool({ initial = null }: Props) {
               <div className="lyrics-karaoke" dir="auto" aria-live="off" ref={karaokeRef}>
                 {lines.map((line, lineIndex) => (
                   <p
+                    dir="auto"
                     key={`${line.start}-${lineIndex}`}
                     className={`lyrics-line ${lineIndex === position.line ? "is-current" : lineIndex < position.line ? "is-past" : ""}`}
                     role="button"

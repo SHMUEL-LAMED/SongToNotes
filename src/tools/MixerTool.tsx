@@ -12,6 +12,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { encodeWav } from "../lib/wav";
 import type { SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 const MAX_TRACKS = 8;
 const HUES = [20, 200, 300, 120, 45, 260, 340, 170];
@@ -180,15 +181,15 @@ export function MixerTool({ initial = null }: Props) {
               <div className="mixer-track-controls">
                 <label>
                   <span>עוצמה {Math.round(track.gain * 100)}%</span>
-                  <input type="range" min={0} max={150} value={Math.round(track.gain * 100)} onChange={(event) => update(track.id, { gain: Number(event.target.value) / 100 })} aria-label={`עוצמה של ${track.name}`} />
+                  <Fader min={0} max={150} value={Math.round(track.gain * 100)} onChange={(next) => update(track.id, { gain: next / 100 })} label={`עוצמה של ${track.name}`} />
                 </label>
                 <label>
                   <span>פאן {track.pan === 0 ? "מרכז" : track.pan < 0 ? `שמאל ${Math.round(-track.pan * 100)}` : `ימין ${Math.round(track.pan * 100)}`}</span>
-                  <input type="range" min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(event) => update(track.id, { pan: Number(event.target.value) / 100 })} aria-label={`פאן של ${track.name}`} />
+                  <Fader min={-100} max={100} value={Math.round(track.pan * 100)} onChange={(next) => update(track.id, { pan: next / 100 })} label={`פאן של ${track.name}`} />
                 </label>
                 <label>
                   <span>התחלה {track.offset.toFixed(2)} ש׳</span>
-                  <input type="range" min={0} max={offsetRange} step={0.05} value={track.offset} onChange={(event) => update(track.id, { offset: Number(event.target.value) })} aria-label={`התחלה של ${track.name}`} />
+                  <Fader min={0} max={offsetRange} step={0.05} value={track.offset} onChange={(next) => update(track.id, { offset: next })} label={`התחלה של ${track.name}`} />
                 </label>
               </div>
             </div>
@@ -404,7 +405,7 @@ export function MixerTool({ initial = null }: Props) {
               >
                 <Square size={16} />
               </button>
-              <input className="transport-seek" type="range" min={0} max={Math.max(0.1, duration)} step={0.01} value={Math.min(position, duration)} onChange={(event) => { const time = Number(event.target.value); playerRef.current?.seek(time); setPosition(time); }} aria-label="מיקום הנגינה" />
+              <Fader className="transport-seek" min={0} max={Math.max(0.1, duration)} step={0.01} value={Math.min(position, duration)} onChange={(time) => { playerRef.current?.seek(time); setPosition(time); }} label="מיקום הנגינה" />
               <span className="transport-time">
                 {formatTime(position)} / {formatTime(duration)}
               </span>

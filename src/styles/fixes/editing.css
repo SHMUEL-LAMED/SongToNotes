@@ -1,0 +1,91 @@
+/* Style fixes found by the site-wide audit: editing. Loaded after skin.css. */
+
+/* ---- 1. Sliders: the slot and the travelled part ----
+   skin.css set --range-done to a gradient, but ui.css and ltr.css use it as a
+   colour stop inside linear-gradient(), so the whole track background was
+   dropped (no slot, no fill). Keep it a colour, and draw the gradient trail as
+   its own layer. The two hue pickers paint their own rainbow track. */
+input[type="range"] { --range-done: var(--accent); }
+input[type="range"]::-moz-range-progress { background: var(--accent-grad); }
+input[type="range"]:not(.is-vertical, .songcard-hue, .visualizer-hue)::-webkit-slider-runnable-track {
+  background:
+    var(--accent-grad) right center / var(--range-fill, 0%) 100% no-repeat,
+    var(--range-track);
+}
+/* Left to right the trail starts from the left. `html:root` outranks the two
+   ltr.css rules, which load later; two rules, since a browser without :dir()
+   would drop a whole selector list. */
+html:root[dir="ltr"] input[type="range"]:not(.is-vertical, .songcard-hue, .visualizer-hue)::-webkit-slider-runnable-track {
+  background:
+    var(--accent-grad) left center / var(--range-fill, 0%) 100% no-repeat,
+    var(--range-track);
+}
+html input[type="range"]:dir(ltr):not(.is-vertical, .songcard-hue, .visualizer-hue)::-webkit-slider-runnable-track {
+  background:
+    var(--accent-grad) left center / var(--range-fill, 0%) 100% no-repeat,
+    var(--range-track);
+}
+
+/* ---- 3. The "send to another tool" menu: solid, not see-through ---- */
+.send-file-popover {
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-overlay), inset 0 1px 0 var(--glass-edge);
+}
+
+/* ---- 4. The convert family tabs: frosted when they stick ---- */
+@media (min-width: 720px) {
+  .tool-tabs {
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .tool-tabs { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ---- 5. Video: the file block hugs its name and meta ---- */
+.video-selected { gap: 8px; }
+.video-selected .file-details { flex: none; }
+.video-selected > .link-button { align-self: flex-start; }
+
+/* ---- 6. Joiner: a Latin file name stays at the start, by its meta ----
+   Chromium knows only the prefixed value; the others take the plain one. */
+.joiner-clip-title strong { text-align: -webkit-match-parent; text-align: match-parent; }
+.identify-history li > span[dir] { text-align: -webkit-match-parent; text-align: match-parent; }
+
+/* ---- 7. Hebrew in a monospaced place comes from Rubik: now set at the
+   source, --font-mono in tokens.css. ---- */
+
+/* ---- 8. Vocals stems: the pitch row's step buttons, boxed like the toggles ---- */
+.stem-key-row .icon-button {
+  flex: none;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--surface-solid) 55%, transparent);
+  color: var(--text);
+}
+.stem-key-row .icon-button:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+}
+
+/* ---- 10. The masthead description stays clear of the equaliser bars ---- */
+@media (min-width: 720px) {
+  .tool-masthead.tool-intro .masthead-copy { padding-inline-end: min(220px, 22%); }
+}
+
+/* ---- 11. Speed presets: one row of seven, or a balanced 4 + 3 ---- */
+.range-field:has(> .preset-row.compact) { container-type: inline-size; }
+.range-field .preset-row.compact { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.range-field .preset-row.compact button { padding: 0 4px; justify-content: center; min-width: 0; }
+@container (max-width: 360px) {
+  .range-field .preset-row.compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

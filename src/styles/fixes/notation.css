@@ -1,0 +1,61 @@
+/* Style fixes found by the site-wide audit: notation. Loaded after skin.css. */
+
+/* notation-1: the transcriber's result cards stack with the frame's rhythm. */
+.results-section { display: flex; flex-direction: column; gap: 20px; }
+@media (max-width: 599.98px) {
+  .results-section { gap: 16px; }
+}
+
+/* notation-2 (frosted sticky family tabs) lives in fixes/editing.css (editing-4),
+   and notation-3 (chip toggle pills) in fixes/words-practice.css (item 1). */
+
+/* notation-4: the legacy result tabs are underline tabs, not gradient pills
+   (skin.css no longer lists `.tabs button.active` among the chosen pills; this
+   keeps the ink text and underline explicit). */
+.tabs > button.active,
+.tabs > button[aria-selected="true"] {
+  background: none;
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* notation-5: Hebrew key names have no monospace glyphs; set figures in the
+   text face with tabular digits. */
+.stat-card strong { font-family: var(--font-sans); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* notation-6: the analyze cards fill whole rows (2 heroes, then 3). */
+@media (min-width: 720px) {
+  .analyze-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .analyze-stats > .stat-card { grid-column: span 2; }
+  .analyze-stats > .stat-card.is-hero { grid-column: span 3; }
+}
+@media (max-width: 719.98px) {
+  .analyze-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analyze-stats > .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* notation-7: on a phone a panel title's hint drops to its own line. */
+@media (max-width: 719.98px) {
+  .settings-title { flex-wrap: wrap; row-gap: 2px; }
+  .settings-title em { flex-basis: 100%; margin-inline-start: 0; }
+  /* indented under the title text only when an icon tile leads (28px + 10px gap) */
+  .settings-title:has(> svg:first-child) em { margin-inline-start: 38px; }
+}
+
+/* notation-8: a Latin title or artist (dir="auto" makes it ltr) still lines up
+   with the rest of the right-to-left card. */
+.identify-text:dir(rtl) > :is(h2, p)[dir="auto"] { text-align: right; }
+
+/* notation-9: native audio players sit as a bordered pill like the buttons
+   beside them. No color-scheme here: Chrome would draw dark icons in dark. */
+audio[controls] { height: 40px; border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+audio[controls]::-webkit-media-controls-enclosure { border-radius: var(--r-pill); background: transparent; }
+audio[controls]::-webkit-media-controls-panel { background: transparent; }
+
+/* notation-10 (the slider's gradient trail, RTL and LTR) lives in
+   fixes/editing.css (section 1). */
+
+/* notation-11: a checkbox row beside taller slider fields keeps its natural
+   height instead of stretching into an empty box. */
+.settings-grid > .checkbox-field { align-self: center; }
