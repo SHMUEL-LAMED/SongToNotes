@@ -103,6 +103,12 @@ function createPlayheadClock(): PlayheadClock {
   };
 }
 
+/** The travelled share of a range input, for the gradient trail (--range-fill). */
+function rangeFill(value: number, min: number, max: number): React.CSSProperties {
+  const share = max > min ? Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100)) : 0;
+  return { "--range-fill": `${share}%` } as React.CSSProperties;
+}
+
 function usePlayhead(clock: PlayheadClock) {
   return useSyncExternalStore(clock.subscribe, clock.get, clock.get);
 }
@@ -126,6 +132,7 @@ function PlayheadSeek({
         max={Math.max(0.1, duration)}
         step={0.01}
         value={Math.min(playhead, duration)}
+        style={rangeFill(Math.min(playhead, duration), 0, Math.max(0.1, duration))}
         onChange={(event) => onSeek(Number(event.target.value))}
         aria-label="מיקום הנגינה"
       />
@@ -898,7 +905,7 @@ export function TranscriberTool({ initial }: Props) {
   const combinedError = error ?? audioFile.error;
 
   return (
-    <>
+    <section className="tool-body notes-tool">
       <section className="workspace-section">
         <div className="workspace-card">
           <div className="workspace-heading">
@@ -977,6 +984,7 @@ export function TranscriberTool({ initial }: Props) {
                   min="20"
                   max="90"
                   value={settings.sensitivity}
+                  style={rangeFill(settings.sensitivity, 20, 90)}
                   onChange={(event) => update("sensitivity", Number(event.target.value))}
                 />
                 <small>
@@ -1178,6 +1186,7 @@ export function TranscriberTool({ initial }: Props) {
                   min={0}
                   max={100}
                   value={Math.round(volume * 100)}
+                  style={rangeFill(volume * 100, 0, 100)}
                   onChange={(event) => setVolume(Number(event.target.value) / 100)}
                 />
               </label>
@@ -1220,6 +1229,7 @@ export function TranscriberTool({ initial }: Props) {
                   min="0"
                   max="100"
                   value={Math.round(settings.harmonicCleanup * 100)}
+                  style={rangeFill(settings.harmonicCleanup * 100, 0, 100)}
                   onChange={(event) => update("harmonicCleanup", Number(event.target.value) / 100)}
                 />
                 <small>מסיר צלילים עליונים שנוצרים מאותו תו.</small>
@@ -1235,6 +1245,7 @@ export function TranscriberTool({ initial }: Props) {
                   max="300"
                   step="10"
                   value={Math.round(settings.minDuration * 1000)}
+                  style={rangeFill(settings.minDuration * 1000, 20, 300)}
                   onChange={(event) => update("minDuration", Number(event.target.value) / 1000)}
                 />
                 <small>מסנן נקישות ורעשים קצרים.</small>
@@ -1265,6 +1276,7 @@ export function TranscriberTool({ initial }: Props) {
                   max="100"
                   step="5"
                   value={Math.round(settings.quantize * 100)}
+                  style={rangeFill(settings.quantize * 100, 0, 100)}
                   onChange={(event) => update("quantize", Number(event.target.value) / 100)}
                   aria-label="עוצמת היישור לרשת"
                 />
@@ -1281,6 +1293,7 @@ export function TranscriberTool({ initial }: Props) {
                   max="60"
                   step="1"
                   value={Math.round(settings.swing * 100)}
+                  style={rangeFill(settings.swing * 100, 0, 60)}
                   onChange={(event) => update("swing", Number(event.target.value) / 100)}
                   aria-label="סווינג"
                   disabled={settings.quantize === 0}
@@ -1345,6 +1358,7 @@ export function TranscriberTool({ initial }: Props) {
                   min="-12"
                   max="12"
                   value={settings.transpose}
+                  style={rangeFill(settings.transpose, -12, 12)}
                   onChange={(event) => update("transpose", Number(event.target.value))}
                 />
                 <small>הזזת כל התווים בחצאי טונים.</small>
@@ -1425,6 +1439,7 @@ export function TranscriberTool({ initial }: Props) {
                     min="24"
                     max="220"
                     value={zoom}
+                    style={rangeFill(zoom, 24, 220)}
                     onChange={(event) => setZoom(Number(event.target.value))}
                   />
                 </label>
@@ -1612,6 +1627,6 @@ export function TranscriberTool({ initial }: Props) {
         </section>
       )}
 
-    </>
+    </section>
   );
 }

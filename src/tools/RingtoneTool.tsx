@@ -41,6 +41,7 @@ import {
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useRenderedAudio } from "../lib/useRenderedAudio";
 import { encodeWav } from "../lib/wav";
+import { Fader } from "../ui";
 
 const DEFAULT_LENGTH = 30;
 /** What an iPhone will accept as a ringtone. */
@@ -665,12 +666,12 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
           <span>
             אורך הצלצול <b>{Math.round(length)} שניות</b>
           </span>
-          <input
-            type="range"
+          <Fader
             min={MIN_LENGTH}
             max={Math.max(MIN_LENGTH + 1, Math.min(MAX_LENGTH, Math.floor(duration)))}
             value={Math.round(Math.min(length, MAX_LENGTH))}
-            onChange={(event) => setLength(Number(event.target.value))}
+            onChange={setLength}
+            label="אורך הצלצול"
           />
         </label>
         <button className="secondary-button" type="button" onClick={snapNow}>
@@ -684,39 +685,19 @@ function RingtoneEditor({ audio, context, userId }: EditorProps) {
             <span>
               כניסה רכה <b>{fadeIn.toFixed(1)} שנ׳</b>
             </span>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={0.1}
-              value={fadeIn}
-              onChange={(event) => setFadeIn(Number(event.target.value))}
-            />
+            <Fader min={0} max={5} step={0.1} value={fadeIn} onChange={setFadeIn} label="כניסה רכה" />
           </label>
           <label className="setting-field range-field">
             <span>
               יציאה רכה <b>{fadeOut.toFixed(1)} שנ׳</b>
             </span>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={0.1}
-              value={fadeOut}
-              onChange={(event) => setFadeOut(Number(event.target.value))}
-            />
+            <Fader min={0} max={5} step={0.1} value={fadeOut} onChange={setFadeOut} label="יציאה רכה" />
           </label>
           <label className="setting-field range-field">
             <span>
               עוצמה <b>{gain}%</b>
             </span>
-            <input
-              type="range"
-              min={20}
-              max={200}
-              value={gain}
-              onChange={(event) => setGain(Number(event.target.value))}
-            />
+            <Fader min={20} max={200} value={gain} onChange={setGain} label="עוצמה" />
           </label>
           <label className="checkbox-field">
             <input

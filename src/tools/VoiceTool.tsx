@@ -20,6 +20,7 @@ import {
 } from "../lib/voiceFx";
 import { encodeWav } from "../lib/wav";
 import "./voice.css";
+import { Fader } from "../ui";
 
 const SETTINGS_KEY = "musictools.voice.v1";
 /** Long enough to swallow a dragged slider, short enough to feel instant on a card tap. */
@@ -308,14 +309,13 @@ export function VoiceTool() {
           <span>
             עוצמת האפקט <b>{effect === "none" ? "—" : intensity}</b>
           </span>
-          <input
-            type="range"
+          <Fader
             min={0}
             max={100}
             value={effect === "none" ? 0 : intensity}
             disabled={effect === "none"}
-            onChange={(event) => setIntensity(Number(event.target.value))}
-            aria-label="עוצמת האפקט"
+            onChange={setIntensity}
+            label="עוצמת האפקט"
           />
           {/* The page runs right to left, and so does the slider: its minimum is on the right. */}
           <small>{effect === "none" ? "בלי אפקט — שומעים את ההקלטה כמו שהיא." : "עדין מימין, קיצוני משמאל."}</small>
