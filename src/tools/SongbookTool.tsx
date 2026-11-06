@@ -15,6 +15,7 @@ import { clearSongbookDraft, foldChordLines, parseChordSymbol, parseSong, songCh
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { listWorks, type SavedWork } from "../lib/works";
+import { Fader } from "../ui";
 
 const EXAMPLE = `[פזמון]
 [Am]היה היה [G]פעם ילד [C]קטן
@@ -432,7 +433,7 @@ export function SongbookTool({ initial = null }: Props) {
                   <span>
                     <Type size={15} /> גודל טקסט <b>{fontSize}</b>
                   </span>
-                  <input type="range" min={14} max={32} value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} aria-label="גודל הטקסט" />
+                  <Fader min={14} max={32} value={fontSize} onChange={setFontSize} label="גודל הטקסט" />
                 </div>
                 <div className="setting-field" data-tour="songbook-scroll">
                   <span>גלילה אוטומטית</span>
@@ -449,7 +450,7 @@ export function SongbookTool({ initial = null }: Props) {
                       {scrolling ? <Pause size={16} /> : <Play size={16} />} {scrolling ? "עצור" : "התחל"}
                     </button>
                     {scrollMode === "free" ? (
-                      <input type="range" min={5} max={120} value={scrollSpeed} onChange={(event) => setScrollSpeed(Number(event.target.value))} aria-label="מהירות הגלילה" />
+                      <Fader min={5} max={120} value={scrollSpeed} onChange={setScrollSpeed} label="מהירות הגלילה" />
                     ) : (
                       <>
                         <label className="songbook-tempo">

@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef } from "react";
 import { formatTime } from "../lib/audio";
 import type { TrimRange } from "../lib/audio";
+import { Fader } from "../ui";
 
 type WaveformProps = {
   peaks: Float32Array;
@@ -225,35 +226,33 @@ export function Waveform({
       <div className="waveform-handles" dir="rtl">
         <label>
           <span>תחילת {selectLabel}</span>
-          <input
-            type="range"
+          <Fader
             min={0}
             max={Math.max(0.1, duration)}
             step={0.1}
             value={trim ? trim.start : 0}
-            onChange={(event) => {
-              const start = Number(event.target.value);
+            onChange={(start) => {
               const end = trim ? trim.end : Math.min(duration, start + defaultSpan);
               // Never below zero, even on a clip shorter than the minimum.
               onTrimChange({ start: Math.max(0, Math.min(start, end - 0.4)), end });
             }}
+            label={`תחילת ${selectLabel}`}
             aria-valuetext={`${formatTime(trim ? trim.start : 0)}`}
           />
         </label>
         <label>
           <span>סוף {selectLabel}</span>
-          <input
-            type="range"
+          <Fader
             min={0}
             max={Math.max(0.1, duration)}
             step={0.1}
             value={trim ? trim.end : Math.min(duration, defaultSpan)}
-            onChange={(event) => {
-              const end = Number(event.target.value);
+            onChange={(end) => {
               const start = trim ? trim.start : 0;
               // Pushed out by the minimum length, but never past the file.
               onTrimChange({ start, end: Math.min(duration, Math.max(end, start + 0.4)) });
             }}
+            label={`סוף ${selectLabel}`}
             aria-valuetext={`${formatTime(trim ? trim.end : Math.min(duration, defaultSpan))}`}
           />
         </label>

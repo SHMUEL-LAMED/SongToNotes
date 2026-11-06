@@ -1,18 +1,7 @@
 /* Style fixes found by the site-wide audit: studio. Loaded after skin.css. */
 
-/* studio-1: plain .chip-toggle buttons (progressions moods, melody scales and
-   toggles, songbook, songcard imports) had the browser's bevel border and
-   square corners. :where() keeps specificity at 0,1,0 so the ChipToggle
-   component (.chip), the context overrides and ui.css :hover still win. */
-.chip-toggle:where(:not(.chip)) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: var(--hair-strong);
-  border-radius: var(--r-1);
-  font-weight: 600;
-}
+/* studio-1 (plain .chip-toggle border and corners) lives in
+   fixes/words-practice.css (item 1). */
 
 /* studio-2: the beat style presets carry Hebrew words, not numbers, so they
    use the sans face. Metronome and speed presets keep mono. */
@@ -43,53 +32,8 @@
   .prog-deck { padding: 16px; }
 }
 
-/* studio-6: the progressions deck is a dark plate in both themes but was
-   missing from the deck token lists in tokens.css. Same tokens as there
-   (keep in step with tokens.css until .prog-deck is added to its lists). */
-:root .prog-deck,
-:root .prog-deck [style*="--accent-hue"],
-:root[data-theme] .prog-deck,
-:root[data-theme] .prog-deck [style*="--accent-hue"] {
-  --bg: var(--deck-bg);
-  --surface: var(--deck-2);
-  --surface-2: var(--deck-2);
-  --surface-3: #1f1f24;
-  --surface-sunken: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.06);
-  --surface-solid: var(--deck-2);
-  --text: var(--deck-text);
-  --text-soft: var(--deck-text);
-  --text-muted: var(--deck-muted);
-  --ink: var(--deck-text);
-  --on-ink: var(--deck-bg);
-  --line: var(--deck-line);
-  --line-strong: var(--deck-line-strong);
-
-  --accent: var(--led);
-  --accent-strong: var(--led-text);
-  --accent-text: var(--led-text);
-  --accent-soft: oklch(0.82 0.14 var(--accent-hue) / 0.16);
-  --accent-tint: var(--led-dim);
-  --accent-ring: oklch(0.82 0.14 var(--accent-hue) / 0.5);
-  --accent-line: oklch(0.82 0.14 var(--accent-hue) / 0.42);
-  --accent-grad: var(--accent);
-  --on-accent: #0b0b0e;
-
-  --success: oklch(0.76 0.14 150);
-  --success-soft: oklch(0.76 0.14 150 / 0.16);
-  --warning: oklch(0.82 0.13 80);
-  --warning-soft: oklch(0.82 0.13 80 / 0.16);
-  --danger: oklch(0.72 0.17 25);
-  --danger-soft: oklch(0.72 0.17 25 / 0.16);
-  --on-danger: #0b0b0e;
-
-  --fader-cap: #34363d;
-  --shadow-key: inset 0 2px 4px rgba(0, 0, 0, 0.6);
-  --shadow-cap: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --shadow-panel: none;
-  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.45);
-  --wave-bg: var(--surface-sunken);
-}
+/* studio-6: the progressions deck is a dark plate in both themes; its deck
+   tokens come from the lists in tokens.css (.prog-deck is listed there). */
 .prog-deck {
   color: var(--deck-text);
   color-scheme: dark;
@@ -104,12 +48,8 @@
   opacity: 0.85;
 }
 
-/* studio-9: the "send to another tool" menu read the translucent glass
-   --surface without a blur, so the page showed through its items. */
-.send-file-popover {
-  background: var(--surface-solid);
-  box-shadow: var(--shadow-raised), inset 0 1px 0 var(--glass-edge);
-}
+/* studio-9 (the solid "send to another tool" menu) lives in
+   fixes/editing.css (section 3). */
 
 /* studio-10: the songbook translation language select sits outside a field
    wrapper, so it got no field skin. Same look as the shared fields. */

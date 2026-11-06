@@ -55,10 +55,8 @@ html input[type="range"]:dir(ltr):not(.is-vertical, .songcard-hue, .visualizer-h
 .joiner-clip-title strong { text-align: -webkit-match-parent; text-align: match-parent; }
 .identify-history li > span[dir] { text-align: -webkit-match-parent; text-align: match-parent; }
 
-/* ---- 7. Hebrew in a monospaced place comes from Rubik, digits stay mono ---- */
-:root {
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, "DejaVu Sans Mono", "Rubik Variable", "Rubik", monospace;
-}
+/* ---- 7. Hebrew in a monospaced place comes from Rubik: now set at the
+   source, --font-mono in tokens.css. ---- */
 
 /* ---- 8. Vocals stems: the pitch row's step buttons, boxed like the toggles ---- */
 .stem-key-row .icon-button {

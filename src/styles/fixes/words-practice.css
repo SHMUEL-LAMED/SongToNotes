@@ -1,1 +1,101 @@
 /* Style fixes found by the site-wide audit: words-practice. Loaded after skin.css. */
+
+/* 1. Every raw .chip-toggle (button or link) is a proper pill, not a default
+   outset button (also covers notation-3 and studio-1). :where() keeps the
+   specificity at 0,1,0, so skin.css's .active / [aria-pressed] rules (0,2,0),
+   the context overrides and ui.css :hover still win, and the ChipToggle
+   component (.chip, the home catalog chips) keeps its own look. */
+.chip-toggle:where(:not(.chip)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* 2. Metronome: meters as a 3-column grid, subdivisions as 2x2, so nothing
+   stretches across a lone row and 'שש־עשריות' fits. */
+.metronome .segmented-control.wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.metronome .segmented-control.wrap:has(> button:nth-child(5)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.metronome .segmented-control.wrap button { min-width: 0; padding-inline: 6px; }
+
+/* 3. Tuner: the six instruments as a 3x2 grid on a phone. */
+@media (max-width: 719.98px) {
+  .tuner .segmented-control.wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tuner .segmented-control.wrap button { min-width: 0; }
+}
+
+/* 4 + 16. Field values: take the direction from the first strong letter
+   ('440 Hz', '96 BPM' read LTR; Hebrew values stay RTL) and use the UI font,
+   with tabular figures so numbers do not jitter while a slider moves. */
+.field-value,
+.setting-field > span b {
+  unicode-bidi: plaintext;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A value that isolates its own Latin parts (the speechsong key 'A♭ מז׳ור')
+   stays in the page's RTL flow; Chrome's plaintext would read the isolated
+   note name as the first strong letter and flip it. */
+.setting-field > span b:has(> bdi) { unicode-bidi: isolate; }
+
+/* 7. The text-box focus look must not paint a box around sliders and checkboxes. */
+.setting-field input:is([type="range"], [type="checkbox"], [type="radio"]):focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 8. Legacy underline tabs (Theory, Transcriber results): see notation-4 in
+   fixes/notation.css. */
+
+/* 9. The fretboard scroller opens at the nut, not at fret 12. */
+.fretboard-wrap { direction: ltr; }
+
+/* 10. Light theme: dark letters on the light note dots (white was ~2:1). */
+:root[data-theme="light"] .fret:not(.is-root) span { color: oklch(0.22 0.07 var(--accent-hue)); }
+
+/* 11. Theory facts: two cards on top, the interval structure across the full row. */
+@media (min-width: 561px) {
+  .theory-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.theory-facts > div:last-child { grid-column: 1 / -1; }
+
+/* 12. Rhythm: the hint sits on its own line under the main button label. */
+.rhythm-actions .primary-button { flex-wrap: wrap; justify-content: center; row-gap: 2px; white-space: nowrap; }
+.rhythm-actions .primary-button small { flex-basis: 100%; text-align: center; white-space: normal; }
+
+/* 13. Piano tip: icon inline with the text, link following on the same line. */
+.piano-lesson-tip { display: block; line-height: 1.65; }
+.piano-lesson-tip svg { display: inline; vertical-align: -3px; margin-inline-end: 6px; }
+.piano-lesson-tip a { margin-inline-start: 6px; white-space: nowrap; }
+
+/* 15. The recording timer uses the UI font, not mono (Hebrew fell back to a wide face). */
+.recording-info strong { font-family: inherit; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* 17. Native search clear 'X': a thin lucide-like cross in the text colour. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: currentColor;
+  opacity: 0.55;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+input[type="search"]::-webkit-search-cancel-button:hover { opacity: 0.85; }
+/* The home catalog search has its own clear button; keep the native one hidden there. */
+.catalog .hub-search input::-webkit-search-cancel-button { display: none; }

@@ -253,7 +253,7 @@ export function VideoTool() {
             <div className="file-details">
               <strong>{extracted.file.name}</strong>
               <span>
-                {formatTime(extracted.buffer.duration)} · {extracted.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"} · {(extracted.buffer.sampleRate / 1000).toFixed(1)} kHz · {formatBytes(extracted.file.size)}
+                <bdi dir="ltr">{formatTime(extracted.buffer.duration)}</bdi> · {extracted.buffer.numberOfChannels === 1 ? "מונו" : "סטריאו"} · <bdi dir="ltr">{(extracted.buffer.sampleRate / 1000).toFixed(1)} kHz</bdi> · <bdi dir="ltr">{formatBytes(extracted.file.size)}</bdi>
               </span>
             </div>
             <button

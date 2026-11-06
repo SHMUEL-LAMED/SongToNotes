@@ -410,7 +410,7 @@
   font-size: 15px;
 }
 .hub-search input::-webkit-search-cancel-button { filter: grayscale(1); }
-.catalog .hub-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.catalog .hub-search input::-webkit-search-cancel-button { display: none; }
 .hub-search-clear {
   flex: none;
   width: 32px;

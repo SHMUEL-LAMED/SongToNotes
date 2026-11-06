@@ -320,7 +320,6 @@ body { background: var(--bg); }
 .segmented button.active,
 .segmented button[aria-pressed="true"],
 .segmented-control button.active,
-.tabs button.active,
 .chip-toggle.active,
 .chip-toggle[aria-pressed="true"],
 .preset-row button.active {
@@ -334,8 +333,8 @@ body { background: var(--bg); }
 .segmented button[aria-pressed="true"],
 .segmented-control button.active svg { color: var(--on-accent); }
 
-/* Sliders: a gradient trail and a glowing thumb. */
-input[type="range"] { --range-done: var(--accent-grad); }
+/* Sliders: a glowing thumb. The gradient trail is drawn in fixes/editing.css
+   (--range-done stays the solid accent from ui.css, a colour stop). */
 input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-tint), 0 0 16px oklch(0.7 0.2 var(--accent-hue) / 0.7), var(--shadow-cap); }
 
 /* Fields and the drop zone. */
@@ -441,7 +440,11 @@ input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-t
   box-shadow: 0 0 16px oklch(0.7 0.2 var(--accent-hue) / 0.7);
   opacity: 0.8;
 }
-.tool-tabs { background: transparent; }
+/* Below 720px the family tabs do not stick, so they sit on the page; from
+   720px up fixes/editing.css gives the sticky tabs a frosted fill. */
+@media (max-width: 719.98px) {
+  .tool-tabs { background: transparent; }
+}
 .tool-tabs-thumb { background: var(--accent-grad); box-shadow: 0 0 12px oklch(0.7 0.2 var(--accent-hue) / 0.8); height: 3px; border-radius: 3px; }
 
 @media (max-width: 719.98px) {

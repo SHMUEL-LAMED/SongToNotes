@@ -5,6 +5,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 import { ToolActions } from "../components/ToolFrame";
+import { Fader } from "../ui";
 
 type SoundKind = "click" | "wood" | "beep";
 
@@ -440,14 +441,13 @@ export function MetronomeTool({ initial = null }: Props) {
           </button>
         </div>
 
-        <input
+        <Fader
           className="bpm-slider"
-          type="range"
           min={30}
           max={260}
           value={bpm}
-          onChange={(event) => setBpm(Number(event.target.value))}
-          aria-label="קצב"
+          onChange={setBpm}
+          label="קצב"
         />
 
         <div className="beat-dots" role="img" aria-label={`תיבה של ${meter.beats} פעמות`}>
@@ -524,12 +524,12 @@ export function MetronomeTool({ initial = null }: Props) {
             <span>
               <Volume2 size={15} /> עוצמה <b>{Math.round(volume * 100)}%</b>
             </span>
-            <input
-              type="range"
+            <Fader
               min={0}
               max={100}
               value={Math.round(volume * 100)}
-              onChange={(event) => setVolume(Number(event.target.value) / 100)}
+              onChange={(next) => setVolume(next / 100)}
+              label="עוצמה"
             />
           </label>
         </div>

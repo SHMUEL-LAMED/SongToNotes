@@ -13,6 +13,7 @@ import type { DetectedNote } from "../lib/types";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import { ToolActions } from "../components/ToolFrame";
+import { Fader } from "../ui";
 
 type Timbre = "piano" | "organ" | "synth";
 
@@ -731,12 +732,12 @@ export function PianoTool() {
             <span>
               עוצמה <b>{Math.round(volume * 100)}%</b>
             </span>
-            <input
-              type="range"
+            <Fader
               min={0}
               max={100}
               value={Math.round(volume * 100)}
-              onChange={(event) => setVolume(Number(event.target.value) / 100)}
+              onChange={(next) => setVolume(next / 100)}
+              label="עוצמה"
             />
           </label>
           <label className="checkbox-field">

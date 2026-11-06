@@ -6,33 +6,12 @@
   .results-section { gap: 16px; }
 }
 
-/* notation-2: the sticky family tabs keep a frosted fill so scrolled content
-   does not print through their labels. */
-@media (min-width: 720px) {
-  .tool-tabs {
-    background: color-mix(in srgb, var(--bg) 78%, transparent);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .tool-tabs { -webkit-backdrop-filter: none; backdrop-filter: none; }
-}
-
-/* notation-3: a chip toggle (button or link) is a bordered pill, never the
-   browser's outset button. Zero specificity, so every scoped rule still wins;
-   the .chip-based ChipToggle keeps its own look. */
-:where(.chip-toggle:not(.chip)) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-}
+/* notation-2 (frosted sticky family tabs) lives in fixes/editing.css (editing-4),
+   and notation-3 (chip toggle pills) in fixes/words-practice.css (item 1). */
 
 /* notation-4: the legacy result tabs are underline tabs, not gradient pills
-   (undoes skin.css's `.tabs button.active` in the chosen-pill list). */
+   (skin.css no longer lists `.tabs button.active` among the chosen pills; this
+   keeps the ink text and underline explicit). */
 .tabs > button.active,
 .tabs > button[aria-selected="true"] {
   background: none;
@@ -74,14 +53,8 @@ audio[controls] { height: 40px; border-radius: var(--r-pill); border: 1px solid 
 audio[controls]::-webkit-media-controls-enclosure { border-radius: var(--r-pill); background: transparent; }
 audio[controls]::-webkit-media-controls-panel { background: transparent; }
 
-/* notation-10: ui.css/ltr.css use --range-done as a colour stop, so it must
-   stay a colour (skin.css set it to a gradient, which voided the whole track
-   background). The gradient trail is drawn here as a sized image instead. */
-input[type="range"] { --range-done: var(--accent); }
-input[type="range"]::-webkit-slider-runnable-track {
-  background: var(--accent-grad) right center / var(--range-fill, 0%) 100% no-repeat, var(--range-track);
-}
-input[type="range"]::-moz-range-progress { background: var(--accent-grad); }
+/* notation-10 (the slider's gradient trail, RTL and LTR) lives in
+   fixes/editing.css (section 1). */
 
 /* notation-11: a checkbox row beside taller slider fields keeps its natural
    height instead of stretching into an empty box. */

@@ -23,6 +23,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 import type { ChordsRequest, ChordsResponse } from "../workers/chords.worker";
+import { Fader } from "../ui";
 
 const QUALITIES: ChordQuality[] = ["", "m", "7", "m7", "maj7", "sus4", "sus2", "dim", "aug"];
 
@@ -343,14 +344,14 @@ export function ChordsTool({ initial = null }: Props) {
                   <span>
                     <Music3 size={15} /> טרנספוזיציה <b>{transpose > 0 ? `+${transpose}` : transpose}</b>
                   </span>
-                  <input type="range" min={-6} max={6} step={1} value={transpose} style={{ "--range-fill": `${((transpose + 6) / 12) * 100}%` } as React.CSSProperties} onChange={(event) => setTranspose(Number(event.target.value))} aria-label="טרנספוזיציה בחצאי טונים" />
+                  <Fader min={-6} max={6} step={1} value={transpose} onChange={setTranspose} label="טרנספוזיציה בחצאי טונים" />
                   <small>מזיז את כל השיר לסולם נוח יותר לשירה.</small>
                 </label>
                 <label className="setting-field">
                   <span>
                     <Guitar size={15} /> קאפו <b>{capo ? `שריג ${capo}` : "בלי"}</b>
                   </span>
-                  <input type="range" min={0} max={7} step={1} value={capo} style={{ "--range-fill": `${(capo / 7) * 100}%` } as React.CSSProperties} onChange={(event) => setCapo(Number(event.target.value))} aria-label="מיקום הקאפו" />
+                  <Fader min={0} max={7} step={1} value={capo} onChange={setCapo} label="מיקום הקאפו" />
                   <small>עם קאפו האחיזות הופכות פשוטות יותר; הצליל נשאר אותו דבר.</small>
                 </label>
                 <label className="checkbox-field">

@@ -38,6 +38,7 @@ import { useMidiInput } from "../lib/midiInput";
 import { handOffTo } from "../lib/handoff";
 import { useAssistantTool } from "../lib/useAssistantTool";
 import { encodeWav, fromAudioBuffer } from "../lib/wav";
+import { Fader } from "../ui";
 
 const STATE_KEY = "musictools.beats.v1";
 const SAVED_KEY = "musictools.beats.saved.v1";
@@ -380,19 +381,19 @@ export function BeatMakerTool() {
             <span>
               קצב <b>{bpm}</b>
             </span>
-            <input type="range" min={50} max={220} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} aria-label="קצב הביט" />
+            <Fader min={50} max={220} value={bpm} onChange={setBpm} label="קצב הביט" />
           </label>
           <label className="setting-field">
             <span>
               סווינג <b>{Math.round(swing * 100)}%</b>
             </span>
-            <input type="range" min={0} max={60} value={Math.round(swing * 100)} onChange={(event) => setSwing(Number(event.target.value) / 100)} aria-label="סווינג" />
+            <Fader min={0} max={60} value={Math.round(swing * 100)} onChange={(next) => setSwing(next / 100)} label="סווינג" />
           </label>
           <label className="setting-field">
             <span>
               <Volume2 size={14} /> עוצמה <b>{Math.round(volume * 100)}%</b>
             </span>
-            <input type="range" min={0} max={100} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} aria-label="עוצמה ראשית" />
+            <Fader min={0} max={100} value={Math.round(volume * 100)} onChange={(next) => setVolume(next / 100)} label="עוצמה ראשית" />
           </label>
         </div>
       </div>
@@ -455,14 +456,13 @@ export function BeatMakerTool() {
                   >
                     {voiceMix.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                   </button>
-                  <input
+                  <Fader
                     className="beat-level"
-                    type="range"
                     min={0}
                     max={100}
                     value={Math.round(voiceMix.volume * 100)}
-                    onChange={(event) => setVoiceMix(voice.id, { volume: Number(event.target.value) / 100 })}
-                    aria-label={`עוצמה: ${voice.label}`}
+                    onChange={(next) => setVoiceMix(voice.id, { volume: next / 100 })}
+                    label={`עוצמה: ${voice.label}`}
                   />
                 </div>
                 <div className="beat-steps">

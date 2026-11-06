@@ -1,1 +1,148 @@
 /* Style fixes found by the site-wide audit: pages. Loaded after skin.css. */
+
+/* pages-1. Notices are glass now (skin.css), so everything on them follows the
+   page text instead of the old ink tokens from ui.css. */
+.app-notice { --slip-tone: oklch(0.55 0.16 var(--accent-hue)); }
+:root[data-theme="dark"] .app-notice { --slip-tone: oklch(0.78 0.12 var(--accent-hue)); }
+.app-notice p,
+.app-notice p strong { color: var(--text); }
+.app-notice-close { color: var(--text-muted); }
+.app-notice-close:hover { background: var(--surface-hover); color: var(--text); }
+.share-prompt-more { border-color: var(--line-strong); color: var(--text); }
+.share-prompt-more:hover { border-color: var(--text-muted); }
+
+/* pages-2. Account drawer: the sticky glass head sat below the scroller's
+   padding and covered the stat cards and the close X. */
+.account-drawer.is-quick .quick-head { top: -26px; }
+.account-drawer.is-quick > .account-drawer-close {
+  position: fixed;
+  top: 22px;
+  inset-inline-end: 20px;
+  z-index: 4;
+}
+@media (max-width: 720px) {
+  .account-drawer.is-quick .quick-head { top: -20px; }
+  .account-drawer.is-quick > .account-drawer-close { top: 16px; inset-inline-end: 14px; }
+}
+
+/* pages-3. Entrance animations must not leave a transform behind: it traps
+   position:fixed overlays (the #/me quick preview) inside the page root. */
+.me-full,
+.admin-page,
+.credits-page,
+.home > * { animation-fill-mode: backwards; }
+
+/* The quick preview is a dialog: same glass as .dialog, keeping its accent top edge. */
+.preview {
+  border-radius: var(--r-4);
+  border-color: var(--line-strong);
+  border-top-color: var(--accent);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent 45%), var(--surface-3);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-overlay), 0 0 0 1px var(--glass-edge) inset;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .preview { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* pages-4. Home promises: the gradient icon tile stretched across the card. */
+.pledge-list .pledge-icon {
+  flex: none;
+  align-self: flex-start;
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+}
+
+/* pages-5. Home hero and catalog bar follow the page column, not the window
+   (the AI assistant panel narrows the column on desktop). */
+@container (max-width: 900px) {
+  .hub-hero { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 20px; }
+  .hero-pillars { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .hero-pillars li { padding-inline: 0; border-inline-start: 0; }
+  .catalog-bar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "search" "chips" "result"; }
+  .catalog-result { justify-self: start; }
+}
+
+/* pages-6. #/me kind chips: space between the tool icon and its label. */
+.me-kinds .chip-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
+/* pages-7. The count inside an active (gradient) chip follows the chip label. */
+.chip-toggle.active .chip-count,
+.chip-toggle[aria-pressed="true"] .chip-count { color: var(--on-accent); opacity: 0.8; }
+
+/* pages-8. Assistant history: the hidden action column set every card's height. */
+.assistant-history-actions {
+  gap: 0;
+  padding-block: 4px;
+  padding-inline: 4px 0;
+  justify-content: flex-start;
+}
+/* (Its 26px buttons are set at the source, assistant.css.) */
+
+/* pages-9. Bare on/off checkboxes (assistant settings, privacy and admin
+   switch rows) drawn as switches. */
+.assistant-settings input[type="checkbox"],
+.switch-row input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 1px 0 0;
+  padding: 1px;
+  border-radius: var(--r-pill);
+  border: var(--hair-strong);
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.assistant-settings input[type="checkbox"]::before,
+.switch-row input[type="checkbox"]::before {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: margin-inline-start var(--dur-2) var(--ease-out);
+}
+.assistant-settings input[type="checkbox"]:checked,
+.switch-row input[type="checkbox"]:checked { background: var(--accent-grad); border-color: transparent; }
+.assistant-settings input[type="checkbox"]:checked::before,
+.switch-row input[type="checkbox"]:checked::before { margin-inline-start: 16px; }
+.assistant-settings input[type="checkbox"]:disabled,
+.switch-row input[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
+.assistant-settings input[type="checkbox"]:focus-visible,
+.switch-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* pages-10. #/me tiles: the 34px minimums are now set at the source, me.css. */
+
+/* pages-11. #/me tiles: a Latin title keeps its start and ellipsises at its own end. */
+.me-tile-title { unicode-bidi: plaintext; text-align: match-parent; }
+
+/* pages-12. Phone tools sheet: near-solid, so the page behind does not smear through. */
+@media (max-width: 719.98px) {
+  .sidebar[data-sheet] { background: color-mix(in srgb, var(--surface-solid) 97%, transparent); }
+  .sidebar[data-sheet] .sidebar-head.is-sheet { background: var(--surface-solid); }
+}
+
+/* pages-13. Tour bubble drawn over a lit part is solid; the promo toast waits. */
+.tour[data-placement="over"] { --tour-glass: var(--surface-solid); }
+body:has(.tour) .tool-promo { visibility: hidden; }
+
+/* pages-14. Studio dock column heads: the ghost button stays on one line. */
+.studio-col-head { flex-wrap: wrap; }
+.studio-col-head h3 { min-width: 0; }
+.studio-col-head .btn { flex: none; white-space: nowrap; margin-inline-start: auto; }
+
+/* pages-15. Quick-start actions list: fade the bottom so it reads as scrollable. */
+.quick-start .quick-actions {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  padding-bottom: 28px;
+}

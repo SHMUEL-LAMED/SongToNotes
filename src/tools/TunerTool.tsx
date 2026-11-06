@@ -8,6 +8,7 @@ import { useAssistantTool } from "../lib/useAssistantTool";
 import { useSaveWork } from "../lib/useSaveWork";
 import type { SavedWork } from "../lib/works";
 import { ToolActions } from "../components/ToolFrame";
+import { Fader } from "../ui";
 
 type Preset = { id: string; label: string; strings: number[] | null };
 
@@ -486,12 +487,12 @@ export function TunerTool({ initial = null }: Props) {
             <span>
               כיוון לה (A4) <b>{referenceA4} Hz</b>
             </span>
-            <input
-              type="range"
+            <Fader
               min={430}
               max={450}
               value={referenceA4}
-              onChange={(event) => setReferenceA4(Number(event.target.value))}
+              onChange={setReferenceA4}
+              label="כיוון לה (A4)"
             />
             <small>440 הוא התקן. תזמורות מסוימות מכוונות ל־442.</small>
           </label>
