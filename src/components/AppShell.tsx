@@ -373,7 +373,7 @@ export function AppShell({
                 key: "admin",
                 label: "אזור ניהול",
                 icon: <ShieldCheck size={18} />,
-                current: route === "admin",
+                current: route === "admin" || route.startsWith("admin/"),
                 pageCurrent: false,
                 onClick: () => go("admin"),
               })}

@@ -1,52 +1,7 @@
-import {
-  Activity,
-  AlertTriangle,
-  ArrowRight,
-  ChartNoAxesColumn,
-  CircleCheck,
-  CircleSlash,
-  Clock,
-  Cloud,
-  Download,
-  Eye,
-  FileCog,
-  Gauge,
-  Globe,
-  KeyRound,
-  Laptop,
-  Megaphone,
-  MessageSquareText,
-  Power,
-  RefreshCw,
-  ScrollText,
-  Search,
-  UserRound,
-  ShieldCheck,
-  ShieldX,
-  Stethoscope,
-  Timer,
-  TriangleAlert,
-  Users,
-  Wrench,
-  Zap,
-} from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  Fragment,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { ArrowRight, RefreshCw, ShieldCheck, ShieldX } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   AdminError,
-  accountSummary,
-  actionLabel,
-  busiestHour,
-  changeOverRange,
   compactNumber,
   describeAdminError,
   fetchAccounts,
@@ -54,59 +9,41 @@ import {
   fetchFeedback,
   fetchSettings,
   fetchSnapshot,
-  formatBytes,
-  formatDuration,
   formatNumber,
-  funnel,
-  hourLabel,
   isAdmin,
-  providerLabel,
-  quotaLabel,
   runAdminAction,
-  senderLabel,
-  series,
-  successRate,
-  sumSeries,
   timeAgo,
-  toCsv,
-  toolHue,
-  toolLabel,
-  weekdayLabel,
   type AccountEntry,
   type AdminAuditEntry,
-  type AdminCredits,
   type AdminSetting,
   type AdminSnapshot,
-  type FeedbackEntry,
   type ControlState,
+  type FeedbackEntry,
   type HealthCheck,
-  type ToolRow,
 } from "../lib/admin";
 import { useAuth } from "../lib/auth";
-import { PRICE_KEYS, PRICE_LABELS, entryLabel, type CreditRules } from "../lib/credits";
-import { downloadFile } from "../lib/export";
-import { TOOLS, findAnyTool } from "../lib/tools";
-import {
-  BarList,
-  ConfirmButton,
-  Funnel,
-  Meter,
-  Sparkline,
-  SplitBar,
-  StatTile,
-  TimeChart,
-  WeekHeatmap,
-} from "./Charts";
+import { Button, Notice, Segmented } from "../ui";
+import { AccountsSection, type AccountsState } from "./admin/AccountsSection";
+import { AudienceSection } from "./admin/AudienceSection";
+import { AuditSection } from "./admin/AuditSection";
+import { ControlSection } from "./admin/ControlSection";
+import { CreditsSection } from "./admin/CreditsSection";
+import { FeedbackSection, type FeedbackState } from "./admin/FeedbackSection";
+import { OverviewSection } from "./admin/OverviewSection";
+import { SECTION_GROUPS, sectionById, sectionFrom, type SectionId } from "./admin/sections";
+import { ServerSection } from "./admin/ServerSection";
+import { ToolsSection } from "./admin/ToolsSection";
+import { Loading } from "./admin/shared";
 
 /**
- * The admin area: how the site is doing, and the switches that change it.
+ * The admin area: how the site is doing, the people who use it, and the
+ * switches that change it — nine parts in three groups, each on an address
+ * of its own (`#/admin/feedback`), with the navigation beside them.
  *
  * What it does *not* show is as deliberate as what it does. The measurements
  * carry no titles of anybody's work and no account — the rows they are drawn
- * from never had any. The question they answer is "how is the site being
- * used": which tools are opened, when, for how long, what finishes and what
- * breaks. The one list of people is the accounts tab, read only when opened
- * and logged by the server each time.
+ * from never had any. The one list of people is the accounts part, read only
+ * when opened and logged by the server each time.
  *
  * The gate is on the server. `supabase/functions/admin` checks the verified
  * address on the caller's own token before it answers, so this page is not a
@@ -115,1520 +52,33 @@ import {
  * request it makes.
  */
 
-type Tab = "overview" | "accounts" | "tools" | "times" | "feedback" | "system";
+const RANGES = ["7", "30", "90"] as const;
 
-const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
-  { id: "overview", label: "סקירה", icon: ChartNoAxesColumn },
-  { id: "accounts", label: "חשבונות", icon: UserRound },
-  { id: "tools", label: "כלים", icon: Activity },
-  { id: "times", label: "זמנים וקהל", icon: Clock },
-  { id: "feedback", label: "משוב", icon: MessageSquareText },
-  { id: "system", label: "מערכת", icon: FileCog },
-];
-
-const RANGES = [7, 30, 90] as const;
-
-type MetricId = "views" | "visitors" | "results" | "errors";
-
-const METRICS: { id: MetricId; label: string; unit: string }[] = [
-  { id: "views", label: "כניסות לכלים", unit: "כניסות" },
-  { id: "visitors", label: "גולשים", unit: "גולשים" },
-  { id: "results", label: "תוצאות שהופקו", unit: "תוצאות" },
-  { id: "errors", label: "שגיאות", unit: "שגיאות" },
-];
-
-const dateTime = new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" });
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : dateTime.format(date);
-}
-
-function Card({
-  title,
-  hint,
-  icon,
-  actions,
-  children,
-  wide,
-}: {
-  title: string;
-  hint?: string;
-  icon?: ReactNode;
-  actions?: ReactNode;
-  children: ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <section className={`admin-card ${wide ? "is-wide" : ""}`}>
-      <header className="admin-card-head">
-        <div className="admin-card-title">
-          {icon && <span className="admin-card-icon">{icon}</span>}
-          <div>
-            <h2>{title}</h2>
-            {hint && <p>{hint}</p>}
-          </div>
-        </div>
-        {actions && <div className="admin-card-actions">{actions}</div>}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ tabs */
-
-function Overview({
-  snapshot,
-  metric,
-  setMetric,
-  onTool,
-}: {
-  snapshot: AdminSnapshot;
-  metric: MetricId;
-  setMetric: (id: MetricId) => void;
-  onTool: (tool: string) => void;
-}) {
-  const stats = snapshot.stats;
-  // The pages that are not tools — home, the personal area — count in the
-  // totals but have no place in a ranking of tools.
-  const tools = stats.tools.filter((tool) => findAnyTool(tool.tool));
-  const chosen = METRICS.find((item) => item.id === metric) ?? METRICS[0];
-  const points = series(stats.daily, metric);
-  const change = changeOverRange(points);
-  const viewPoints = series(stats.daily, "views");
-  const errorRate = stats.views ? Math.round((sumSeries(series(stats.daily, "errors")) / stats.views) * 100) : 0;
-  const top = tools[0];
-
-  return (
-    <div className="admin-grid">
-      <div className="admin-tiles">
-        <StatTile
-          label="כניסות לכלים"
-          value={compactNumber(stats.views)}
-          trend={changeOverRange(viewPoints)}
-          note={`ב־${snapshot.days} הימים האחרונים`}
-          icon={<Eye size={16} />}
-        >
-          <Sparkline points={viewPoints} label="מגמת הכניסות" />
-        </StatTile>
-        <StatTile
-          label="גולשים"
-          value={compactNumber(stats.visitors.total)}
-          note={`${formatNumber(stats.visitors.returning)} מהם חזרו ביותר מיום אחד`}
-          icon={<Users size={16} />}
-        />
-        <StatTile
-          label="עכשיו באתר"
-          value={formatNumber(stats.live)}
-          note="פעילות בחמש הדקות האחרונות"
-          icon={<Zap size={16} />}
-          hue={155}
-        />
-        <StatTile
-          label="שיעור שגיאות"
-          value={`${errorRate}%`}
-          note={`${formatNumber(sumSeries(series(stats.daily, "errors")))} שגיאות מתוך ${compactNumber(stats.views)} כניסות`}
-          icon={<TriangleAlert size={16} />}
-          hue={errorRate >= 5 ? 25 : 250}
-        />
-      </div>
-
-      <Card
-        title={chosen.label}
-        hint={
-          change == null
-            ? `לאורך ${snapshot.days} הימים האחרונים`
-            : `המחצית האחרונה של הטווח לעומת הראשונה: ${change > 0 ? "+" : ""}${change}%`
-        }
-        icon={<ChartNoAxesColumn size={17} />}
-        wide
-        actions={
-          <div className="chip-row" role="group" aria-label="מה להציג בגרף">
-            {METRICS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`chip-toggle ${metric === item.id ? "active" : ""}`}
-                aria-pressed={metric === item.id}
-                onClick={() => setMetric(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <TimeChart points={points} unit={chosen.unit} label={chosen.label} height={230} />
-      </Card>
-
-      <Card
-        title="הכלים הנצפים ביותר"
-        hint="לפי מספר הכניסות בטווח שנבחר"
-        icon={<Activity size={17} />}
-        actions={
-          top ? <span className="admin-chip">המוביל: {toolLabel(top.tool)}</span> : undefined
-        }
-      >
-        <BarList
-          rows={tools.slice(0, 10).map((tool) => ({
-            key: tool.tool,
-            label: toolLabel(tool.tool),
-            value: tool.views,
-            hue: toolHue(tool.tool),
-            hint: `${formatNumber(tool.results)} תוצאות · ${formatDuration(tool.dwellSeconds)}`,
-          }))}
-          unit="כניסות"
-          onSelect={onTool}
-          empty="עדיין לא נרשמו כניסות בטווח הזה"
-        />
-      </Card>
-
-      <Card title="חדשים מול חוזרים" hint="לפי מזהה אנונימי שמתחלף כל חודש" icon={<Users size={17} />}>
-        <SplitBar
-          label="חדשים מול חוזרים"
-          parts={[
-            { key: "fresh", label: "נכנסו ביום אחד", value: stats.visitors.fresh },
-            { key: "returning", label: "חזרו ביותר מיום", value: stats.visitors.returning },
-          ]}
-        />
-        <p className="admin-foot-note">
-          {stats.signedInShare}% מהכניסות נעשו כשמישהו מחובר לחשבון. מי — לא נשמר.
-        </p>
-      </Card>
-
-      <Card title="מה נשמר באתר" hint="סך הכול, לא לפי טווח" icon={<Cloud size={17} />}>
-        <ul className="admin-facts">
-          <li>
-            <span>חשבונות</span>
-            <b>{formatNumber(snapshot.totals.accounts)}</b>
-          </li>
-          <li>
-            <span>פריטים שמורים</span>
-            <b>{formatNumber(snapshot.totals.works)}</b>
-          </li>
-          <li>
-            <span>קבצים בענן</span>
-            <b>
-              {formatNumber(snapshot.totals.files)} <small>{formatBytes(snapshot.totals.bytes)}</small>
-            </b>
-          </li>
-          <li>
-            <span>קישורי שיתוף פעילים</span>
-            <b>
-              {formatNumber(snapshot.totals.liveShares)}{" "}
-              <small>{formatNumber(snapshot.totals.shareViews)} צפיות</small>
-            </b>
-          </li>
-        </ul>
-      </Card>
-    </div>
-  );
-}
-
-function ToolsTab({ snapshot, focus, setFocus }: { snapshot: AdminSnapshot; focus: string | null; setFocus: (tool: string | null) => void }) {
-  const tools = useMemo(() => snapshot.stats.tools.filter((tool) => findAnyTool(tool.tool)), [snapshot]);
-  const pages = useMemo(() => snapshot.stats.tools.filter((tool) => !findAnyTool(tool.tool)), [snapshot]);
-  const chosen = focus ? tools.find((tool) => tool.tool === focus) ?? null : null;
-  const quiet = useMemo(() => {
-    const seen = new Set(tools.map((tool) => tool.tool));
-    return TOOLS.filter((tool) => !seen.has(tool.id));
-  }, [tools]);
-
-  const exportRows = () =>
-    downloadFile(
-      // A BOM, so a spreadsheet opens the Hebrew headings as Hebrew.
-      `${String.fromCharCode(0xfeff)}${toCsv(
-        tools.map((tool) => ({
-          כלי: toolLabel(tool.tool),
-          כניסות: tool.views,
-          התחילו: tool.inputs,
-          תוצאות: tool.results,
-          שגיאות: tool.errors,
-          גולשים: tool.visitors,
-          "שהייה (שנ׳)": tool.dwellSeconds,
-          "זמן עיבוד (שנ׳)": tool.workSeconds,
-        })),
-      )}`,
-      `tools-${snapshot.days}d.csv`,
-      "text/csv;charset=utf-8",
-    );
-
-  return (
-    <div className="admin-grid">
-      <Card
-        title="כלי מול כלי"
-        hint="כניסה, התחלה, תוצאה — ומה נשבר באמצע"
-        icon={<Activity size={17} />}
-        wide
-        actions={
-          <button type="button" className="secondary-button" onClick={exportRows} disabled={!tools.length}>
-            <Download size={15} /> ייצוא CSV
-          </button>
-        }
-      >
-        {tools.length ? (
-          <div className="admin-table-wrap">
-            <table className="admin-table tools-table">
-              <thead>
-                <tr>
-                  <th scope="col">כלי</th>
-                  <th scope="col">כניסות</th>
-                  <th scope="col">גולשים</th>
-                  <th scope="col">הצלחה</th>
-                  <th scope="col">שהייה</th>
-                  <th scope="col">עיבוד</th>
-                  <th scope="col">שגיאות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tools.map((tool) => {
-                  const rate = successRate(tool);
-                  return (
-                    <tr
-                      key={tool.tool}
-                      className={focus === tool.tool ? "is-focus" : ""}
-                      style={{ "--accent-hue": String(toolHue(tool.tool)) } as CSSProperties}
-                    >
-                      <th scope="row">
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() => setFocus(focus === tool.tool ? null : tool.tool)}
-                        >
-                          <i className="tool-dot" aria-hidden="true" />
-                          {toolLabel(tool.tool)}
-                        </button>
-                      </th>
-                      <td>{formatNumber(tool.views)}</td>
-                      <td>{formatNumber(tool.visitors)}</td>
-                      <td>
-                        {rate == null ? (
-                          "—"
-                        ) : (
-                          <span className={`rate ${rate >= 60 ? "is-good" : rate >= 25 ? "is-ok" : "is-low"}`}>
-                            {rate}%
-                          </span>
-                        )}
-                      </td>
-                      <td>{formatDuration(tool.dwellSeconds)}</td>
-                      <td>{formatDuration(tool.workSeconds)}</td>
-                      <td>{tool.errors ? <span className="rate is-low">{formatNumber(tool.errors)}</span> : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="admin-empty">עדיין לא נאספו מדידות בטווח הזה.</p>
-        )}
-        <p className="admin-foot-note">
-          "הצלחה" היא היחס בין מי שנכנס לכלי לבין מי שיצא ממנו עם תוצאה. "שהייה" היא הזמן הממוצע
-          בתוך הכלי, ו"עיבוד" הוא כמה זמן הכלי עצמו לקח.
-        </p>
-      </Card>
-
-      {chosen && <ToolDetail tool={chosen} onClose={() => setFocus(null)} />}
-
-      <Card title="תקלות חוזרות" hint="הסוג בלבד — בלי הקובץ, בלי מה שנכתב" icon={<TriangleAlert size={17} />}>
-        {snapshot.stats.failures.length ? (
-          <ul className="failure-list">
-            {snapshot.stats.failures.map((failure) => (
-              <li key={`${failure.tool}|${failure.code}`}>
-                <span className="failure-tool" style={{ "--accent-hue": String(toolHue(failure.tool)) } as CSSProperties}>
-                  <i className="tool-dot" aria-hidden="true" />
-                  {toolLabel(failure.tool)}
-                </span>
-                <code>{failure.code}</code>
-                <b>{formatNumber(failure.count)}</b>
-                <small>{timeAgo(failure.last)}</small>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty">לא נרשמה אף שגיאה בטווח הזה.</p>
-        )}
-      </Card>
-
-      <Card title="כלים ששקטים" hint="לא נפתחו אף פעם בטווח שנבחר" icon={<CircleSlash size={17} />}>
-        {quiet.length ? (
-          <ul className="quiet-list">
-            {quiet.map((tool) => (
-              <li key={tool.id} style={{ "--accent-hue": String(tool.hue) } as CSSProperties}>
-                <i className="tool-dot" aria-hidden="true" />
-                {tool.title}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty">כל הכלים נפתחו לפחות פעם אחת. יפה.</p>
-        )}
-      </Card>
-
-      {pages.length > 0 && (
-        <Card title="דפים שאינם כלים" hint="דף הבית, האזור האישי, דפי שיתוף" icon={<Eye size={17} />}>
-          <BarList
-            rows={pages.map((page) => ({
-              key: page.tool,
-              label: toolLabel(page.tool),
-              value: page.views,
-              hint: `שהייה ${formatDuration(page.dwellSeconds)}`,
-            }))}
-            unit="כניסות"
-          />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function ToolDetail({ tool, onClose }: { tool: ToolRow; onClose: () => void }) {
-  const rate = successRate(tool);
-  return (
-    <Card
-      title={toolLabel(tool.tool)}
-      hint="המסע בתוך הכלי"
-      icon={<Gauge size={17} />}
-      wide
-      actions={
-        <button type="button" className="link-button" onClick={onClose}>
-          סגור
-        </button>
-      }
-    >
-      <div className="tool-detail" style={{ "--accent-hue": String(toolHue(tool.tool)) } as CSSProperties}>
-        <Funnel steps={funnel(tool)} />
-        <ul className="admin-facts">
-          <li>
-            <span>אחוז הצלחה</span>
-            <b>{rate == null ? "—" : `${rate}%`}</b>
-          </li>
-          <li>
-            <span>שהייה ממוצעת</span>
-            <b>{formatDuration(tool.dwellSeconds)}</b>
-          </li>
-          <li>
-            <span>זמן עיבוד ממוצע</span>
-            <b>{formatDuration(tool.workSeconds)}</b>
-          </li>
-          <li>
-            <span>גולשים שונים</span>
-            <b>{formatNumber(tool.visitors)}</b>
-          </li>
-          <li>
-            <span>שגיאות</span>
-            <b>{formatNumber(tool.errors)}</b>
-          </li>
-        </ul>
-      </div>
-    </Card>
-  );
-}
-
-function TimesTab({ snapshot }: { snapshot: AdminSnapshot }) {
-  const stats = snapshot.stats;
-  const peak = busiestHour(stats.hours);
-
-  const lists: { title: string; hint: string; icon: ReactNode; rows: { key: string; value: number }[] }[] = [
-    { title: "מכשירים", hint: "לפי רוחב המסך", icon: <Laptop size={17} />, rows: stats.devices },
-    { title: "דפדפנים", hint: "מה פותחים בו את האתר", icon: <Globe size={17} />, rows: stats.browsers },
-    { title: "מערכות הפעלה", hint: "", icon: <Laptop size={17} />, rows: stats.systems },
-    { title: "שפות", hint: "שפת הדפדפן", icon: <Globe size={17} />, rows: stats.languages },
-    { title: "מאיפה הגיעו", hint: "שם האתר המפנה בלבד — לא הדף", icon: <Globe size={17} />, rows: stats.referrers },
-  ];
-
-  return (
-    <div className="admin-grid">
-      <Card
-        title="מתי נכנסים"
-        hint={
-          peak
-            ? `הכי עמוס ביום ${weekdayLabel(peak.weekday)} בשעה ${hourLabel(peak.hour)} — ${formatNumber(peak.value)} כניסות`
-            : "אין עדיין מספיק מדידות"
-        }
-        icon={<Clock size={17} />}
-        wide
-      >
-        <WeekHeatmap grid={stats.hours} />
-      </Card>
-
-      {lists.map((list) => (
-        <Card key={list.title} title={list.title} hint={list.hint} icon={list.icon}>
-          <BarList
-            rows={list.rows.map((row) => ({ key: row.key, label: row.key, value: row.value }))}
-            unit="כניסות"
-            empty="אין עדיין נתונים"
-          />
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------- system */
-
-function ControlCard({
-  control,
-  onSave,
-  busy,
-}: {
-  control: ControlState;
-  onSave: (patch: Record<string, unknown>) => void;
-  busy: boolean;
-}) {
-  // The drafts start from whatever the server holds. When that changes the
-  // card is remounted from above by its key, which is simpler and less
-  // surprising than copying props into state on every render.
-  const [banner, setBanner] = useState(control.banner ?? "");
-  const [bannerKind, setBannerKind] = useState(control.bannerKind);
-  const [message, setMessage] = useState(control.maintenanceMessage ?? "");
-
-  const toggleTool = (id: string) => {
-    const off = new Set(control.disabledTools);
-    if (off.has(id)) off.delete(id);
-    else off.add(id);
-    onSave({ disabledTools: [...off] });
-  };
-
-  return (
-    <Card title="שליטה באתר" hint="שינוי כאן משפיע על כל הגולשים תוך דקות" icon={<Power size={17} />} wide>
-      <div className="control-row">
-        <label className="switch-row">
-          <input
-            type="checkbox"
-            checked={control.maintenance}
-            disabled={busy}
-            onChange={(event) => onSave({ maintenance: event.target.checked })}
-          />
-          <span>
-            <b>מצב תחזוקה</b>
-            <small>האתר נסגר לכולם ומוצגת הודעה בלבד. אזור הניהול נשאר פתוח לך.</small>
-          </span>
-        </label>
-        <div className="control-field">
-          <label htmlFor="admin-maintenance-text">הודעת התחזוקה</label>
-          <div className="control-input">
-            <input
-              id="admin-maintenance-text"
-              type="text"
-              value={message}
-              maxLength={300}
-              placeholder="חוזרים בעוד כמה דקות…"
-              onChange={(event) => setMessage(event.target.value)}
-            />
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy || message === (control.maintenanceMessage ?? "")}
-              onClick={() => onSave({ maintenanceMessage: message })}
-            >
-              שמירה
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="control-field">
-        <label htmlFor="admin-banner-text">
-          <Megaphone size={15} /> הודעה לכל האתר
-        </label>
-        <div className="control-input">
-          <input
-            id="admin-banner-text"
-            type="text"
-            value={banner}
-            maxLength={300}
-            placeholder="למשל: הוספנו כלי חדש להפרדת שירה"
-            onChange={(event) => setBanner(event.target.value)}
-          />
-          <select
-            value={bannerKind}
-            aria-label="סוג ההודעה"
-            onChange={(event) => setBannerKind(event.target.value as ControlState["bannerKind"])}
-          >
-            <option value="info">מידע</option>
-            <option value="good">בשורה טובה</option>
-            <option value="warn">אזהרה</option>
-          </select>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={() => onSave({ banner, bannerKind })}
-          >
-            פרסום
-          </button>
-          {control.banner && (
-            <button
-              type="button"
-              className="link-button"
-              disabled={busy}
-              onClick={() => onSave({ banner: "" })}
-            >
-              הסרה
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="control-field">
-        <span className="control-label">כלים פעילים</span>
-        <p className="admin-foot-note">
-          כלי שמכובה נשאר בדף הבית עם הסבר קצר, ואי אפשר לפתוח אותו. שימושי כששירות חיצוני נופל.
-        </p>
-        <ul className="tool-switches">
-          {TOOLS.map((tool) => {
-            const off = control.disabledTools.includes(tool.id);
-            return (
-              <li key={tool.id} style={{ "--accent-hue": String(tool.hue) } as CSSProperties}>
-                <button
-                  type="button"
-                  className={`tool-switch ${off ? "is-off" : ""}`}
-                  aria-pressed={!off}
-                  disabled={busy}
-                  onClick={() => toggleTool(tool.id)}
-                >
-                  <i className="tool-dot" aria-hidden="true" />
-                  <span>{tool.title}</span>
-                  <small>{off ? "מכובה" : "פעיל"}</small>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </Card>
-  );
-}
-
-function SystemTab({
-  snapshot,
-  settings,
-  audit,
-  auditQuery,
-  setAuditQuery,
-  checks,
-  busy,
-  onControl,
-  onSetting,
-  onDeleteSetting,
-  onHealth,
-  onScan,
-  onClean,
-  onPrune,
-  onResetUsage,
-  onCredits,
-  orphans,
-}: {
-  snapshot: AdminSnapshot;
-  settings: AdminSetting[];
-  audit: AdminAuditEntry[];
-  auditQuery: string;
-  setAuditQuery: (value: string) => void;
-  checks: HealthCheck[] | null;
-  busy: boolean;
-  onControl: (patch: Record<string, unknown>) => void;
-  onSetting: (key: string, value: string) => void;
-  onDeleteSetting: (key: string) => void;
-  onHealth: () => void;
-  onScan: () => void;
-  onClean: () => void;
-  onPrune: () => void;
-  onResetUsage: () => void;
-  onCredits: (patch: Record<string, unknown>) => void;
-  orphans: { count: number; bytes: number } | null;
-}) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-
-  const softGb = Number(settings.find((item) => item.key === "STORAGE_SOFT_GB")?.preview || "2");
-  const limits: Record<string, number> = {
-    stt: Number(settings.find((item) => item.key === "STT_DAILY_SECONDS")?.preview || 0),
-    ai: Number(settings.find((item) => item.key === "AI_DAILY_TOKENS")?.preview || 0),
-    tts: Number(settings.find((item) => item.key === "TTS_DAILY_CHARS")?.preview || 0),
-    separation: Number(settings.find((item) => item.key === "SEPARATION_DAILY")?.preview || 0),
-  };
-
-  return (
-    <div className="admin-grid">
-      <ControlCard
-        key={`${snapshot.control.banner ?? ""}|${snapshot.control.bannerKind}|${snapshot.control.maintenanceMessage ?? ""}`}
-        control={snapshot.control}
-        onSave={onControl}
-        busy={busy}
-      />
-
-      <Card
-        title="בריאות השירותים"
-        hint="בדיקה חיה מול כל שירות חיצוני"
-        icon={<Stethoscope size={17} />}
-        actions={
-          <button type="button" className="secondary-button" onClick={onHealth} disabled={busy}>
-            <RefreshCw size={15} className={busy ? "is-spinning" : ""} /> בדיקה
-          </button>
-        }
-      >
-        {checks ? (
-          <ul className="health-list">
-            {checks.map((check) => (
-              <li key={check.service} className={`health-${check.state}`}>
-                <span className="health-mark" aria-hidden="true">
-                  {check.state === "good" ? (
-                    <CircleCheck size={16} />
-                  ) : check.state === "bad" ? (
-                    <AlertTriangle size={16} />
-                  ) : (
-                    <CircleSlash size={16} />
-                  )}
-                </span>
-                <span className="health-name">
-                  <b>{check.label}</b>
-                  <small>{check.note}</small>
-                </span>
-                <span className="health-ms">{check.ms ? `${check.ms}ms` : ""}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty">לחץ "בדיקה" כדי לפנות לכל שירות ולראות אם הוא עונה.</p>
-        )}
-      </Card>
-
-      <CreditsAdminCard
-        key={JSON.stringify(snapshot.credits.rules)}
-        credits={snapshot.credits}
-        days={snapshot.days}
-        busy={busy}
-        onSave={onCredits}
-      />
-
-      <Card title="מכסות וצריכה" hint="היום מול התקרה היומית שהוגדרה" icon={<Gauge size={17} />}>
-        <div className="meter-stack">
-          {snapshot.quotas.map((quota) => (
-            <Meter
-              key={quota.kind}
-              label={quotaLabel(quota.kind)}
-              value={quota.today}
-              max={limits[quota.kind] || quota.today}
-              note={
-                limits[quota.kind]
-                  ? `בטווח כולו: ${compactNumber(quota.range)}`
-                  : `בטווח כולו: ${compactNumber(quota.range)} · אין תקרה מוגדרת`
-              }
-              format={compactNumber}
-            />
-          ))}
-          <div className="row-actions">
-            <ConfirmButton confirmLabel="לאפס את מכסות היום ואת הקרדיטים היומיים לכל החשבונות?" onConfirm={onResetUsage} disabled={busy}>
-              <RefreshCw size={15} /> איפוס מכסות היום
-            </ConfirmButton>
-          </div>
-          <Meter
-            label="אחסון בענן"
-            value={snapshot.totals.bytes}
-            max={softGb * 1024 ** 3}
-            note={`${formatNumber(snapshot.totals.files)} קבצים`}
-            format={formatBytes}
-          />
-        </div>
-      </Card>
-
-      <Card
-        title="מפתחות והגדרות שרת"
-        hint="ערך של מפתח לא מוצג אף פעם — רק אם הוא קיים"
-        icon={<KeyRound size={17} />}
-        wide
-      >
-        <div className="admin-table-wrap">
-          <table className="admin-table settings-table">
-            <thead>
-              <tr>
-                <th scope="col">מפתח</th>
-                <th scope="col">מצב</th>
-                <th scope="col">מקור</th>
-                <th scope="col">פעולה</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings.map((setting) => (
-                <tr key={setting.key}>
-                  <th scope="row">
-                    <code>{setting.key}</code>
-                    {setting.preview && <span className="setting-preview" dir="ltr">{setting.preview}</span>}
-                    {SETTING_HINTS[setting.key] && <small className="setting-hint">{SETTING_HINTS[setting.key]}</small>}
-                  </th>
-                  <td>
-                    <span className={`pill ${setting.set ? "is-on" : "is-off"}`}>
-                      {setting.set ? "מוגדר" : "חסר"}
-                    </span>
-                  </td>
-                  <td>{setting.source === "secret" ? "סוד של הפונקציה" : setting.source === "table" ? "טבלת הגדרות" : "—"}</td>
-                  <td>
-                    {editing === setting.key ? (
-                      <span className="control-input">
-                        <input
-                          type={/KEY|TOKEN|SECRET|PASSWORD/.test(setting.key) ? "password" : "text"}
-                          value={draft}
-                          dir="ltr"
-                          autoComplete="off"
-                          spellCheck={false}
-                          placeholder={SETTING_PLACEHOLDERS[setting.key]}
-                          autoFocus
-                          aria-label={`ערך ל־${setting.key}`}
-                          onChange={(event) => setDraft(event.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={!draft.trim() || busy}
-                          onClick={() => {
-                            onSetting(setting.key, draft.trim());
-                            setEditing(null);
-                            setDraft("");
-                          }}
-                        >
-                          שמירה
-                        </button>
-                        <button type="button" className="link-button" onClick={() => setEditing(null)}>
-                          ביטול
-                        </button>
-                      </span>
-                    ) : setting.editable ? (
-                      <span className="row-actions">
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() => {
-                            setEditing(setting.key);
-                            setDraft("");
-                          }}
-                        >
-                          {setting.set ? "החלפה" : "הגדרה"}
-                        </button>
-                        {setting.source === "table" && (
-                          <ConfirmButton
-                            className="link-button is-danger"
-                            confirmLabel="למחוק?"
-                            onConfirm={() => onDeleteSetting(setting.key)}
-                            disabled={busy}
-                          >
-                            מחיקה
-                          </ConfirmButton>
-                        )}
-                      </span>
-                    ) : (
-                      <small className="admin-muted">נקבע כסוד — לא ניתן לשינוי מכאן</small>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card title="תחזוקה" hint="ניקוי קבצים יתומים ומדידות ישנות" icon={<Wrench size={17} />}>
-        <div className="maintenance-row">
-          <div>
-            <b>קבצים שאף פריט לא מצביע עליהם</b>
-            <p className="admin-foot-note">
-              {orphans
-                ? orphans.count
-                  ? `נמצאו ${formatNumber(orphans.count)} קבצים (${formatBytes(orphans.bytes)}).`
-                  : "לא נמצאו קבצים יתומים."
-                : "סריקה עוברת על הדלי ומשווה לטבלאות."}
-            </p>
-          </div>
-          <div className="row-actions">
-            <button type="button" className="secondary-button" onClick={onScan} disabled={busy}>
-              <Search size={15} /> סריקה
-            </button>
-            <ConfirmButton
-              confirmLabel="למחוק לצמיתות?"
-              onConfirm={onClean}
-              disabled={busy || !orphans?.count}
-            >
-              ניקוי
-            </ConfirmButton>
-          </div>
-        </div>
-        <div className="maintenance-row">
-          <div>
-            <b>מדידות ישנות</b>
-            <p className="admin-foot-note">
-              {formatNumber(snapshot.stats.events)} מדידות בטווח הנוכחי. מחיקה מסירה כל מה שישן
-              משנה — הן אנונימיות, אבל אין סיבה לשמור אותן לנצח.
-            </p>
-          </div>
-          <ConfirmButton confirmLabel="למחוק מדידות מעל שנה?" onConfirm={onPrune} disabled={busy}>
-            <Timer size={15} /> ניקוי מעל שנה
-          </ConfirmButton>
-        </div>
-      </Card>
-
-      <Card
-        title="יומן פעולות"
-        hint="כל שינוי שנעשה מאזור הניהול"
-        icon={<ScrollText size={17} />}
-        wide
-        actions={
-          <span className="admin-search">
-            <Search size={15} aria-hidden="true" />
-            <input
-              type="search"
-              value={auditQuery}
-              placeholder="חיפוש פעולה"
-              aria-label="חיפוש ביומן"
-              onChange={(event) => setAuditQuery(event.target.value)}
-            />
-          </span>
-        }
-      >
-        {audit.length ? (
-          <ul className="audit-list">
-            {audit.map((entry) => (
-              <li key={entry.id}>
-                <span className="audit-when">{formatDate(entry.createdAt)}</span>
-                <span className="audit-what">
-                  <b>{actionLabel(entry.action)}</b>
-                  {entry.target && <code>{entry.target}</code>}
-                </span>
-                <span className="audit-who">{entry.actorEmail}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="admin-empty">אין עדיין רשומות ביומן.</p>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------- credits */
-
-type CreditField = { key: keyof Omit<CreditRules, "enabled" | "prices">; server: string; label: string; hint: string };
-
-const CREDIT_FIELDS: CreditField[] = [
-  { key: "daily", server: "daily", label: "קצבה יומית לכל חשבון", hint: "מתחדשת בחצות, שעון ישראל" },
-  { key: "signupBonus", server: "signup_bonus", label: "בונוס על חבר שמצטרף", hint: "פעם אחת, למי שהזמין" },
-  { key: "friendDaily", server: "friend_daily", label: "תוספת יומית לכל חבר", hint: "לתמיד, לקצבה של מי שהזמין" },
-  { key: "friendDailyMax", server: "friend_daily_max", label: "תקרת התוספת היומית", hint: "הכי הרבה שחברים מוסיפים ביום" },
-  { key: "welcomeBonus", server: "welcome_bonus", label: "מתנת הצטרפות", hint: "לחבר החדש שהגיע דרך הזמנה" },
-  { key: "visitBonus", server: "visit_bonus", label: "על כניסה חדשה לקישור", hint: "כל אדם נספר פעם אחת" },
-  { key: "visitDailyMax", server: "visit_daily_max", label: "תקרת כניסות מתוגמלות ביום", hint: "לכל קישור" },
-  { key: "signupDailyMax", server: "signup_daily_max", label: "תקרת בונוסי הצטרפות ביום", hint: "נגד חשבונות שנפתחים רק בשביל הבונוס" },
-  { key: "claimHours", server: "claim_hours", label: "שעות לציון חבר אחרי ההרשמה", hint: "למי שנרשם ממכשיר אחר" },
-];
-
-/**
- * The credit rules, and how credits moved across the site in the range — in
- * totals only, never whose, like everything else on this page.
- */
-function CreditsAdminCard({
-  credits,
-  days,
-  busy,
-  onSave,
-}: {
-  credits: AdminCredits;
-  days: number;
-  busy: boolean;
-  onSave: (patch: Record<string, unknown>) => void;
-}) {
-  const rules = credits.rules;
-  const stats = credits.stats;
-  // The drafts start from the server's numbers; a save remounts the card by its key.
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    rules
-      ? Object.fromEntries([
-          ...CREDIT_FIELDS.map((field) => [field.key, String(rules[field.key])]),
-          ...PRICE_KEYS.map((key) => [`price:${key}`, String(rules.prices[key])]),
-        ])
-      : {},
-  );
-
-  if (!rules) {
-    return (
-      <Card title="קרדיטים והזמנת חברים" hint="אין עדיין נתונים מהשרת" icon={<Zap size={17} />} wide>
-        <p className="admin-empty">
-          השרת לא החזיר את כללי הקרדיטים: פונקציית הניהול עוד לא עודכנה, או ש־supabase/credits.sql לא הורץ בפרויקט.
-        </p>
-      </Card>
-    );
-  }
-
-  const changed =
-    CREDIT_FIELDS.some((field) => draft[field.key] !== String(rules[field.key])) ||
-    PRICE_KEYS.some((key) => draft[`price:${key}`] !== String(rules.prices[key]));
-  const valid = Object.values(draft).every((value) => /^\d{1,6}$/.test(value.trim()));
-
-  const save = () => {
-    const patch: Record<string, unknown> = {};
-    for (const field of CREDIT_FIELDS) patch[field.server] = Number(draft[field.key]);
-    patch.prices = Object.fromEntries(PRICE_KEYS.map((key) => [key, Number(draft[`price:${key}`])]));
-    onSave(patch);
-  };
-
-  const granted = stats?.granted ?? {};
-  return (
-    <Card
-      title="קרדיטים והזמנת חברים"
-      hint="כמה עולה כל פעולת שרת, כמה מקבלים — ואיך הקרדיטים זזים באתר"
-      icon={<Zap size={17} />}
-      wide
-    >
-      <label className="switch-row credits-admin-switch">
-        <input type="checkbox" checked={rules.enabled} disabled={busy} onChange={(event) => onSave({ enabled: event.target.checked })} />
-        <span>
-          <b>קרדיטים פעילים</b>
-          <small>כבוי: פעולות השרת לא נגבות ולא נחסמות, והאתר לא מזכיר קרדיטים. המכסות היומיות של כל כלי ממשיכות לחול.</small>
-        </span>
-      </label>
-
-      {stats && (
-        <div className="credits-admin-figures">
-          <div>
-            <span>נוצלו היום</span>
-            <b>{formatNumber(stats.spentToday)}</b>
-          </div>
-          <div>
-            <span>{`נוצלו ב־${days} ימים`}</span>
-            <b>{compactNumber(stats.spent)}</b>
-          </div>
-          <div>
-            <span>כניסות לקישורים</span>
-            <b>{formatNumber(stats.visits)}</b>
-            <small>{`${formatNumber(stats.visitsRewarded)} זיכו בקרדיט`}</small>
-          </div>
-          <div>
-            <span>הצטרפו דרך חברים</span>
-            <b>{formatNumber(stats.referred)}</b>
-            <small>{`${formatNumber(stats.referredTotal)} מאז ההתחלה`}</small>
-          </div>
-          <div>
-            <span>בונוס שמחכה בחשבונות</span>
-            <b>{compactNumber(stats.bonusOutstanding)}</b>
-            <small>{`ב־${formatNumber(stats.accounts)} חשבונות`}</small>
-          </div>
-          <div>
-            <span>החזרים על כשלים</span>
-            <b>{formatNumber(stats.refunds)}</b>
-          </div>
-        </div>
-      )}
-
-      {stats && (
-        <div className="credits-admin-split">
-          <div>
-            <h3>על מה הלכו הקרדיטים</h3>
-            <BarList
-              rows={stats.byAction.map((row) => ({
-                key: row.action,
-                label: entryLabel({ kind: "spend", action: row.action, detail: {} }),
-                value: row.credits,
-                hint: `${formatNumber(row.count)} פעולות`,
-              }))}
-              unit="קרדיטים"
-              empty="עדיין לא נוצלו קרדיטים בטווח"
-            />
-          </div>
-          <div>
-            <h3>מה ניתן במתנה</h3>
-            <BarList
-              rows={[
-                { key: "signup", label: "על חברים שהצטרפו", value: granted.signup ?? 0 },
-                { key: "welcome", label: "מתנות הצטרפות", value: granted.welcome ?? 0 },
-                { key: "visit", label: "על כניסות לקישורים", value: granted.visit ?? 0 },
-              ].filter((row) => row.value > 0)}
-              unit="קרדיטים"
-              empty="עדיין לא ניתנו קרדיטים בטווח"
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="credits-admin-form">
-        <h3>הכללים</h3>
-        <div className="credits-admin-fields">
-          {CREDIT_FIELDS.map((field) => (
-            <label key={field.key} className="credits-admin-field">
-              <span>{field.label}</span>
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={draft[field.key] ?? ""}
-                disabled={busy}
-                onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
-              />
-              <small>{field.hint}</small>
-            </label>
-          ))}
-        </div>
-        <h3>המחירון</h3>
-        <div className="credits-admin-fields">
-          {PRICE_KEYS.map((key) => (
-            <label key={key} className="credits-admin-field">
-              <span>{PRICE_LABELS[key].title}</span>
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={draft[`price:${key}`] ?? ""}
-                disabled={busy}
-                onChange={(event) => setDraft((current) => ({ ...current, [`price:${key}`]: event.target.value }))}
-              />
-              <small>{PRICE_LABELS[key].unit}</small>
-            </label>
-          ))}
-        </div>
-        <div className="row-actions">
-          <button type="button" className="primary-button compact" disabled={busy || !changed || !valid} onClick={save}>
-            שמירת הכללים
-          </button>
-          {!valid && <small className="admin-muted">כל ערך צריך להיות מספר שלם, 0 או יותר.</small>}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/** Where to copy a setting from, shown under its name in the keys table. */
-const SETTING_HINTS: Record<string, string> = {
-  IDENTIFY_API_KEY: "זיהוי שירים (AudD). ה־API Token מ־dashboard.audd.io, או test לבדיקה (מכסה קטנה)",
-  IDENTIFY_API_KEY_2: "מפתח AudD נוסף, לא חובה: כשהמכסה של המפתח הראשון נגמרת, הזיהוי עובר לכאן לבד",
-  IDENTIFY_API_KEY_3: "מפתח AudD שלישי, לא חובה",
-  IDENTIFY_DAILY: "כמה זיהויים מותרים לכל חשבון ביום (ברירת מחדל 30)",
+type Props = {
+  /** The part named by the address (`#/admin/<part>`); the overview when absent. */
+  section: string | null;
+  onSection: (id: SectionId) => void;
+  onHome: () => void;
 };
 
-const SETTING_PLACEHOLDERS: Record<string, string> = {
-  IDENTIFY_DAILY: "30",
-};
-
-/* ------------------------------------------------------------------ page */
-
-type AccountsState = { accounts: AccountEntry[]; truncated: boolean };
-
-type AccountSort = "joined" | "seen" | "works" | "bytes";
-
-const ACCOUNT_SORTS: { id: AccountSort; label: string }[] = [
-  { id: "joined", label: "הצטרפות" },
-  { id: "seen", label: "כניסה אחרונה" },
-  { id: "works", label: "עבודות" },
-  { id: "bytes", label: "אחסון" },
-];
-
-function AccountsTab({
-  state,
-  loading,
-  error,
-  onReload,
-}: {
-  state: AccountsState | null;
-  loading: boolean;
-  error: string | null;
-  onReload: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<AccountSort>("joined");
-  const [open, setOpen] = useState<string | null>(null);
-
-  const shown = useMemo(() => {
-    const wanted = query.trim().toLowerCase();
-    const rows = (state?.accounts ?? []).filter(
-      (account) =>
-        !wanted ||
-        [account.email, account.name, account.phone, account.id].some((field) => field?.toLowerCase().includes(wanted)),
-    );
-    const time = (value: string | null) => (value ? new Date(value).getTime() || 0 : 0);
-    const key: Record<AccountSort, (account: AccountEntry) => number> = {
-      joined: (account) => time(account.createdAt),
-      seen: (account) => time(account.lastSignInAt),
-      works: (account) => account.works,
-      bytes: (account) => account.bytes,
-    };
-    return [...rows].sort((a, b) => key[sort](b) - key[sort](a));
-  }, [query, sort, state]);
-
-  if (!state) {
-    return (
-      <div className="admin-skeleton" role="status">
-        <span className="admin-skeleton-bar" />
-        <p>{error ?? (loading ? "טוען את החשבונות…" : "אין נתונים.")}</p>
-      </div>
-    );
-  }
-
-  const summary = accountSummary(state.accounts);
-
-  const exportRows = () =>
-    downloadFile(
-      `${String.fromCharCode(0xfeff)}${toCsv(
-        shown.map((account) => ({
-          אימייל: account.email ?? "",
-          שם: account.name ?? "",
-          טלפון: account.phone ?? "",
-          "כניסה דרך": account.providers.map(providerLabel).join(" "),
-          הצטרפות: formatDate(account.createdAt),
-          "כניסה אחרונה": formatDate(account.lastSignInAt),
-          מאומת: account.confirmed ? "כן" : "לא",
-          עבודות: account.works,
-          קבצים: account.files,
-          אחסון: formatBytes(account.bytes),
-          קרדיטים: account.bonus ?? "",
-          חברים: account.friends,
-        })),
-      )}`,
-      "accounts.csv",
-      "text/csv;charset=utf-8",
-    );
-
-  return (
-    <div className="admin-grid">
-      <div className="admin-tiles">
-        <StatTile label="חשבונות רשומים" value={formatNumber(summary.total)} note={`${formatNumber(summary.joinedWeek)} הצטרפו השבוע`} icon={<Users size={16} />} />
-        <StatTile label="נכנסו היום" value={formatNumber(summary.today)} note="התחברו ב־24 השעות האחרונות" icon={<Zap size={16} />} hue={155} />
-        <StatTile label="נכנסו השבוע" value={formatNumber(summary.week)} note="התחברו ב־7 הימים האחרונים" icon={<Clock size={16} />} />
-        <StatTile label="נכנסו החודש" value={formatNumber(summary.month)} note="התחברו ב־30 הימים האחרונים" icon={<Activity size={16} />} />
-      </div>
-
-      <Card
-        title="פירוט החשבונות"
-        hint={query ? `${formatNumber(shown.length)} מתוך ${formatNumber(summary.total)}` : `${formatNumber(summary.total)} חשבונות`}
-        icon={<UserRound size={17} />}
-        wide
-        actions={
-          <>
-            <span className="admin-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                placeholder="אימייל, שם או טלפון"
-                aria-label="חיפוש חשבון"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </span>
-            <select value={sort} aria-label="מיון" onChange={(event) => setSort(event.target.value as AccountSort)}>
-              {ACCOUNT_SORTS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  מיון: {item.label}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="secondary-button compact" onClick={onReload} disabled={loading}>
-              <RefreshCw size={15} className={loading ? "is-spinning" : ""} /> רענון
-            </button>
-            <button type="button" className="secondary-button compact" onClick={exportRows} disabled={!shown.length}>
-              <Download size={15} /> ייצוא CSV
-            </button>
-          </>
-        }
-      >
-        {error && (
-          <p className="error-message admin-message" role="alert">
-            {error}
-          </p>
-        )}
-        {state.truncated && <p className="admin-foot-note">יש יותר חשבונות ממה שהשרת קורא בבת אחת; מוצגים הראשונים.</p>}
-        {shown.length ? (
-          <div className="admin-table-wrap">
-            <table className="admin-table accounts-table">
-              <thead>
-                <tr>
-                  <th scope="col">חשבון</th>
-                  <th scope="col">כניסה דרך</th>
-                  <th scope="col">הצטרף</th>
-                  <th scope="col">כניסה אחרונה</th>
-                  <th scope="col">עבודות</th>
-                  <th scope="col">אחסון</th>
-                  <th scope="col">קרדיטים</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((account) => (
-                  <Fragment key={account.id}>
-                    <tr className={open === account.id ? "is-focus" : ""}>
-                      <th scope="row">
-                        <button
-                          type="button"
-                          className="link-button"
-                          aria-expanded={open === account.id}
-                          onClick={() => setOpen(open === account.id ? null : account.id)}
-                        >
-                          {account.email ?? account.phone ?? account.id.slice(0, 8)}
-                        </button>
-                        {account.name && <small className="account-name">{account.name}</small>}
-                      </th>
-                      <td>{account.providers.map(providerLabel).join(", ") || "—"}</td>
-                      <td title={formatDate(account.createdAt)}>{timeAgo(account.createdAt)}</td>
-                      <td title={formatDate(account.lastSignInAt)}>{timeAgo(account.lastSignInAt)}</td>
-                      <td>{account.works ? formatNumber(account.works) : "—"}</td>
-                      <td>{account.bytes ? formatBytes(account.bytes) : "—"}</td>
-                      <td>{account.bonus == null ? "—" : formatNumber(account.bonus)}</td>
-                    </tr>
-                    {open === account.id && (
-                      <tr className="account-detail">
-                        <td colSpan={7}>
-                          <dl className="account-facts">
-                            <dt>מזהה</dt>
-                            <dd dir="ltr">{account.id}</dd>
-                            <dt>אימייל</dt>
-                            <dd dir="ltr">{account.email ?? "—"}</dd>
-                            <dt>טלפון</dt>
-                            <dd dir="ltr">{account.phone ?? "—"}</dd>
-                            <dt>שם</dt>
-                            <dd>{account.name ?? "—"}</dd>
-                            <dt>מאומת</dt>
-                            <dd>{account.confirmed ? "כן" : "לא"}</dd>
-                            <dt>חסום</dt>
-                            <dd>{account.banned ? "כן" : "לא"}</dd>
-                            <dt>הצטרף</dt>
-                            <dd>{formatDate(account.createdAt)}</dd>
-                            <dt>כניסה אחרונה</dt>
-                            <dd>{formatDate(account.lastSignInAt)}</dd>
-                            <dt>עבודות שמורות</dt>
-                            <dd>{formatNumber(account.works)}</dd>
-                            <dt>קבצים בענן</dt>
-                            <dd>
-                              {formatNumber(account.files)} · {formatBytes(account.bytes)}
-                            </dd>
-                            <dt>קרדיטים שנצברו</dt>
-                            <dd>{account.bonus == null ? "—" : formatNumber(account.bonus)}</dd>
-                            <dt>חברים שהביא</dt>
-                            <dd>{formatNumber(account.friends)}</dd>
-                          </dl>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="admin-empty">{query ? "אין חשבון שמתאים לחיפוש." : "עוד אין חשבונות."}</p>
-        )}
-        <p className="admin-foot-note">
-          "כניסה אחרונה" היא הפעם האחרונה שהחשבון התחבר (לא כל ביקור באתר). כל פתיחה של הרשימה נרשמת ביומן הפעולות.
-        </p>
-      </Card>
-    </div>
-  );
-}
-
-const FEEDBACK_KIND_LABELS: Record<FeedbackEntry["kind"], string> = { problem: "בעיה", idea: "רעיון", other: "אחר" };
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type FeedbackState = { entries: FeedbackEntry[]; missing: boolean; upgrade: boolean };
-type FeedbackFrom = "all" | "accounts" | "guests";
-
-/** Who sent a message: their name and address, or "guest" when nobody was signed in. */
-function FeedbackSenderLine({ entry, count, onPick }: { entry: FeedbackEntry; count: number; onPick: () => void }) {
-  const { sender } = entry;
-  if (!sender) {
-    return (
-      <div className="feedback-sender is-guest">
-        <UserRound size={15} aria-hidden="true" />
-        <span>אורח (לא מחובר)</span>
-      </div>
-    );
-  }
-  const address = sender.email ?? sender.phone;
-  return (
-    <div className="feedback-sender">
-      <UserRound size={15} aria-hidden="true" />
-      <button type="button" className="feedback-sender-name" onClick={onPick} title="כל ההודעות מהחשבון הזה" dir="auto">
-        {senderLabel(sender)}
-      </button>
-      {address && address !== senderLabel(sender) &&
-        (sender.email ? (
-          <a href={`mailto:${sender.email}`} dir="ltr">
-            {sender.email}
-          </a>
-        ) : (
-          <span dir="ltr">{address}</span>
-        ))}
-      {count > 1 && <span className="feedback-sender-count">{formatNumber(count)} הודעות</span>}
-    </div>
-  );
-}
-
-/** What visitors sent from "משוב והצעות": the open ones first, handled ones on request, with who sent each. */
-function FeedbackTab({
-  feedback,
-  busy,
-  onHandle,
-  onDelete,
-  onReload,
-}: {
-  feedback: FeedbackState | null;
-  busy: boolean;
-  onHandle: (entry: FeedbackEntry) => void;
-  onDelete: (entry: FeedbackEntry) => void;
-  onReload: () => void;
-}) {
-  const [showHandled, setShowHandled] = useState(false);
-  const [from, setFrom] = useState<FeedbackFrom>("all");
-  const [query, setQuery] = useState("");
-  // Deleting takes a second press on the same message.
-  const [confirming, setConfirming] = useState<number | null>(null);
-
-  const perSender = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const entry of feedback?.entries ?? []) if (entry.sender) counts.set(entry.sender.id, (counts.get(entry.sender.id) ?? 0) + 1);
-    return counts;
-  }, [feedback]);
-
-  if (!feedback) {
-    return (
-      <div className="admin-skeleton" role="status">
-        <span className="admin-skeleton-bar" />
-        <p>טוען את ההודעות…</p>
-      </div>
-    );
-  }
-  const open = feedback.entries.filter((entry) => !entry.handled);
-  const needle = query.trim().toLowerCase();
-  const shown = (showHandled ? feedback.entries : open).filter((entry) => {
-    if (from === "accounts" && !entry.sender) return false;
-    if (from === "guests" && entry.sender) return false;
-    if (!needle) return true;
-    const sender = entry.sender;
-    return [entry.message, entry.contact, sender?.name, sender?.email, sender?.phone, sender?.id]
-      .some((text) => text?.toLowerCase().includes(needle));
-  });
-  const fromAccounts = feedback.entries.filter((entry) => entry.sender).length;
-
-  return (
-    <div className="admin-grid">
-      <Card
-        title="משוב מהגולשים"
-        hint={
-          feedback.missing
-            ? "הטבלה עוד לא קיימת"
-            : `${formatNumber(open.length)} ממתינות · ${formatNumber(feedback.entries.length)} בסך הכול · ${formatNumber(fromAccounts)} מחשבונות`
-        }
-        icon={<MessageSquareText size={17} />}
-        wide
-        actions={
-          <>
-            <span className="admin-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                placeholder="תוכן, שם או אימייל"
-                aria-label="חיפוש בהודעות"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </span>
-            <select value={from} aria-label="מי שלח" onChange={(event) => setFrom(event.target.value as FeedbackFrom)}>
-              <option value="all">מכולם</option>
-              <option value="accounts">מחשבונות מחוברים</option>
-              <option value="guests">מאורחים</option>
-            </select>
-            <label className="feedback-filter">
-              <input type="checkbox" checked={showHandled} onChange={(event) => setShowHandled(event.target.checked)} /> גם כאלה שטופלו
-            </label>
-            <button type="button" className="secondary-button compact" onClick={onReload} disabled={busy}>
-              <RefreshCw size={15} /> רענון
-            </button>
-          </>
-        }
-      >
-        {feedback.missing ? (
-          <p className="notice-message">
-            כדי לקבל משוב צריך להריץ פעם אחת את <code dir="ltr">supabase/site_feedback.sql</code> בפרויקט ה־Supabase.
-          </p>
-        ) : (
-          <>
-            {feedback.upgrade && (
-              <p className="notice-message">
-                כדי לראות מי שלח כל הודעה צריך להריץ שוב את <code dir="ltr">supabase/site_feedback.sql</code> בפרויקט ה־Supabase.
-              </p>
-            )}
-            {shown.length ? (
-              <ul className="feedback-list">
-                {shown.map((entry) => (
-                  <li key={entry.id} className={entry.handled ? "is-handled" : ""}>
-                    <div className="feedback-meta">
-                      <span className={`feedback-kind is-${entry.kind}`}>{FEEDBACK_KIND_LABELS[entry.kind]}</span>
-                      <span title={formatDate(entry.createdAt)}>{timeAgo(entry.createdAt)}</span>
-                      {entry.page && <span>{entry.page === "home" ? "דף הבית" : toolLabel(entry.page)}</span>}
-                      {(entry.device || entry.browser || entry.os) && <span dir="ltr">{[entry.device, entry.browser, entry.os].filter(Boolean).join(" · ")}</span>}
-                    </div>
-                    <FeedbackSenderLine
-                      entry={entry}
-                      count={entry.sender ? perSender.get(entry.sender.id) ?? 0 : 0}
-                      onPick={() => setQuery(entry.sender?.email ?? entry.sender?.id ?? "")}
-                    />
-                    <p className="feedback-text" dir="auto">
-                      {entry.message}
-                    </p>
-                    <div className="feedback-row-actions">
-                      {entry.contact && entry.contact !== entry.sender?.email &&
-                        (EMAIL.test(entry.contact) ? (
-                          <a href={`mailto:${entry.contact}`} dir="ltr" title="המייל שנכתב בהודעה">
-                            {entry.contact}
-                          </a>
-                        ) : (
-                          <span dir="auto">{entry.contact}</span>
-                        ))}
-                      <button type="button" className="secondary-button compact" onClick={() => onHandle(entry)} disabled={busy}>
-                        {entry.handled ? "החזר לטיפול" : "סמן כטופל"}
-                      </button>
-                      <button
-                        type="button"
-                        className={`secondary-button compact ${confirming === entry.id ? "is-danger" : ""}`}
-                        onClick={() => {
-                          if (confirming !== entry.id) {
-                            setConfirming(entry.id);
-                            return;
-                          }
-                          setConfirming(null);
-                          onDelete(entry);
-                        }}
-                        onBlur={() => setConfirming((current) => (current === entry.id ? null : current))}
-                        disabled={busy}
-                      >
-                        {confirming === entry.id ? "בטוח? למחוק" : "מחיקה"}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="admin-empty">
-                {needle || from !== "all" ? "אין הודעה שמתאימה לסינון." : feedback.entries.length ? "כל ההודעות טופלו." : "עוד לא הגיעו הודעות."}
-              </p>
-            )}
-          </>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-export function AdminPanel({ onHome }: { onHome: () => void }) {
+export function AdminPanel({ section: sectionRoute, onSection, onHome }: Props) {
   const { user } = useAuth();
   const allowed = isAdmin(user);
+  const section = sectionFrom(sectionRoute);
+  const current = sectionById(section);
 
-  const [tab, setTab] = useState<Tab>("overview");
   const [days, setDays] = useState<number>(30);
-  const [metric, setMetric] = useState<MetricId>("views");
   const [focusTool, setFocusTool] = useState<string | null>(null);
 
   const [snapshot, setSnapshot] = useState<AdminSnapshot | null>(null);
   const [settings, setSettings] = useState<AdminSetting[]>([]);
-  const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
+  const [audit, setAudit] = useState<AdminAuditEntry[] | null>(null);
   const [auditQuery, setAuditQuery] = useState("");
+  const [auditRound, setAuditRound] = useState(0);
   const [checks, setChecks] = useState<HealthCheck[] | null>(null);
   const [orphans, setOrphans] = useState<{ count: number; bytes: number } | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [feedbackQuery, setFeedbackQuery] = useState("");
   const [accounts, setAccounts] = useState<AccountsState | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -1638,22 +88,21 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const load = useCallback(
-    async (range: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [next, keys] = await Promise.all([fetchSnapshot(range), fetchSettings().catch(() => [])]);
-        setSnapshot(next);
-        setSettings(keys);
-      } catch (cause) {
-        setError(cause instanceof AdminError ? cause.message : describeAdminError("storage"));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  /* ------------------------------------------------------------ reading */
+
+  const load = useCallback(async (range: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [next, keys] = await Promise.all([fetchSnapshot(range), fetchSettings().catch(() => [])]);
+      setSnapshot(next);
+      setSettings(keys);
+    } catch (cause) {
+      setError(cause instanceof AdminError ? cause.message : describeAdminError("storage"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!allowed) return;
@@ -1666,15 +115,16 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   const loadFeedback = useCallback(() => {
     void fetchFeedback()
       .then(setFeedback)
-      .catch(() => setFeedback((current) => current ?? { entries: [], missing: false, upgrade: false }));
+      .catch(() => setFeedback((existing) => existing ?? { entries: [], missing: false, upgrade: false }));
   }, []);
 
+  // Read with everything else, so the count of waiting messages is in the
+  // navigation from the start.
   useEffect(() => {
     if (!allowed) return;
     const timer = window.setTimeout(loadFeedback, 0);
     return () => window.clearTimeout(timer);
   }, [allowed, loadFeedback]);
-  const waiting = feedback ? feedback.entries.filter((entry) => !entry.handled).length : 0;
 
   const loadAccounts = useCallback(() => {
     setAccountsLoading(true);
@@ -1685,8 +135,8 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
       .finally(() => setAccountsLoading(false));
   }, []);
 
-  // The list of people is read only when the tab is opened, not with the rest.
-  const wantAccounts = allowed && tab === "accounts" && !accounts;
+  // The list of people is read only when its part is opened, not with the rest.
+  const wantAccounts = allowed && section === "accounts" && !accounts && !accountsError;
   useEffect(() => {
     if (!wantAccounts) return;
     const timer = window.setTimeout(loadAccounts, 0);
@@ -1694,40 +144,56 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
   }, [wantAccounts, loadAccounts]);
 
   useEffect(() => {
-    if (!allowed || tab !== "system") return;
-    const timer = window.setTimeout(() => {
-      void fetchAudit(auditQuery)
-        .then(setAudit)
-        .catch(() => undefined);
-    }, auditQuery ? 300 : 0);
+    if (!allowed || section !== "audit") return;
+    const timer = window.setTimeout(
+      () => {
+        void fetchAudit(auditQuery)
+          .then(setAudit)
+          .catch(() => setAudit((existing) => existing ?? []));
+      },
+      auditQuery ? 300 : 0,
+    );
     return () => window.clearTimeout(timer);
-  }, [allowed, auditQuery, tab]);
+  }, [allowed, auditQuery, auditRound, section]);
 
-  const act = useCallback(
-    async (run: () => Promise<void>) => {
-      setBusy(true);
-      setError(null);
-      try {
-        await run();
-      } catch (cause) {
-        setError(cause instanceof AdminError ? cause.message : describeAdminError("storage"));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [],
-  );
+  const refresh = () => {
+    void load(days);
+    loadFeedback();
+    if (accounts) loadAccounts();
+    if (section === "audit") setAuditRound((round) => round + 1);
+  };
+
+  // A word that something was saved goes away by itself.
+  useEffect(() => {
+    if (!note) return;
+    const timer = window.setTimeout(() => setNote(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [note]);
+
+  /* ------------------------------------------------------------ writing */
+
+  const act = useCallback(async (run: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await run();
+    } catch (cause) {
+      setError(cause instanceof AdminError ? cause.message : describeAdminError("storage"));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const onControl = useCallback(
     (patch: Record<string, unknown>) =>
       void act(async () => {
         const result = await runAdminAction("control.set", patch);
-        setSnapshot((current) =>
-          current && result.control
-            ? { ...current, control: { ...current.control, ...normalizePatch(patch, current.control) } }
-            : current,
+        setSnapshot((existing) =>
+          existing && result.control
+            ? { ...existing, control: { ...existing.control, ...normalizePatch(patch, existing.control) } }
+            : existing,
         );
-        setNote("ההגדרות נשמרו. הגולשים יראו את השינוי תוך כמה דקות.");
+        setNote("נשמר. הגולשים יראו את השינוי תוך כמה דקות.");
       }),
     [act],
   );
@@ -1789,24 +255,6 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     [act],
   );
 
-  const onHandleFeedback = useCallback(
-    (entry: FeedbackEntry) =>
-      void act(async () => {
-        await runAdminAction("feedback.handle", { id: entry.id, handled: !entry.handled });
-        setFeedback((current) => current && { ...current, entries: current.entries.map((item) => (item.id === entry.id ? { ...item, handled: !entry.handled } : item)) });
-      }),
-    [act],
-  );
-
-  const onDeleteFeedback = useCallback(
-    (entry: FeedbackEntry) =>
-      void act(async () => {
-        await runAdminAction("feedback.delete", { id: entry.id });
-        setFeedback((current) => current && { ...current, entries: current.entries.filter((item) => item.id !== entry.id) });
-      }),
-    [act],
-  );
-
   const onResetUsage = useCallback(
     () =>
       void act(async () => {
@@ -1827,187 +275,273 @@ export function AdminPanel({ onHome }: { onHome: () => void }) {
     [act, load, days],
   );
 
-  const openTool = useCallback((tool: string) => {
-    setFocusTool(tool);
-    setTab("tools");
-  }, []);
+  const onHandleFeedback = useCallback(
+    (entry: FeedbackEntry) =>
+      void act(async () => {
+        await runAdminAction("feedback.handle", { id: entry.id, handled: !entry.handled });
+        setFeedback(
+          (existing) =>
+            existing && {
+              ...existing,
+              entries: existing.entries.map((item) => (item.id === entry.id ? { ...item, handled: !entry.handled } : item)),
+            },
+        );
+      }),
+    [act],
+  );
 
-  // The pill under the chosen tab is measured rather than computed: the tabs
-  // are as wide as their words, and the strip scrolls on a phone. It follows
-  // the tab when the words change width — the count beside "משוב" — too.
-  const tabsRef = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    const strip = tabsRef.current;
-    if (!strip) return;
-    const place = () => {
-      const active = strip.querySelector<HTMLElement>(".admin-tab.active");
-      if (!active) return;
-      strip.style.setProperty("--thumb-x", `${active.offsetLeft}px`);
-      strip.style.setProperty("--thumb-w", `${active.offsetWidth}px`);
-      strip.dataset.thumb = "on";
-    };
-    place();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(place);
-    observer.observe(strip);
-    for (const button of strip.querySelectorAll<HTMLElement>(".admin-tab")) observer.observe(button);
-    return () => observer.disconnect();
-  }, [tab, allowed]);
+  const onDeleteFeedback = useCallback(
+    (entry: FeedbackEntry) =>
+      void act(async () => {
+        await runAdminAction("feedback.delete", { id: entry.id });
+        setFeedback((existing) => existing && { ...existing, entries: existing.entries.filter((item) => item.id !== entry.id) });
+      }),
+    [act],
+  );
+
+  /* ------------------------------------------------------- between parts */
+
+  const go = (id: SectionId) => {
+    setError(null);
+    onSection(id);
+  };
+
+  const openTool = (tool: string) => {
+    setFocusTool(tool);
+    go("tools");
+  };
+
+  const showMessagesFrom = (account: AccountEntry) => {
+    setFeedbackQuery(account.email ?? account.id);
+    go("feedback");
+  };
+
+  const waiting = feedback ? feedback.entries.filter((entry) => !entry.handled).length : 0;
+  const messagesFrom = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of feedback?.entries ?? []) if (entry.sender) counts.set(entry.sender.id, (counts.get(entry.sender.id) ?? 0) + 1);
+    return counts;
+  }, [feedback]);
+
+  /** What each part of the navigation has waiting: a number, or a dot. */
+  const badges: Partial<Record<SectionId, { text: string; tone: "accent" | "warning" | "danger"; label: string }>> = {};
+  if (waiting) badges.feedback = { text: formatNumber(waiting), tone: "accent", label: `${formatNumber(waiting)} ממתינות` };
+  if (snapshot?.control.maintenance) badges.control = { text: "!", tone: "danger", label: "מצב תחזוקה פעיל" };
+  else if (snapshot?.control.disabledTools.length) {
+    badges.control = { text: formatNumber(snapshot.control.disabledTools.length), tone: "warning", label: "כלים מכובים" };
+  }
+  if (snapshot?.alerts.some((alert) => alert.kind === "bad")) badges.server = { text: "!", tone: "danger", label: "אזהרה מהשרת" };
+
+  /* --------------------------------------------------------------- door */
 
   if (!allowed) {
     return (
-      <div className="admin-page admin-locked">
-        <div className="admin-locked-card">
-          <span className="admin-locked-mark">
+      <div className="admin-page adm-locked">
+        <section className="adm-locked-card" aria-labelledby="adm-locked-title">
+          <span className="adm-locked-mark" aria-hidden="true">
             <ShieldX size={26} />
           </span>
-          <h1>האזור הזה סגור</h1>
+          <h1 id="adm-locked-title">האזור הזה סגור</h1>
           <p>
-            אזור הניהול פתוח לחשבון של בעל האתר בלבד. גם אם מגיעים לכתובת הזאת ישירות, השרת
-            אינו עונה לאף חשבון אחר.
+            אזור הניהול פתוח לחשבון של בעל האתר בלבד. גם אם מגיעים לכתובת הזאת ישירות, השרת אינו עונה לאף חשבון
+            אחר.
           </p>
-          <button type="button" className="primary-button" onClick={onHome}>
-            <ArrowRight size={17} /> חזרה לכלי המוזיקה
-          </button>
-        </div>
+          <Button variant="primary" size="lg" icon={<ArrowRight size={17} />} onClick={onHome}>
+            חזרה לכלי המוזיקה
+          </Button>
+        </section>
       </div>
     );
   }
 
+  /* --------------------------------------------------------------- page */
+
+  const needsSnapshot = !["accounts", "feedback", "audit"].includes(section);
+
+  let content;
+  if (section === "accounts") {
+    content = (
+      <AccountsSection
+        state={accounts}
+        loading={accountsLoading}
+        error={accountsError}
+        onReload={loadAccounts}
+        messagesFrom={messagesFrom}
+        onShowMessages={showMessagesFrom}
+      />
+    );
+  } else if (section === "feedback") {
+    content = (
+      <FeedbackSection
+        feedback={feedback}
+        busy={busy}
+        query={feedbackQuery}
+        setQuery={setFeedbackQuery}
+        onHandle={onHandleFeedback}
+        onDelete={onDeleteFeedback}
+        onReload={loadFeedback}
+      />
+    );
+  } else if (section === "audit") {
+    content = <AuditSection audit={audit} query={auditQuery} setQuery={setAuditQuery} />;
+  } else if (!snapshot) {
+    content = error ? (
+      <Notice tone="danger" action={<Button size="sm" onClick={() => void load(days)}>נסה שוב</Button>}>
+        {error}
+      </Notice>
+    ) : (
+      <Loading text={loading ? "אוסף את המדידות…" : "אין נתונים."} />
+    );
+  } else if (section === "overview") {
+    content = <OverviewSection snapshot={snapshot} waiting={waiting} onGo={go} onTool={openTool} />;
+  } else if (section === "tools") {
+    content = <ToolsSection snapshot={snapshot} focus={focusTool} setFocus={setFocusTool} />;
+  } else if (section === "audience") {
+    content = <AudienceSection snapshot={snapshot} />;
+  } else if (section === "control") {
+    content = <ControlSection key={JSON.stringify(snapshot.control)} control={snapshot.control} busy={busy} onSave={onControl} />;
+  } else if (section === "credits") {
+    content = (
+      <CreditsSection
+        key={JSON.stringify(snapshot.credits.rules)}
+        credits={snapshot.credits}
+        days={snapshot.days}
+        busy={busy}
+        onSave={onCredits}
+      />
+    );
+  } else {
+    content = (
+      <ServerSection
+        snapshot={snapshot}
+        settings={settings}
+        checks={checks}
+        orphans={orphans}
+        busy={busy}
+        onHealth={onHealth}
+        onSetting={onSetting}
+        onDeleteSetting={onDeleteSetting}
+        onResetUsage={onResetUsage}
+        onScan={onScan}
+        onClean={onClean}
+        onPrune={onPrune}
+      />
+    );
+  }
+
   return (
-    <div className="admin-page" style={{ "--accent-hue": 250 } as CSSProperties}>
-      <header className="admin-head">
-        <div>
-          <p className="admin-eyebrow">
-            <ShieldCheck size={15} /> אזור ניהול · {user?.email}
+    <div className="admin-page adm" style={{ "--accent-hue": 250 } as CSSProperties}>
+      <header className="adm-head">
+        <div className="adm-head-text">
+          <p className="adm-kicker">
+            <ShieldCheck size={15} aria-hidden="true" /> אזור ניהול
+            {user?.email && (
+              <span className="adm-kicker-who" dir="ltr">
+                {user.email}
+              </span>
+            )}
           </p>
-          <h1>מצב האתר</h1>
-          <p className="admin-subtitle">
-            {snapshot
-              ? `עודכן ${timeAgo(snapshot.generatedAt)} · ${compactNumber(snapshot.stats.views)} כניסות ב־${snapshot.days} ימים · ${formatNumber(snapshot.stats.live)} עכשיו באתר`
-              : loading
-                ? "טוען את הנתונים מהשרת…"
-                : "אין עדיין נתונים להצגה."}
-          </p>
+          <h1>{current.title}</h1>
+          <p className="adm-lead">{current.lead}</p>
         </div>
-        <div className="admin-head-actions">
-          <div className="admin-range" role="group" aria-label="טווח הזמן">
-            {RANGES.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={`chip-toggle ${days === option ? "active" : ""}`}
-                aria-pressed={days === option}
-                onClick={() => setDays(option)}
-              >
-                {option} ימים
-              </button>
-            ))}
-          </div>
-          <button type="button" className="secondary-button" onClick={() => void load(days)} disabled={loading}>
-            <RefreshCw size={16} className={loading ? "is-spinning" : ""} /> רענון
-          </button>
-          <button type="button" className="secondary-button" onClick={onHome}>
-            <ArrowRight size={16} /> לאתר
-          </button>
+        <div className="adm-head-actions">
+          {current.ranged && (
+            <Segmented
+              size="sm"
+              className="adm-range"
+              label="טווח הזמן"
+              value={String(days) as (typeof RANGES)[number]}
+              onChange={(value) => setDays(Number(value))}
+              options={RANGES.map((value) => ({ id: value, label: `${value} ימים` }))}
+            />
+          )}
+          <Button size="sm" icon={<RefreshCw size={15} />} loading={loading} onClick={refresh}>
+            רענון
+          </Button>
+          <Button size="sm" variant="ghost" icon={<ArrowRight size={15} />} onClick={onHome}>
+            לאתר
+          </Button>
         </div>
       </header>
 
-      <p className="admin-privacy-note">
-        <ShieldCheck size={15} aria-hidden="true" />
-        המדידות כאן אנונימיות לגמרי: הן אומרות איזה כלי נפתח ומתי, ולא מי עשה מה. רשימת החשבונות
-        נמצאת בלשונית "חשבונות" בלבד, וכל פתיחה שלה נרשמת ביומן.
+      <p className="adm-status" role="status">
+        <span className={`adm-live ${snapshot?.stats.live ? "is-on" : ""}`} aria-hidden="true" />
+        {snapshot
+          ? `עודכן ${timeAgo(snapshot.generatedAt)} · ${formatNumber(snapshot.stats.live)} עכשיו באתר · ${compactNumber(snapshot.stats.views)} כניסות ב־${snapshot.days} ימים`
+          : loading
+            ? "טוען את הנתונים מהשרת…"
+            : "אין עדיין נתונים להצגה."}
       </p>
 
-      {snapshot?.alerts.map((alert) => (
-        <p key={alert.text} className={`admin-alert is-${alert.kind}`} role={alert.kind === "bad" ? "alert" : "status"}>
-          {alert.kind === "bad" ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />} {alert.text}
-        </p>
-      ))}
-
-      {error && (
-        <div className="error-message admin-message" role="alert">
+      {error && (snapshot || !needsSnapshot) && (
+        <Notice tone="danger" onClose={() => setError(null)}>
           {error}
-        </div>
+        </Notice>
       )}
       {note && (
-        <p className="notice-message admin-message" role="status">
+        <Notice tone="success" onClose={() => setNote(null)}>
           {note}
-          <button type="button" className="link-button" onClick={() => setNote(null)}>
-            סגור
-          </button>
-        </p>
+        </Notice>
       )}
-      {snapshot?.truncated && (
-        <p className="notice-message admin-message" role="status">
-          בטווח הזה יש יותר מדידות ממה שהשרת קורא בבת אחת; המספרים מבוססים על החדשות ביותר.
-        </p>
+      {snapshot?.truncated && needsSnapshot && (
+        <Notice tone="info">בטווח הזה יש יותר מדידות ממה שהשרת קורא בבת אחת; המספרים מבוססים על החדשות ביותר.</Notice>
       )}
 
-      <nav ref={tabsRef} className="admin-tabs has-thumb" role="tablist" aria-label="חלקי אזור הניהול">
-        <span className="admin-tabs-thumb" aria-hidden="true" />
-        {TABS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              className={`admin-tab ${tab === item.id ? "active" : ""}`}
-              onClick={() => setTab(item.id)}
-            >
-              <Icon size={16} aria-hidden="true" /> {item.label}
-              {item.id === "feedback" && waiting > 0 && <span className="admin-tab-count">{waiting}</span>}
-            </button>
-          );
-        })}
-      </nav>
+      <div className="adm-layout">
+        <nav className="adm-nav" aria-label="חלקי אזור הניהול">
+          {SECTION_GROUPS.map((group) => (
+            <div key={group.label} className="adm-nav-group">
+              <p className="adm-nav-heading">{group.label}</p>
+              <ul>
+                {group.ids.map((id) => {
+                  const item = sectionById(id);
+                  const Icon = item.icon;
+                  const badge = badges[id];
+                  const active = id === section;
+                  return (
+                    <li key={id}>
+                      <a
+                        href={id === "overview" ? "#/admin" : `#/admin/${id}`}
+                        className={`adm-nav-item ${active ? "is-current" : ""}`}
+                        aria-current={active ? "page" : undefined}
+                        data-tour={`admin-nav-${id}`}
+                        onClick={(event) => {
+                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                          event.preventDefault();
+                          go(id);
+                        }}
+                      >
+                        <Icon size={17} aria-hidden="true" />
+                        <span className="adm-nav-label">{item.label}</span>
+                        {badge && (
+                          <span className={`adm-badge is-${badge.tone}`} title={badge.label}>
+                            {badge.text}
+                            <span className="sr-only"> ({badge.label})</span>
+                          </span>
+                        )}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+          <p className="adm-nav-privacy">
+            <ShieldCheck size={14} aria-hidden="true" />
+            המדידות אנונימיות: איזה כלי נפתח ומתי, לא מי. רשימת האנשים נמצאת ב„חשבונות” בלבד, וכל פתיחה שלה נרשמת ביומן.
+          </p>
+        </nav>
 
-      {tab === "feedback" ? (
-        <FeedbackTab feedback={feedback} busy={busy} onHandle={onHandleFeedback} onDelete={onDeleteFeedback} onReload={loadFeedback} />
-      ) : tab === "accounts" ? (
-        <AccountsTab state={accounts} loading={accountsLoading} error={accountsError} onReload={loadAccounts} />
-      ) : !snapshot ? (
-        <div className="admin-skeleton" role="status">
-          <span className="admin-skeleton-bar" />
-          <span className="admin-skeleton-bar" />
-          <span className="admin-skeleton-bar" />
-          <p>{loading ? "אוסף את המדידות…" : "אין נתונים."}</p>
+        <div className="adm-main" key={section}>
+          {content}
         </div>
-      ) : tab === "overview" ? (
-        <Overview snapshot={snapshot} metric={metric} setMetric={setMetric} onTool={openTool} />
-      ) : tab === "tools" ? (
-        <ToolsTab snapshot={snapshot} focus={focusTool} setFocus={setFocusTool} />
-      ) : tab === "times" ? (
-        <TimesTab snapshot={snapshot} />
-      ) : (
-        <SystemTab
-          snapshot={snapshot}
-          settings={settings}
-          audit={audit}
-          auditQuery={auditQuery}
-          setAuditQuery={setAuditQuery}
-          checks={checks}
-          busy={busy}
-          onControl={onControl}
-          onSetting={onSetting}
-          onDeleteSetting={onDeleteSetting}
-          onHealth={onHealth}
-          onScan={onScan}
-          onClean={onClean}
-          onPrune={onPrune}
-          onResetUsage={onResetUsage}
-          onCredits={onCredits}
-          orphans={orphans}
-        />
-      )}
+      </div>
     </div>
   );
 }
 
 /** The switches a save changed, in the shape the page already holds. */
-function normalizePatch(patch: Record<string, unknown>, current: ControlState): Partial<ControlState> {
+function normalizePatch(patch: Record<string, unknown>, existing: ControlState): Partial<ControlState> {
   const next: Partial<ControlState> = {};
   if ("maintenance" in patch) next.maintenance = Boolean(patch.maintenance);
   if ("maintenanceMessage" in patch) {
@@ -2019,9 +553,7 @@ function normalizePatch(patch: Record<string, unknown>, current: ControlState): 
     next.bannerKind = kind === "warn" || kind === "good" ? kind : "info";
   }
   if ("disabledTools" in patch) {
-    next.disabledTools = Array.isArray(patch.disabledTools)
-      ? patch.disabledTools.map(String)
-      : current.disabledTools;
+    next.disabledTools = Array.isArray(patch.disabledTools) ? patch.disabledTools.map(String) : existing.disabledTools;
   }
   return next;
 }
