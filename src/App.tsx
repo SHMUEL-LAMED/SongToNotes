@@ -21,6 +21,7 @@ import { ToolFrame } from "./components/ToolFrame";
 import { FeedbackDialog } from "./components/FeedbackDialog";
 import { useAssistantTool } from "./lib/useAssistantTool";
 import { isAdmin } from "./lib/admin";
+import { SECTIONS as ADMIN_SECTIONS } from "./components/admin/sections";
 import { setSignedIn, startAnalytics, trackLeave, trackView } from "./lib/analytics";
 import { useAuth } from "./lib/auth";
 import { balanceOf, referralLink, untilReset } from "./lib/credits";
@@ -183,7 +184,9 @@ function WorkspaceApp() {
   const shareToken = shareTokenFromRoute(route);
   // The admin area is not a tool: it never appears in the hub, and the page
   // behind the route refuses anybody but the owner — as does the server.
-  const admin = route === "admin";
+  // `#/admin` and `#/admin/feedback`: the admin area, opened on one of its parts.
+  const admin = route === "admin" || route.startsWith("admin/");
+  const adminSection = admin ? route.slice(6) || null : null;
   // `#/me` and `#/me/links`: the personal area, opened on one of its tabs.
   const me = route === "me" || route.startsWith("me/");
   const meTab = me ? route.slice(3) || null : null;
@@ -456,6 +459,17 @@ function WorkspaceApp() {
     ];
     if (owner) {
       items.push({ id: "page:admin", label: "אזור ניהול", group: "דפים", icon: <Wrench size={15} />, run: () => go("admin") });
+      for (const part of ADMIN_SECTIONS) {
+        if (part.id === "overview") continue;
+        items.push({
+          id: `page:admin/${part.id}`,
+          label: `אזור ניהול: ${part.label}`,
+          hint: part.lead,
+          group: "דפים",
+          icon: <Wrench size={15} />,
+          run: () => go(`admin/${part.id}`),
+        });
+      }
     }
     for (const item of TOOLS) {
       const Icon = item.icon;
@@ -654,7 +668,13 @@ function WorkspaceApp() {
         )}
         {admin && (
           <Suspense fallback={loading("טוען את אזור הניהול…")}>
-            <AdminPanel onHome={() => go("home")} />
+            <AdminPanel
+              section={adminSection}
+              // Moving between the parts replaces the address rather than
+              // stacking it, so Back leaves the admin area in one step.
+              onSection={(id) => navigate(id === "overview" ? "admin" : `admin/${id}`, { replace: true })}
+              onHome={() => go("home")}
+            />
           </Suspense>
         )}
         {!closed && !tool && !shareToken && !admin && !me && !credits && (

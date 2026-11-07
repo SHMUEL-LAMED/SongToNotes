@@ -106,6 +106,13 @@ function toolTour(tool: ToolDefinition): TourStep[] {
  */
 export function tourFor(route: string, tool: ToolDefinition | null): TourStep[] {
   if (tool) return toolTour(tool);
-  const page = route === "home" ? "home" : route === "me" || route.startsWith("me/") ? "me" : route;
+  const page =
+    route === "home"
+      ? "home"
+      : route === "me" || route.startsWith("me/")
+        ? "me"
+        : route === "admin" || route.startsWith("admin/")
+          ? "admin"
+          : route;
   return [...(PAGE_TOURS[page] ?? FRAME), ...CLOSING];
 }
